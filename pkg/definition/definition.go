@@ -1,9 +1,7 @@
 package definition
 
 type Definitions struct {
-	Secrets       map[string]string
 	Identities    map[string]IdentityDef
-	Data          map[string]interface{}
 	Functions     map[string]FunctionDef
 	Subscriptions []SubscriptionDef
 }

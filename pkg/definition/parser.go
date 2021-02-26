@@ -9,7 +9,7 @@ import (
 
 var multiDocSeparatorRegex = regexp.MustCompile(`\-{3,}`)
 var functionDefRegex = regexp.MustCompile("\\s*(define|#)\\s+(\\w+)\\:?\\s+```([A-Za-z]+)?([\\s\\S]+)```\\s*")
-var identityDefRegex = regexp.MustCompile("\\s*identity\\s+(\\w+):\\s+(\\w+)")
+var identityDefRegex = regexp.MustCompile("\\s*[Ii]dentity\\s+(\\w+):\\s+(\\w+)")
 var subscribeDefRegex = regexp.MustCompile("\\s*[Ss]ubscribe\\s+(\\w+)\\:?\\s+([\\s\\S]+)")
 
 type yamlSubscription struct {
