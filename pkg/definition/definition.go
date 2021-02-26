@@ -1,9 +1,9 @@
 package definition
 
 type Definitions struct {
-	Identities    map[string]IdentityDef
+	Sources       map[string]SourceDef
 	Functions     map[string]FunctionDef
-	Subscriptions []SubscriptionDef
+	Subscriptions map[string]SubscriptionDef
 }
 
 type FunctionDef struct {
@@ -14,14 +14,13 @@ type FunctionDef struct {
 }
 
 type SubscriptionDef struct {
-	EventTypes      []string
-	Channel         string
-	TriggerFunction string
-	Identity        string
+	Source     string
+	Function   string
+	EventTypes []string
+	Channel    string
 }
 
-type IdentityDef struct {
+type SourceDef struct {
+	URL   string
 	Token string
-	URL   string // TODO: at some point
-	WSURL string // TODO: at some point
 }

@@ -2,66 +2,108 @@ package definition
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/mattermost/mattermost-server/model"
-	"gopkg.in/yaml.v2"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
+	"gopkg.in/yaml.v3"
 )
 
-var multiDocSeparatorRegex = regexp.MustCompile(`\-{3,}`)
-var functionDefRegex = regexp.MustCompile("\\s*(define|#)\\s+(\\w+)\\:?\\s+```([A-Za-z]+)?([\\s\\S]+)```\\s*")
-var identityDefRegex = regexp.MustCompile("\\s*[Ii]dentity\\s+(\\w+):\\s+(\\w+)")
-var subscribeDefRegex = regexp.MustCompile("\\s*[Ss]ubscribe\\s+(\\w+)\\:?\\s+([\\s\\S]+)")
+var headerRegex = regexp.MustCompile("\\s*(\\w+)\\:?\\s*(.*)")
 
 type yamlSubscription struct {
-	Identity string   `yaml:"Identity"`
+	Function string   `yaml:"Function"`
+	Source   string   `yaml:"Source"`
 	Channel  string   `yaml:"Channel"`
 	Events   []string `yaml:"Events"`
 }
 
+type yamlSource struct {
+	URL   string `yaml:"URL"`
+	Token string `yaml:"Token"`
+}
+
+// Parse uses the GoldMark Markdown parser to parse definitions
 func Parse(posts []*model.Post) (Definitions, error) {
-	// functionDefs := make([]FunctionDef, 0, 5)
+	mdParser := goldmark.DefaultParser()
+
 	definitions := Definitions{
 		Functions:     map[string]FunctionDef{},
-		Identities:    map[string]IdentityDef{},
-		Subscriptions: []SubscriptionDef{},
+		Sources:       map[string]SourceDef{},
+		Subscriptions: map[string]SubscriptionDef{},
 	}
 	for _, p := range posts {
-		blocks := multiDocSeparatorRegex.Split(p.Message, -1)
-		for _, block := range blocks {
-			// Check if this is a FunctionDef
-			defMatchParts := functionDefRegex.FindStringSubmatch(block)
-			if defMatchParts != nil {
-				// fmt.Printf("Name: %s Language: %s Code: %s", defMatchParts[2], defMatchParts[3], defMatchParts[4])
-				definitions.Functions[defMatchParts[2]] = FunctionDef{
-					Language: defMatchParts[3],
-					Name:     defMatchParts[2],
-					Code:     defMatchParts[4],
+		message := []byte(p.Message)
+
+		node := mdParser.Parse(text.NewReader(message))
+		var (
+			currentDeclarationType string
+			currentDeclarationName string
+			currentBody            string
+			currentLanguage        string
+		)
+		processDefinition := func() error {
+			switch currentDeclarationType {
+			case "Function":
+				definitions.Functions[currentDeclarationName] = FunctionDef{
+					Name:     currentDeclarationName,
+					Language: currentLanguage,
+					Code:     currentBody,
 				}
-				continue
-			}
-			defMatchParts = identityDefRegex.FindStringSubmatch(block)
-			if defMatchParts != nil {
-				definitions.Identities[defMatchParts[1]] = IdentityDef{
-					Token: defMatchParts[2],
-				}
-				continue
-			}
-			defMatchParts = subscribeDefRegex.FindStringSubmatch(block)
-			if defMatchParts != nil {
-				yamlBody := defMatchParts[2]
-				var yamlSub yamlSubscription
-				err := yaml.Unmarshal([]byte(yamlBody), &yamlSub)
+			case "Subscription":
+				var yamlD yamlSubscription
+				err := yaml.Unmarshal([]byte(currentBody), &yamlD)
 				if err != nil {
+					return err
+				}
+				definitions.Subscriptions[currentDeclarationName] = SubscriptionDef{
+					Source:     yamlD.Source,
+					Function:   yamlD.Function,
+					EventTypes: yamlD.Events,
+					Channel:    yamlD.Channel,
+				}
+			case "Source":
+				var yamlS yamlSource
+				err := yaml.Unmarshal([]byte(currentBody), &yamlS)
+				if err != nil {
+					return err
+				}
+				definitions.Sources[currentDeclarationName] = SourceDef{
+					URL:   yamlS.URL,
+					Token: yamlS.Token,
+				}
+			}
+			return nil
+		}
+		for c := node.FirstChild(); c != nil; c = c.NextSibling() {
+			switch v := c.(type) {
+			case *ast.Heading:
+				parts := headerRegex.FindStringSubmatch(string(v.Text(message)))
+				currentDeclarationType = parts[1]
+				currentDeclarationName = parts[2]
+			case *ast.FencedCodeBlock:
+				currentLanguage = string(v.Language(message))
+				allCode := make([]string, 0, 10)
+				for i := 0; i < v.Lines().Len(); i++ {
+					seg := v.Lines().At(i)
+					allCode = append(allCode, string(seg.Value(message)))
+				}
+				currentBody = strings.Join(allCode, "")
+			case *ast.ThematicBreak:
+				if err := processDefinition(); err != nil {
 					return definitions, err
 				}
-				definitions.Subscriptions = append(definitions.Subscriptions, SubscriptionDef{
-					TriggerFunction: defMatchParts[1],
-					EventTypes:      yamlSub.Events,
-					Channel:         yamlSub.Channel,
-					Identity:        yamlSub.Identity,
-				})
-				continue
+				// Reset all
+				currentBody = ""
+				currentDeclarationName = ""
+				currentDeclarationType = ""
+				currentLanguage = ""
 			}
+		}
+		if err := processDefinition(); err != nil {
+			return definitions, err
 		}
 	}
 	return definitions, nil

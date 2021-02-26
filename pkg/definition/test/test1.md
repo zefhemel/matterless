@@ -1,4 +1,4 @@
-# TestFunction1
+# Function: TestFunction1
 
 ```
 function handler(event) {
@@ -7,20 +7,27 @@ function handler(event) {
 ```
 
 ------
-
-define TestFunction2
+# Function TestFunction2
 
 ```JavaScript
 function handler(event) {
   console.log("Hello world 2!");
 }
 ```
+---
+# Source: Me
+This is some documentation
 
+```yaml
+URL: http://localhost:8065
+Token: 1234
+```
 ---
-identity me: 1234
----
-Subscribe TestFunction1
-Identity: me
+# Subscription: TestSubscription
+```yaml
+Source: Me
+Function: TestFunction1
 Channel: Off-Topic
 Events: 
 - posted
+```
