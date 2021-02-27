@@ -100,7 +100,7 @@ func apiDelay() {
 func logApiResponse(resp *model.Response, action string) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		// Something's not right
-		log.Error("HTTP Error status %d during %s: %s", resp.StatusCode, action, resp.Error.Message)
+		log.Errorf("HTTP Error status %d during %s: %s", resp.StatusCode, action, resp.Error.Message)
 	}
 }
 

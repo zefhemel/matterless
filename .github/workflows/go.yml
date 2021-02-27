@@ -23,7 +23,7 @@ jobs:
         node-version: '14'
 
     - name: Build
-      run: go build -v ./...
+      run: make
 
     - name: Test
-      run: go test -v ./...
+      run: make test
