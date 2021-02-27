@@ -2,14 +2,21 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/mattermost/mattermost-server/model"
 )
 
+var safeChannelRegexp *regexp.Regexp = regexp.MustCompile(`[^A-Za-z0-9\-]`)
+
+func safeChannelName(name string) string {
+	return strings.ToLower(safeChannelRegexp.ReplaceAllString(name, "-"))
+}
+
 func (mb *MatterlessBot) postFunctionLog(userID string, functionName string, logMessage string) error {
 	user := mb.lookupUser(userID)
-	channelName := strings.ToLower(fmt.Sprintf("matterless-logs-%s-%s", user.Username, functionName))
+	channelName := safeChannelName(fmt.Sprintf("matterless-logs-%s-%s", user.Username, functionName))
 	displayName := fmt.Sprintf("MatterLess: Logs: %s: %s", user.Username, functionName)
 	ch, err := mb.ensureLogChannel(mb.team.Id, channelName, displayName)
 	if err != nil {
