@@ -1,6 +1,6 @@
-package definition
+package declaration
 
-type Definitions struct {
+type Declarations struct {
 	Sources       map[string]SourceDef
 	Functions     map[string]FunctionDef
 	Subscriptions map[string]SubscriptionDef

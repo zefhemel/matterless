@@ -1,7 +1,6 @@
 package sandbox_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,7 +30,7 @@ func TestNodeSandbox(t *testing.T) {
 	resp, logs, err := s.Invoke(sillyEvent, code, emptyEnv)
 	assert.NoError(t, err, "invoking")
 	assert.Equal(t, "ok", resp.(map[string]interface{})["status"], "status check")
-	assert.Equal(t, []string{"Log message", ""}, logs, "logs")
+	assert.Equal(t, "Log message", logs, "logs")
 
 	code = `
 	function handler() {
@@ -41,7 +40,7 @@ func TestNodeSandbox(t *testing.T) {
 	resp, logs, err = s.Invoke(sillyEvent, code, emptyEnv)
 	assert.NoError(t, err, "invoking")
 	assert.Equal(t, map[string]interface{}{}, resp, "empty response")
-	assert.Equal(t, []string{"That's all folks!", ""}, logs, "logs")
+	assert.Equal(t, "That's all folks!", logs, "logs")
 
 	invalidSyntax := `
 		console.
@@ -69,5 +68,5 @@ func DisabledTestNodeSandboxClient(t *testing.T) {
 	`
 	_, logs, err := s.Invoke(sillyEvent, code, env)
 	assert.NoError(t, err, "invoking")
-	assert.Fail(t, strings.Join(logs, "\n"))
+	assert.Fail(t, logs)
 }

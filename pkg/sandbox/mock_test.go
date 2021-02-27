@@ -8,9 +8,9 @@ import (
 )
 
 func TestMockSandbox(t *testing.T) {
-	sandbox := sandbox.NewMockSandbox(map[string]string{"status": "ok"}, []string{"Test"}, nil)
+	sandbox := sandbox.NewMockSandbox(map[string]string{"status": "ok"}, "Test", nil)
 	result, logs, err := sandbox.Invoke(nil, ``, map[string]string{})
 	assert.Equal(t, map[string]string{"status": "ok"}, result)
-	assert.Equal(t, []string{"Test"}, logs)
+	assert.Equal(t, "Test", logs)
 	assert.NoError(t, err)
 }

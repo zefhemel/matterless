@@ -1,7 +1,7 @@
 package interpreter
 
 import (
-	"github.com/zefhemel/matterless/pkg/definition"
+	"github.com/zefhemel/matterless/pkg/declaration"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
@@ -11,19 +11,17 @@ type TestResults struct {
 
 type FunctionTestResult struct {
 	Error  error
-	Logs   []string
+	Logs   string
 	Result interface{}
 }
 
-func TestDefinitions(defs definition.Definitions, sandbox sandbox.Sandbox) TestResults {
+func TestDeclarations(defs declaration.Declarations, sandbox sandbox.Sandbox) TestResults {
 	testResults := TestResults{
 		FunctionResults: map[string]FunctionTestResult{},
 	}
 	for funcName, funcDef := range defs.Functions {
 		ftr := FunctionTestResult{}
-		ftr.Result, ftr.Logs, ftr.Error = sandbox.Invoke(map[string]string{
-			"type": "test",
-		}, funcDef.Code, map[string]string{})
+		ftr.Result, ftr.Logs, ftr.Error = sandbox.Invoke(struct{}{}, funcDef.Code, map[string]string{})
 		testResults.FunctionResults[funcName] = ftr
 	}
 	return testResults

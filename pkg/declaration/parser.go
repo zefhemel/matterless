@@ -1,10 +1,9 @@
-package definition
+package declaration
 
 import (
 	"regexp"
 	"strings"
 
-	"github.com/mattermost/mattermost-server/model"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -26,16 +25,16 @@ type yamlSource struct {
 }
 
 // Parse uses the GoldMark Markdown parser to parse definitions
-func Parse(posts []*model.Post) (Definitions, error) {
+func Parse(messages []string) (Declarations, error) {
 	mdParser := goldmark.DefaultParser()
 
-	definitions := Definitions{
+	definitions := Declarations{
 		Functions:     map[string]FunctionDef{},
 		Sources:       map[string]SourceDef{},
 		Subscriptions: map[string]SubscriptionDef{},
 	}
-	for _, p := range posts {
-		message := []byte(p.Message)
+	for _, message := range messages {
+		message := []byte(message)
 
 		node := mdParser.Parse(text.NewReader(message))
 		var (
