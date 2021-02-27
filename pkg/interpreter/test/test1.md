@@ -20,3 +20,11 @@ function handler(event) {
   console.log("Hello world 2!");
 }
 ```
+----
+# Function: FailFunction
+
+```JavaScript
+function handler(event) {
+  console.
+}
+```

@@ -17,7 +17,7 @@ func (cr *CheckResults) String() string {
 			errorMessageParts = append(errorMessageParts, fmt.Sprintf("[Function: %s] %s", functionName, err))
 		}
 	}
-	return strings.Join(errorMessageParts, "\n\n")
+	return strings.Join(errorMessageParts, "\n")
 }
 
 type FunctionCheckResult struct {

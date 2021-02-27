@@ -2,6 +2,7 @@ package interpreter_test
 
 import (
 	_ "embed"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,7 @@ func TestInterpreter(t *testing.T) {
 	assert.NoError(t, err)
 	sb := sandbox.NewMockSandbox(nil, "Ok", nil)
 	results := interpreter.TestDeclarations(defs, sb)
-	assert.Equal(t, nil, results.FunctionResults["TestFunction1"].Error)
+	assert.Equal(t, nil, results.Functions["TestFunction1"].Error)
 }
 
 func TestNodeInterpreter(t *testing.T) {
@@ -26,8 +27,11 @@ func TestNodeInterpreter(t *testing.T) {
 	assert.NoError(t, err)
 	sb := sandbox.NewNodeSandbox("node")
 	results := interpreter.TestDeclarations(defs, sb)
-	assert.NoError(t, results.FunctionResults["TestFunction1"].Error)
-	assert.Equal(t, "Hello world!", results.FunctionResults["TestFunction1"].Logs)
-	assert.True(t, results.FunctionResults["TestFunction1"].Result.(bool))
-	assert.Equal(t, "Hello world 2!", results.FunctionResults["TestFunction2"].Logs)
+	assert.NoError(t, results.Functions["TestFunction1"].Error)
+	assert.Equal(t, "Hello world!", results.Functions["TestFunction1"].Logs)
+	assert.True(t, results.Functions["TestFunction1"].Result.(bool))
+	assert.Equal(t, "Hello world 2!", results.Functions["TestFunction2"].Logs)
+	assert.Error(t, results.Functions["FailFunction"].Error)
+	assert.True(t, strings.Contains(results.Functions["FailFunction"].Error.Error(), "Unexpected"))
+	assert.NotEqual(t, "", results.String())
 }

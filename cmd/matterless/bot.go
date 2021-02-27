@@ -10,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zefhemel/matterless/pkg/declaration"
 	"github.com/zefhemel/matterless/pkg/eventsource"
+	"github.com/zefhemel/matterless/pkg/interpreter"
+	"github.com/zefhemel/matterless/pkg/sandbox"
 
 	"github.com/mattermost/mattermost-server/model"
 	log "github.com/sirupsen/logrus"
@@ -140,23 +142,8 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 			return
 		}
 		results := declaration.Check(decls)
-		if results.String() == "" {
-			apiDelay()
-			_, resp := mb.mmClient.DeleteReaction(&model.Reaction{
-				UserId:    mb.botUser.Id,
-				PostId:    post.Id,
-				EmojiName: "stop_sign",
-			})
-			logApiResponse(resp, "delete declaration reaction")
-			apiDelay()
-			mb.ensureReply(post, "All good :thumbsup:")
-			_, resp = mb.mmClient.SaveReaction(&model.Reaction{
-				UserId:    mb.botUser.Id,
-				PostId:    post.Id,
-				EmojiName: "white_check_mark",
-			})
-			logApiResponse(resp, "save declaration reaction")
-		} else {
+		if results.String() != "" {
+			// Error while checking
 			apiDelay()
 			_, resp := mb.mmClient.DeleteReaction(&model.Reaction{
 				UserId:    mb.botUser.Id,
@@ -172,7 +159,44 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 			})
 			logApiResponse(resp, "set declaration reaction")
 			mb.ensureReply(post, fmt.Sprintf("Errors :thumbsdown:\n\n```\n%s\n```", results.String()))
+			return
 		}
+		nodeSandbox := sandbox.NewNodeSandbox("node")
+		testResults := interpreter.TestDeclarations(decls, nodeSandbox)
+		if testResults.String() != "" {
+			// Error while running
+			apiDelay()
+			_, resp := mb.mmClient.DeleteReaction(&model.Reaction{
+				UserId:    mb.botUser.Id,
+				PostId:    post.Id,
+				EmojiName: "white_check_mark",
+			})
+			logApiResponse(resp, "delete declaration reaction")
+			apiDelay()
+			_, resp = mb.mmClient.SaveReaction(&model.Reaction{
+				UserId:    mb.botUser.Id,
+				PostId:    post.Id,
+				EmojiName: "stop_sign",
+			})
+			logApiResponse(resp, "set declaration reaction")
+			mb.ensureReply(post, fmt.Sprintf("Errors :thumbsdown:\n\n```\n%s\n```", testResults.String()))
+			return
+		}
+		apiDelay()
+		_, resp := mb.mmClient.DeleteReaction(&model.Reaction{
+			UserId:    mb.botUser.Id,
+			PostId:    post.Id,
+			EmojiName: "stop_sign",
+		})
+		logApiResponse(resp, "delete declaration reaction")
+		apiDelay()
+		mb.ensureReply(post, "All good :thumbsup:")
+		_, resp = mb.mmClient.SaveReaction(&model.Reaction{
+			UserId:    mb.botUser.Id,
+			PostId:    post.Id,
+			EmojiName: "white_check_mark",
+		})
+		logApiResponse(resp, "save declaration reaction")
 	} else {
 		switch post.Message {
 		case "ping":
