@@ -35,7 +35,7 @@ func (tr *TestResults) String() string {
 	for functionName, functionResult := range tr.Functions {
 		if functionResult.Error != nil {
 			errorMessageParts = append(errorMessageParts, fmt.Sprintf("[Function: %s Error] %s", functionName, functionResult.Error.Error()))
-			errorMessageParts = append(errorMessageParts, fmt.Sprintf("[Function: %s Logs] %s", functionName, functionResult.Logs))
+			// errorMessageParts = append(errorMessageParts, fmt.Sprintf("[Function: %s Logs] %s", functionName, functionResult.Logs))
 		}
 	}
 	return strings.Join(errorMessageParts, "\n")

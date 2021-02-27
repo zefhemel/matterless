@@ -24,6 +24,7 @@ var helpText string
 type MatterlessBot struct {
 	userCache    map[string]*model.User
 	channelCache map[string]*model.Channel
+	team         *model.Team
 	mmClient     *model.Client4
 	eventSource  *eventsource.MatterMostSource
 	botUser      *model.User
@@ -50,6 +51,10 @@ func NewBot(url, token string) (*MatterlessBot, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.Wrap(resp.Error, "Could not get bot account")
 	}
+
+	teams, resp := mb.mmClient.GetTeamsForUser(mb.botUser.Id, "")
+	logAPIResponse(resp, "get bot teams")
+	mb.team = teams[0] // TODO Come up with something better
 
 	return mb, nil
 }
@@ -99,7 +104,7 @@ func apiDelay() {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func logApiResponse(resp *model.Response, action string) {
+func logAPIResponse(resp *model.Response, action string) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		// Something's not right
 		log.Errorf("HTTP Error status %d during %s: %s", resp.StatusCode, action, resp.Error.Message)
@@ -113,7 +118,7 @@ func (mb *MatterlessBot) replyToPost(post *model.Post, message string) {
 		Message:   message,
 		ChannelId: post.ChannelId,
 	})
-	logApiResponse(resp, "replying to message")
+	logAPIResponse(resp, "replying to message")
 }
 
 func (mb *MatterlessBot) ensureReply(post *model.Post, message string) {
@@ -125,7 +130,7 @@ func (mb *MatterlessBot) ensureReply(post *model.Post, message string) {
 		if p.ParentId == post.Id {
 			p.Message = message
 			_, resp := mb.mmClient.UpdatePost(p.Id, p)
-			logApiResponse(resp, "updating reply")
+			logAPIResponse(resp, "updating reply")
 			return
 		}
 	}
@@ -150,19 +155,27 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 				PostId:    post.Id,
 				EmojiName: "white_check_mark",
 			})
-			logApiResponse(resp, "delete declaration reaction")
+			logAPIResponse(resp, "delete declaration reaction")
 			apiDelay()
 			_, resp = mb.mmClient.SaveReaction(&model.Reaction{
 				UserId:    mb.botUser.Id,
 				PostId:    post.Id,
 				EmojiName: "stop_sign",
 			})
-			logApiResponse(resp, "set declaration reaction")
+			logAPIResponse(resp, "set declaration reaction")
 			mb.ensureReply(post, fmt.Sprintf("Errors :thumbsdown:\n\n```\n%s\n```", results.String()))
 			return
 		}
 		nodeSandbox := sandbox.NewNodeSandbox("node")
 		testResults := interpreter.TestDeclarations(decls, nodeSandbox)
+		for functionName, functionResult := range testResults.Functions {
+			if functionResult.Logs != "" {
+				err := mb.postFunctionLog(post.UserId, functionName, functionResult.Logs)
+				if err != nil {
+					log.Error("While logging", err)
+				}
+			}
+		}
 		if testResults.String() != "" {
 			// Error while running
 			apiDelay()
@@ -171,15 +184,16 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 				PostId:    post.Id,
 				EmojiName: "white_check_mark",
 			})
-			logApiResponse(resp, "delete declaration reaction")
+			logAPIResponse(resp, "delete declaration reaction")
 			apiDelay()
 			_, resp = mb.mmClient.SaveReaction(&model.Reaction{
 				UserId:    mb.botUser.Id,
 				PostId:    post.Id,
 				EmojiName: "stop_sign",
 			})
-			logApiResponse(resp, "set declaration reaction")
+			logAPIResponse(resp, "set declaration reaction")
 			mb.ensureReply(post, fmt.Sprintf("Errors :thumbsdown:\n\n```\n%s\n```", testResults.String()))
+
 			return
 		}
 		apiDelay()
@@ -188,7 +202,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 			PostId:    post.Id,
 			EmojiName: "stop_sign",
 		})
-		logApiResponse(resp, "delete declaration reaction")
+		logAPIResponse(resp, "delete declaration reaction")
 		apiDelay()
 		mb.ensureReply(post, "All good :thumbsup:")
 		_, resp = mb.mmClient.SaveReaction(&model.Reaction{
@@ -196,7 +210,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 			PostId:    post.Id,
 			EmojiName: "white_check_mark",
 		})
-		logApiResponse(resp, "save declaration reaction")
+		logAPIResponse(resp, "save declaration reaction")
 	} else {
 		switch post.Message {
 		case "ping":
@@ -205,7 +219,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 				PostId:    post.Id,
 				EmojiName: "ping_pong",
 			})
-			logApiResponse(resp, "ping pong")
+			logAPIResponse(resp, "ping pong")
 		case "help":
 			mb.replyToPost(post, helpText)
 		}
