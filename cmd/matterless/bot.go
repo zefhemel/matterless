@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -22,20 +23,22 @@ var helpText string
 
 // MatterlessBot represent the meeting bot object
 type MatterlessBot struct {
-	userCache    map[string]*model.User
-	channelCache map[string]*model.Channel
-	team         *model.Team
-	mmClient     *model.Client4
-	eventSource  *eventsource.MatterMostSource
-	botUser      *model.User
+	userCache        map[string]*model.User
+	channelCache     map[string]*model.Channel
+	channelNameCache map[string]*model.Channel
+	team             *model.Team
+	mmClient         *model.Client4
+	eventSource      *eventsource.MatterMostSource
+	botUser          *model.User
 }
 
 // NewBot creates a new instance of the bot event listener
 func NewBot(url, token string) (*MatterlessBot, error) {
 	mb := &MatterlessBot{
-		userCache:    map[string]*model.User{},
-		channelCache: map[string]*model.Channel{},
-		mmClient:     model.NewAPIv4Client(url),
+		userCache:        map[string]*model.User{},
+		channelCache:     map[string]*model.Channel{},
+		channelNameCache: map[string]*model.Channel{},
+		mmClient:         model.NewAPIv4Client(url),
 	}
 	mb.mmClient.SetOAuthToken(token)
 
@@ -96,6 +99,17 @@ func (mb *MatterlessBot) lookupChannel(channelID string) *model.Channel {
 	} else {
 		mb.channelCache[channelID], _ = mb.mmClient.GetChannel(channelID, "")
 		return mb.channelCache[channelID]
+	}
+}
+
+// lookupChannelByName returns nil in case channel is not found
+func (mb *MatterlessBot) lookupChannelByName(name string, teamID string) *model.Channel {
+	channel := mb.channelNameCache[name]
+	if channel != nil {
+		return channel
+	} else {
+		mb.channelNameCache[name], _ = mb.mmClient.GetChannelByName(name, teamID, "")
+		return mb.channelNameCache[name]
 	}
 }
 
@@ -234,7 +248,41 @@ func (mb *MatterlessBot) handlePosted(evt *model.WebSocketEvent) {
 		return
 	}
 	channel := mb.lookupChannel(post.ChannelId)
-	if channel.Type == model.CHANNEL_DIRECT {
+	switch channel.Type {
+	case model.CHANNEL_DIRECT:
 		mb.handleDirect(&post, channel)
+	case model.CHANNEL_PRIVATE:
+		mb.handlePrivate(&post, channel)
+	}
+}
+
+func (mb *MatterlessBot) handlePrivate(p *model.Post, channel *model.Channel) {
+	if strings.HasPrefix(channel.Name, "matterless-logs-") {
+		// Log channel
+
+		// TODO: Reenable when figuring out how to recreate channels
+		//mb.handleLogChannelLeaving(p, channel)
+	}
+}
+
+func (mb *MatterlessBot) handleLogChannelLeaving(p *model.Post, channel *model.Channel) {
+	if p.Type == model.POST_LEAVE_CHANNEL {
+		members, resp := mb.mmClient.GetChannelMembers(channel.Id, 0, 5, "")
+		if resp.Error != nil {
+			logAPIResponse(resp, "getting channel members")
+			return
+		}
+		if len(*members) == 1 {
+			// Just matterless bot left, close the channel
+			success, resp := mb.mmClient.DeleteChannel(channel.Id)
+			if !success {
+				logAPIResponse(resp, "deleting log channel")
+			} else {
+				// Update caches
+				delete(mb.channelCache, channel.Id)
+				delete(mb.channelNameCache, channel.Name)
+			}
+			log.Info("Deleted channel ", channel.Name, "Success: ", success)
+		}
 	}
 }
