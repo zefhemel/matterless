@@ -1,7 +1,7 @@
 # Function: TestFunction1
 
 ```javascript
-export default function(event) {
+function handle(event) {
   console.log("Hello world!");
   if(JSON.stringify(event) === '{}') {
     // Test event
@@ -16,7 +16,7 @@ export default function(event) {
 # Function: TestFunction2
 
 ```JavaScript
-export default function(event) {
+function handle(event) {
   console.log("Hello world 2!"); 
 }
 ```
@@ -24,7 +24,7 @@ export default function(event) {
 # Function: FailFunction
 
 ```JavaScript
-export default function(event) {
+function handle(event) {
   console.
 }
 ```

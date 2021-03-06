@@ -29,4 +29,5 @@ Source: Me
 Function: TestFunction1
 Events: 
 - posted
+PassSourceCredentials: true
 ```

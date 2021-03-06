@@ -183,8 +183,8 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 			mb.ensureReply(post, fmt.Sprintf("Errors :thumbsdown:\n\n```\n%s\n```", results.String()))
 			return
 		}
-		nodeSandbox := sandbox.NewNodeSandbox()
-		testResults := interpreter.TestDeclarations(decls, nodeSandbox)
+		sb := sandbox.NewNodeDockerSandbox()
+		testResults := interpreter.TestDeclarations(decls, sb)
 		for functionName, functionResult := range testResults.Functions {
 			if functionResult.Logs != "" {
 				if err := mb.postFunctionLog(post.UserId, functionName, functionResult.Logs); err != nil {

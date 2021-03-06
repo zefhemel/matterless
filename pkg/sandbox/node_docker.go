@@ -4,26 +4,20 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"text/template"
-
-	_ "embed"
-
-	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/util"
 )
 
-type NodeSandbox struct {
+type NodeDockerSandbox struct {
 }
 
-//go:embed node/template.js
-var nodeTemplate string
-
-func (s *NodeSandbox) wrapScript(event interface{}, code string) string {
+func (s *NodeDockerSandbox) wrapScript(event interface{}, code string) string {
 	data := struct {
 		Code  string
 		Event string
@@ -44,7 +38,7 @@ func (s *NodeSandbox) wrapScript(event interface{}, code string) string {
 	return out.String()
 }
 
-func (s *NodeSandbox) determineNodeBin() string {
+func (s *NodeDockerSandbox) determineNodeBin() string {
 	if nodeBin := os.Getenv("nodeBin"); nodeBin != "" {
 		return nodeBin
 	} else {
@@ -52,12 +46,14 @@ func (s *NodeSandbox) determineNodeBin() string {
 	}
 }
 
-func (s *NodeSandbox) Invoke(event interface{}, code string, env map[string]string) (interface{}, string, error) {
-	cmd := exec.Command(s.determineNodeBin(), "--input-type=module", "-e", s.wrapScript(event, code))
-	cmd.Env = make([]string, 0, 10)
+func (s *NodeDockerSandbox) Invoke(event interface{}, code string, env map[string]string) (interface{}, string, error) {
+	args := make([]string, 0, 10)
+	args = append(args, "run", "--rm")
 	for envKey, envVal := range env {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", envKey, envVal))
+		args = append(args, "-e", fmt.Sprintf("%s=%s", envKey, envVal))
 	}
+	args = append(args, "-i", "zefhemel/matterless-runner-docker-node", "--input-type=module", "-e", s.wrapScript(event, code))
+	cmd := exec.Command("docker", args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, "", errors.Wrap(err, "stdout pipe")
@@ -91,8 +87,8 @@ func (s *NodeSandbox) Invoke(event interface{}, code string, env map[string]stri
 	return response, strings.TrimSpace(string(stdOutBuf)), nil
 }
 
-func NewNodeSandbox() *NodeSandbox {
-	return &NodeSandbox{}
+func NewNodeDockerSandbox() *NodeDockerSandbox {
+	return &NodeDockerSandbox{}
 }
 
-var _ Sandbox = &NodeSandbox{}
+var _ Sandbox = &NodeDockerSandbox{}

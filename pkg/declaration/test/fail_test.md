@@ -5,7 +5,7 @@
 # Function: GoodFunction
 
 ```
-export default function() {
+function handle() {
 
 }
 ```

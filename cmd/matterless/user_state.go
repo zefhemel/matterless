@@ -5,7 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/declaration"
 	"github.com/zefhemel/matterless/pkg/eventsource"
-	sandbox2 "github.com/zefhemel/matterless/pkg/sandbox"
+	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
 type userState struct {
@@ -46,7 +46,7 @@ func (mb *MatterlessBot) evalDeclarations(userID string, decls declaration.Decla
 }
 
 func (mb *MatterlessBot) eventProcessor(userID string, source eventsource.EventSource, decls declaration.Declarations) {
-	sandbox := sandbox2.NewNodeSandbox()
+	sb := sandbox.NewNodeDockerSandbox()
 	env := map[string]string{}
 	for evt := range source.Events() {
 		wsEvent, ok := evt.(*model.WebSocketEvent)
@@ -60,8 +60,16 @@ func (mb *MatterlessBot) eventProcessor(userID string, source eventsource.EventS
 		for _, subscriptionDef := range decls.Subscriptions {
 			if stringSliceContains(subscriptionDef.EventTypes, wsEvent.EventType()) {
 				functionDef := decls.Functions[subscriptionDef.Function]
+				invokeEnv := env
+				if subscriptionDef.PassSourceCredentials {
+					sourceDef := decls.Sources[subscriptionDef.Source]
+					invokeEnv = map[string]string{
+						"SOURCE_URL":   sourceDef.URL,
+						"SOURCE_TOKEN": sourceDef.Token,
+					}
+				}
 				log.Debug("Now triggering event to ", subscriptionDef.Function)
-				_, log, err := sandbox.Invoke(wsEvent, functionDef.Code, env)
+				_, log, err := sb.Invoke(wsEvent, functionDef.Code, invokeEnv)
 				if err != nil {
 					mb.postFunctionLog(userID, subscriptionDef.Function, err.Error())
 				}

@@ -1,17 +1,17 @@
-import f from "./function.mjs";
+{{.Code}}
 
-function getClient() {
-	require('isomorphic-fetch');
-	const Client4 = require('./mattermost-redux/mattermost.client4.js').default;
-	const client = new Client4();
-	client.setUrl(process.env.URL);
-	client.setToken(process.env.TOKEN);
-	return client;
-}
+let result = handle({{.Event}});
 
-let result = f({{.Event}});
-if(result !== undefined) {
-	console.error(JSON.stringify(result));
+if (result === undefined) {
+    console.error(JSON.stringify({}));
+} else if (result.then) {
+    result.then((result) => {
+        if (result === undefined) {
+            console.error(JSON.stringify({}));
+        } else {
+            console.error(JSON.stringify(result));
+        }
+    });
 } else {
-	console.error(JSON.stringify({}));
+    console.error(JSON.stringify(result));
 }

@@ -7,12 +7,12 @@ import (
 	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
-func TestNodeSandbox(t *testing.T) {
+func DisabledTestNodeDockerSandbox(t *testing.T) {
 	sillyEvent := map[string]string{
 		"name": "Zef",
 	}
 	emptyEnv := map[string]string{}
-	s := sandbox.NewNodeSandbox()
+	s := sandbox.NewNodeDockerSandbox()
 	code := `
 	function handle(evt) {
 		console.log('Log message');
@@ -47,26 +47,4 @@ func TestNodeSandbox(t *testing.T) {
 	`
 	_, _, err = s.Invoke(sillyEvent, invalidSyntax, emptyEnv)
 	assert.Error(t, err, "invoking")
-}
-
-// Disabled, can only be run with local MM instance
-func DisabledTestNodeSandboxClient(t *testing.T) {
-	sillyEvent := map[string]string{"name": "Zef"}
-	env := map[string]string{
-		"URL":   "http://localhost:8065",
-		"TOKEN": "MYTOKEN",
-	}
-	s := sandbox.NewNodeSandbox()
-	code := `
-	function handle(evt) {
-		console.log('Starting...');
-		let client = getClient();
-		client.getMe().then(me => {
-			console.log("Me", me);
-		})
-	}
-	`
-	_, logs, err := s.Invoke(sillyEvent, code, env)
-	assert.NoError(t, err, "invoking")
-	assert.Fail(t, logs)
 }

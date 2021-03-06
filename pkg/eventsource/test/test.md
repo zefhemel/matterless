@@ -16,7 +16,7 @@ Events:
 # Function TestFunction1
 
 ```JavaScript
-export default function (event) {
+function handle(event) {
   console.log("Got event", event);
 }
 ```

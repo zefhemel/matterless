@@ -14,9 +14,10 @@ type FunctionDef struct {
 }
 
 type SubscriptionDef struct {
-	Source     string
-	Function   string
-	EventTypes []string
+	Source                string
+	Function              string
+	EventTypes            []string
+	PassSourceCredentials bool
 }
 
 type SourceDef struct {
