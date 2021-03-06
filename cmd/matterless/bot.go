@@ -30,6 +30,8 @@ type MatterlessBot struct {
 	mmClient         *model.Client4
 	eventSource      *eventsource.MatterMostSource
 	botUser          *model.User
+
+	userState map[string]*userState
 }
 
 // NewBot creates a new instance of the bot event listener
@@ -39,6 +41,7 @@ func NewBot(url, token string) (*MatterlessBot, error) {
 		channelCache:     map[string]*model.Channel{},
 		channelNameCache: map[string]*model.Channel{},
 		mmClient:         model.NewAPIv4Client(url),
+		userState:        map[string]*userState{},
 	}
 	mb.mmClient.SetOAuthToken(token)
 
@@ -180,12 +183,11 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 			mb.ensureReply(post, fmt.Sprintf("Errors :thumbsdown:\n\n```\n%s\n```", results.String()))
 			return
 		}
-		nodeSandbox := sandbox.NewNodeSandbox("node")
+		nodeSandbox := sandbox.NewNodeSandbox()
 		testResults := interpreter.TestDeclarations(decls, nodeSandbox)
 		for functionName, functionResult := range testResults.Functions {
 			if functionResult.Logs != "" {
-				err := mb.postFunctionLog(post.UserId, functionName, functionResult.Logs)
-				if err != nil {
+				if err := mb.postFunctionLog(post.UserId, functionName, functionResult.Logs); err != nil {
 					log.Error("While logging", err)
 				}
 			}
@@ -225,6 +227,10 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 			EmojiName: "white_check_mark",
 		})
 		logAPIResponse(resp, "save declaration reaction")
+		err = mb.evalDeclarations(post.UserId, decls)
+		if err != nil {
+			log.Error("Evaluation error:", err)
+		}
 	} else {
 		switch post.Message {
 		case "ping":

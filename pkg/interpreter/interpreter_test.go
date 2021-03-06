@@ -25,7 +25,7 @@ func TestInterpreter(t *testing.T) {
 func TestNodeInterpreter(t *testing.T) {
 	defs, err := declaration.Parse([]string{test1Md})
 	assert.NoError(t, err)
-	sb := sandbox.NewNodeSandbox("node")
+	sb := sandbox.NewNodeSandbox()
 	results := interpreter.TestDeclarations(defs, sb)
 	assert.NoError(t, results.Functions["TestFunction1"].Error)
 	assert.Equal(t, "Hello world!", results.Functions["TestFunction1"].Logs)

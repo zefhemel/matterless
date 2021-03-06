@@ -13,13 +13,13 @@ import (
 var headerRegex = regexp.MustCompile("\\s*(\\w+)\\:?\\s*(.*)")
 
 type yamlSubscription struct {
-	Function string   `yaml:"Function"`
 	Source   string   `yaml:"Source"`
-	Channel  string   `yaml:"Channel"`
+	Function string   `yaml:"Function"`
 	Events   []string `yaml:"Events"`
 }
 
 type yamlSource struct {
+	Type  string `yaml:"Type"`
 	URL   string `yaml:"URL"`
 	Token string `yaml:"Token"`
 }
@@ -61,7 +61,6 @@ func Parse(messages []string) (Declarations, error) {
 					Source:     yamlD.Source,
 					Function:   yamlD.Function,
 					EventTypes: yamlD.Events,
-					Channel:    yamlD.Channel,
 				}
 			case "Source":
 				var yamlS yamlSource
@@ -70,6 +69,7 @@ func Parse(messages []string) (Declarations, error) {
 					return err
 				}
 				definitions.Sources[currentDeclarationName] = SourceDef{
+					Type:  yamlS.Type,
 					URL:   yamlS.URL,
 					Token: yamlS.Token,
 				}

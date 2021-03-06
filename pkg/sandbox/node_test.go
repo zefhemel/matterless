@@ -12,9 +12,9 @@ func TestNodeSandbox(t *testing.T) {
 		"name": "Zef",
 	}
 	emptyEnv := map[string]string{}
-	s := sandbox.NewNodeSandbox("node")
+	s := sandbox.NewNodeSandbox()
 	code := `
-	function handler(evt) {
+	export default function(evt) {
 		console.log('Log message');
 		if(evt.name === "Zef") {
 			return {
@@ -33,7 +33,7 @@ func TestNodeSandbox(t *testing.T) {
 	assert.Equal(t, "Log message", logs, "logs")
 
 	code = `
-	function handler() {
+	export default function handler() {
 		console.log("That's all folks!");
 	}	
 	`
@@ -56,9 +56,9 @@ func DisabledTestNodeSandboxClient(t *testing.T) {
 		"URL":   "http://localhost:8065",
 		"TOKEN": "MYTOKEN",
 	}
-	s := sandbox.NewNodeSandbox("node")
+	s := sandbox.NewNodeSandbox()
 	code := `
-	function handler(evt) {
+	export default function(evt) {
 		console.log('Starting...');
 		let client = getClient();
 		client.getMe().then(me => {

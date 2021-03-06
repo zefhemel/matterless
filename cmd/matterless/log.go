@@ -22,6 +22,7 @@ func (mb *MatterlessBot) postFunctionLog(userID string, functionName string, log
 	if err != nil {
 		return err
 	}
+	apiDelay()
 	_, resp := mb.mmClient.AddChannelMember(ch.Id, userID)
 	logAPIResponse(resp, "add member")
 	_, resp = mb.mmClient.CreatePost(&model.Post{
@@ -45,5 +46,9 @@ func (mb *MatterlessBot) ensureLogChannel(teamID, name, displayName string) (*mo
 		Header:      "",
 		Purpose:     "",
 	})
-	return ch, resp.Error
+	if ch == nil {
+		// Error
+		return nil, resp.Error
+	}
+	return ch, nil
 }

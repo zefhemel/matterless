@@ -1,7 +1,7 @@
 # Function: TestFunction1
 
 ```
-function handler(event) {
+export default function(event) {
   console.log("Hello world!");
 }
 ```
@@ -10,7 +10,7 @@ function handler(event) {
 # Function TestFunction2
 
 ```JavaScript
-function handler(event) {
+export default function (event) {
   console.log("Hello world 2!");
 }
 ```
@@ -27,7 +27,6 @@ Token: 1234
 ```yaml
 Source: Me
 Function: TestFunction1
-Channel: Off-Topic
 Events: 
 - posted
 ```

@@ -13,6 +13,7 @@ type MatterMostSource struct {
 	token    string
 	events   chan interface{}
 	stopping chan struct{}
+	stopped  chan struct{}
 }
 
 func NewMatterMostSource(url, token string) (*MatterMostSource, error) {
@@ -20,8 +21,8 @@ func NewMatterMostSource(url, token string) (*MatterMostSource, error) {
 	wsURL = strings.Replace(wsURL, "https:", "wss:", 1)
 	log.Debug("Websocket URL: ", wsURL)
 	mms := &MatterMostSource{
-		events:   make(chan interface{}),
 		stopping: make(chan struct{}),
+		stopped:  make(chan struct{}),
 	}
 
 	var err *model.AppError
@@ -34,8 +35,18 @@ func NewMatterMostSource(url, token string) (*MatterMostSource, error) {
 	return mms, nil
 }
 
+// Events filtered by SubscribedEvents
 func (mms *MatterMostSource) Events() chan interface{} {
 	return mms.events
+}
+
+func stringSliceContains(stringSlice []string, needle string) bool {
+	for _, s := range stringSlice {
+		if needle == s {
+			return true
+		}
+	}
+	return false
 }
 
 func (mms *MatterMostSource) Start() error {
@@ -46,6 +57,9 @@ func (mms *MatterMostSource) Start() error {
 	}
 
 	mms.wsClient.Listen()
+
+	// Initialize event channel
+	mms.events = make(chan interface{})
 
 	go func() {
 	eventLoop:
@@ -74,12 +88,16 @@ func (mms *MatterMostSource) Start() error {
 			}
 		}
 		close(mms.events)
+		mms.wsClient.Close()
+		mms.stopped <- struct{}{}
 	}()
 	return nil
 }
 
 func (mms *MatterMostSource) Stop() {
 	mms.stopping <- struct{}{}
+	// Wait for the connection to actually close
+	<-mms.stopped
 }
 
 var _ EventSource = &MatterMostSource{}

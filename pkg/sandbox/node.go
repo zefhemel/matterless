@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"text/template"
@@ -17,7 +18,6 @@ import (
 )
 
 type NodeSandbox struct {
-	nodeBin string
 }
 
 //go:embed node/template.js
@@ -44,8 +44,33 @@ func (s *NodeSandbox) wrapScript(event interface{}, code string) string {
 	return out.String()
 }
 
+func (s *NodeSandbox) determineNodeBin() string {
+	if nodeBin := os.Getenv("nodeBin"); nodeBin != "" {
+		return nodeBin
+	} else {
+		return "node"
+	}
+}
+
 func (s *NodeSandbox) Invoke(event interface{}, code string, env map[string]string) (interface{}, string, error) {
-	cmd := exec.Command(s.nodeBin, "-e", s.wrapScript(event, code))
+	tmpDir, err := os.MkdirTemp(".", "function-run")
+	if err != nil {
+		return nil, "", err
+	}
+	err = os.WriteFile(fmt.Sprintf("%s/function.mjs", tmpDir), []byte(code), 0600)
+	if err != nil {
+		return nil, "", err
+	}
+
+	defer func() {
+		// Temp dir cleanup
+		if err := os.RemoveAll(tmpDir); err != nil {
+			log.Info("Could not cleanup temporarily directory ", tmpDir)
+		}
+	}()
+
+	cmd := exec.Command(s.determineNodeBin(), "--input-type=module", "-e", s.wrapScript(event, code))
+	cmd.Dir = tmpDir
 	cmd.Env = make([]string, 0, 10)
 	for envKey, envVal := range env {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", envKey, envVal))
@@ -83,10 +108,8 @@ func (s *NodeSandbox) Invoke(event interface{}, code string, env map[string]stri
 	return response, strings.TrimSpace(string(stdOutBuf)), nil
 }
 
-func NewNodeSandbox(nodeBin string) *NodeSandbox {
-	return &NodeSandbox{
-		nodeBin: nodeBin,
-	}
+func NewNodeSandbox() *NodeSandbox {
+	return &NodeSandbox{}
 }
 
 var _ Sandbox = &NodeSandbox{}

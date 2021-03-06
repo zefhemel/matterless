@@ -1,4 +1,4 @@
-{{.Code}}
+import f from "./function.mjs";
 
 function getClient() {
 	require('isomorphic-fetch');
@@ -9,7 +9,7 @@ function getClient() {
 	return client;
 }
 
-let result = handler({{.Event}});
+let result = f({{.Event}});
 if(result !== undefined) {
 	console.error(JSON.stringify(result));
 } else {

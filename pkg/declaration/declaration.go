@@ -17,10 +17,11 @@ type SubscriptionDef struct {
 	Source     string
 	Function   string
 	EventTypes []string
-	Channel    string
 }
 
 type SourceDef struct {
+	Type  string
 	URL   string
 	Token string
+	// TODO: Add Username and Password
 }
