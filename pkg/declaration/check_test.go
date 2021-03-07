@@ -12,7 +12,7 @@ import (
 var testMd string
 
 func TestCheck(t *testing.T) {
-	declarations, err := declaration.Parse([]string{testMd})
+	declarations, err := declaration.Parse(testMd)
 	assert.NoError(t, err)
 	results := declaration.Check(declarations)
 	assert.Equal(t, "Empty function name", results.Functions[""][0].Error())

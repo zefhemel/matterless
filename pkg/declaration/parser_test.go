@@ -13,7 +13,7 @@ import (
 var test1Md string
 
 func TestParser(t *testing.T) {
-	decls, err := declaration.Parse([]string{test1Md})
+	decls, err := declaration.Parse(test1Md)
 	decls.Normalize()
 	assert.NoError(t, err)
 	assert.Equal(t, "TestFunction1", decls.Functions["TestFunction1"].Name)

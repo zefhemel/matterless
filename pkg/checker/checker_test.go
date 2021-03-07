@@ -15,7 +15,7 @@ import (
 var test1Md string
 
 func TestInterpreter(t *testing.T) {
-	defs, err := declaration.Parse([]string{test1Md})
+	defs, err := declaration.Parse(test1Md)
 	assert.NoError(t, err)
 	sb := sandbox.NewMockSandbox(nil, "Ok", nil)
 	results := checker.TestDeclarations(defs, sb)
@@ -23,7 +23,7 @@ func TestInterpreter(t *testing.T) {
 }
 
 func TestNodeInterpreter(t *testing.T) {
-	defs, err := declaration.Parse([]string{test1Md})
+	defs, err := declaration.Parse(test1Md)
 	assert.NoError(t, err)
 	sb := sandbox.NewNodeSandbox()
 	results := checker.TestDeclarations(defs, sb)

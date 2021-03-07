@@ -2,7 +2,9 @@ package application
 
 import (
 	"github.com/mattermost/mattermost-server/model"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/checker"
 	"github.com/zefhemel/matterless/pkg/declaration"
 	"github.com/zefhemel/matterless/pkg/eventsource"
 	"github.com/zefhemel/matterless/pkg/sandbox"
@@ -10,16 +12,45 @@ import (
 )
 
 type Application struct {
+	// Declarations
 	declarations *declaration.Declarations
+
+	// Runtime
 	eventSources map[string]eventsource.EventSource
+	sandbox      sandbox.Sandbox
 
 	// Callbacks
 	// TODO: Consider switching to channels instead?
 	logCallback func(kind string, message string)
 }
 
-func (app *Application) SetDeclarations(decls *declaration.Declarations) error {
-	app.declarations = decls
+func NewApplication(logCallback func(kind, message string)) *Application {
+	return &Application{
+		eventSources: map[string]eventsource.EventSource{},
+		logCallback:  logCallback,
+		sandbox:      sandbox.NewNodeDockerSandbox(),
+	}
+}
+
+func (app *Application) Eval(code string) error {
+	decls, err := declaration.Parse(code)
+	if err != nil {
+		return err
+	}
+	results := declaration.Check(decls)
+	if results.String() != "" {
+		// Error while checking
+		return errors.Wrap(errors.New(results.String()), "declaration check")
+	}
+	testResults := checker.TestDeclarations(decls, app.sandbox)
+	for _, functionResult := range testResults.Functions {
+		if functionResult.Logs != "" {
+			app.logCallback("Function test", functionResult.Logs)
+		}
+	}
+	if testResults.String() != "" {
+		return errors.Wrap(errors.New(testResults.String()), "test run")
+	}
 
 	// First, stop all event sources
 	for sourceName, eventSource := range app.eventSources {
@@ -40,13 +71,6 @@ func (app *Application) SetDeclarations(decls *declaration.Declarations) error {
 	}
 
 	return nil
-}
-
-func NewApplication(logCallback func(kind, message string)) *Application {
-	return &Application{
-		eventSources: map[string]eventsource.EventSource{},
-		logCallback:  logCallback,
-	}
 }
 
 func (app *Application) eventProcessor(source eventsource.EventSource, decls *declaration.Declarations) {

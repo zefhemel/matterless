@@ -3,20 +3,15 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
-	"fmt"
 	"github.com/zefhemel/matterless/pkg/application"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/zefhemel/matterless/pkg/checker"
-	"github.com/zefhemel/matterless/pkg/declaration"
-	"github.com/zefhemel/matterless/pkg/eventsource"
-	"github.com/zefhemel/matterless/pkg/sandbox"
-
 	"github.com/mattermost/mattermost-server/model"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/eventsource"
 )
 
 //go:embed HELP.md
@@ -64,25 +59,6 @@ func NewBot(url, token string) (*MatterlessBot, error) {
 	mb.team = teams[0] // TODO Come up with something better
 
 	return mb, nil
-}
-
-func (mb *MatterlessBot) evalDeclarations(userID string, decls *declaration.Declarations) error {
-	userApp, ok := mb.userApps[userID]
-	if !ok {
-		userApp = application.NewApplication(func(kind, message string) {
-			err := mb.postFunctionLog(userID, kind, message)
-			if err != nil {
-				log.Error("Could not post function log", err)
-			}
-		})
-	}
-
-	err := userApp.SetDeclarations(decls)
-	if err != nil {
-		return err
-	}
-	mb.userApps[userID] = userApp
-	return nil
 }
 
 // Start listens and handles incoming messages until the socket disconnects
@@ -177,15 +153,15 @@ func (mb *MatterlessBot) ensureReply(post *model.Post, message string) {
 
 func (mb *MatterlessBot) handleDirect(post *model.Post) {
 	if post.Message[0] == '#' {
-		// Declarations
-		decls, err := declaration.Parse([]string{post.Message})
+		userApp, ok := mb.userApps[post.UserId]
+		if !ok {
+			userApp = application.NewApplication(func(kind, message string) {
+				mb.postFunctionLog(post.UserId, kind, message)
+			})
+		}
+		mb.userApps[post.UserId] = userApp
+		err := userApp.Eval(post.Message)
 		if err != nil {
-			log.Error(err)
-			return
-		}
-		results := declaration.Check(decls)
-		if results.String() != "" {
-			// Error while checking
 			apiDelay()
 			_, resp := mb.mmClient.DeleteReaction(&model.Reaction{
 				UserId:    mb.botUser.Id,
@@ -200,38 +176,10 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 				EmojiName: "stop_sign",
 			})
 			logAPIResponse(resp, "set declaration reaction")
-			mb.ensureReply(post, fmt.Sprintf("Errors :thumbsdown:\n\n```\n%s\n```", results.String()))
+			mb.ensureReply(post, err.Error())
 			return
 		}
-		sb := sandbox.NewNodeDockerSandbox()
-		testResults := checker.TestDeclarations(decls, sb)
-		for functionName, functionResult := range testResults.Functions {
-			if functionResult.Logs != "" {
-				if err := mb.postFunctionLog(post.UserId, functionName, functionResult.Logs); err != nil {
-					log.Error("While logging", err)
-				}
-			}
-		}
-		if testResults.String() != "" {
-			// Error while running
-			apiDelay()
-			_, resp := mb.mmClient.DeleteReaction(&model.Reaction{
-				UserId:    mb.botUser.Id,
-				PostId:    post.Id,
-				EmojiName: "white_check_mark",
-			})
-			logAPIResponse(resp, "delete declaration reaction")
-			apiDelay()
-			_, resp = mb.mmClient.SaveReaction(&model.Reaction{
-				UserId:    mb.botUser.Id,
-				PostId:    post.Id,
-				EmojiName: "stop_sign",
-			})
-			logAPIResponse(resp, "set declaration reaction")
-			mb.ensureReply(post, fmt.Sprintf("Errors :thumbsdown:\n\n```\n%s\n```", testResults.String()))
 
-			return
-		}
 		apiDelay()
 		_, resp := mb.mmClient.DeleteReaction(&model.Reaction{
 			UserId:    mb.botUser.Id,
@@ -247,10 +195,6 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 			EmojiName: "white_check_mark",
 		})
 		logAPIResponse(resp, "save declaration reaction")
-		err = mb.evalDeclarations(post.UserId, decls)
-		if err != nil {
-			log.Error("Evaluation error:", err)
-		}
 	} else {
 		switch post.Message {
 		case "ping":
@@ -282,6 +226,7 @@ func (mb *MatterlessBot) handlePosted(evt *model.WebSocketEvent) {
 	}
 }
 
+// Note: currently does nothing
 func (mb *MatterlessBot) handlePrivate(p *model.Post, channel *model.Channel) {
 	if strings.HasPrefix(channel.Name, "mls-bot-logs-") {
 		// Log channel
@@ -291,6 +236,7 @@ func (mb *MatterlessBot) handlePrivate(p *model.Post, channel *model.Channel) {
 	}
 }
 
+// Note: not currently used
 func (mb *MatterlessBot) handleLogChannelLeaving(p *model.Post, channel *model.Channel) {
 	if p.Type == model.POST_LEAVE_CHANNEL {
 		members, resp := mb.mmClient.GetChannelMembers(channel.Id, 0, 5, "")
