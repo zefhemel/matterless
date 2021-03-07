@@ -13,11 +13,14 @@ import (
 var test1Md string
 
 func TestParser(t *testing.T) {
-	def, err := declaration.Parse([]string{test1Md})
+	decls, err := declaration.Parse([]string{test1Md})
+	decls.Normalize()
 	assert.NoError(t, err)
-	assert.Equal(t, "TestFunction1", def.Functions["TestFunction1"].Name)
-	assert.Equal(t, "TestFunction2", def.Functions["TestFunction2"].Name)
-	assert.Equal(t, "JavaScript", def.Functions["TestFunction2"].Language)
-	assert.Equal(t, "1234", def.Sources["Me"].Token)
-	assert.Equal(t, "posted", def.Subscriptions["TestSubscription"].EventTypes[0])
+	assert.Equal(t, "TestFunction1", decls.Functions["TestFunction1"].Name)
+	assert.Equal(t, "TestFunction2", decls.Functions["TestFunction2"].Name)
+	assert.Equal(t, "JavaScript", decls.Functions["TestFunction2"].Language)
+	assert.Equal(t, "1234", decls.Sources["Me"].Token)
+	assert.Equal(t, "posted", decls.Subscriptions["TestSubscription"].EventTypes[0])
+	assert.Equal(t, "http://localhost:8065", decls.Environment["MattermostURL"])
+	assert.Equal(t, "1234", decls.Environment["MattermostToken"])
 }

@@ -19,8 +19,8 @@ export default function (event) {
 This is some documentation
 
 ```yaml
-URL: http://localhost:8065
-Token: 1234
+URL: $MattermostURL
+Token: $MattermostToken
 ```
 ---
 # Subscription: TestSubscription
@@ -29,5 +29,12 @@ Source: Me
 Function: TestFunction1
 Events: 
 - posted
-PassSourceCredentials: true
+```
+
+---
+# Environment
+
+```yaml
+MattermostURL: http://localhost:8065
+MattermostToken: 1234
 ```

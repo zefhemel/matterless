@@ -4,14 +4,15 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"github.com/zefhemel/matterless/pkg/application"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/zefhemel/matterless/pkg/checker"
 	"github.com/zefhemel/matterless/pkg/declaration"
 	"github.com/zefhemel/matterless/pkg/eventsource"
-	"github.com/zefhemel/matterless/pkg/interpreter"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 
 	"github.com/mattermost/mattermost-server/model"
@@ -31,7 +32,7 @@ type MatterlessBot struct {
 	eventSource      *eventsource.MatterMostSource
 	botUser          *model.User
 
-	userState map[string]*userState
+	userApps map[string]*application.Application
 }
 
 // NewBot creates a new instance of the bot event listener
@@ -41,7 +42,7 @@ func NewBot(url, token string) (*MatterlessBot, error) {
 		channelCache:     map[string]*model.Channel{},
 		channelNameCache: map[string]*model.Channel{},
 		mmClient:         model.NewAPIv4Client(url),
-		userState:        map[string]*userState{},
+		userApps:         map[string]*application.Application{},
 	}
 	mb.mmClient.SetOAuthToken(token)
 
@@ -65,7 +66,26 @@ func NewBot(url, token string) (*MatterlessBot, error) {
 	return mb, nil
 }
 
-// Listen listens and handles incoming messages until the socket disconnects
+func (mb *MatterlessBot) evalDeclarations(userID string, decls *declaration.Declarations) error {
+	userApp, ok := mb.userApps[userID]
+	if !ok {
+		userApp = application.NewApplication(func(kind, message string) {
+			err := mb.postFunctionLog(userID, kind, message)
+			if err != nil {
+				log.Error("Could not post function log", err)
+			}
+		})
+	}
+
+	err := userApp.SetDeclarations(decls)
+	if err != nil {
+		return err
+	}
+	mb.userApps[userID] = userApp
+	return nil
+}
+
+// Start listens and handles incoming messages until the socket disconnects
 func (mb *MatterlessBot) Start() error {
 	err := mb.eventSource.Start()
 
@@ -155,7 +175,7 @@ func (mb *MatterlessBot) ensureReply(post *model.Post, message string) {
 	mb.replyToPost(post, message)
 }
 
-func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) {
+func (mb *MatterlessBot) handleDirect(post *model.Post) {
 	if post.Message[0] == '#' {
 		// Declarations
 		decls, err := declaration.Parse([]string{post.Message})
@@ -184,7 +204,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post, channel *model.Channel) 
 			return
 		}
 		sb := sandbox.NewNodeDockerSandbox()
-		testResults := interpreter.TestDeclarations(decls, sb)
+		testResults := checker.TestDeclarations(decls, sb)
 		for functionName, functionResult := range testResults.Functions {
 			if functionResult.Logs != "" {
 				if err := mb.postFunctionLog(post.UserId, functionName, functionResult.Logs); err != nil {
@@ -256,17 +276,17 @@ func (mb *MatterlessBot) handlePosted(evt *model.WebSocketEvent) {
 	channel := mb.lookupChannel(post.ChannelId)
 	switch channel.Type {
 	case model.CHANNEL_DIRECT:
-		mb.handleDirect(&post, channel)
+		mb.handleDirect(&post)
 	case model.CHANNEL_PRIVATE:
 		mb.handlePrivate(&post, channel)
 	}
 }
 
 func (mb *MatterlessBot) handlePrivate(p *model.Post, channel *model.Channel) {
-	if strings.HasPrefix(channel.Name, "matterless-logs-") {
+	if strings.HasPrefix(channel.Name, "mls-bot-logs-") {
 		// Log channel
 
-		// TODO: Reenable when figuring out how to recreate channels
+		// TODO: Re-enable when figuring out how to recreate channels
 		//mb.handleLogChannelLeaving(p, channel)
 	}
 }

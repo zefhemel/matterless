@@ -1,4 +1,4 @@
-package interpreter
+package checker
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ type FunctionTestResult struct {
 	Result interface{}
 }
 
-func TestDeclarations(defs declaration.Declarations, sandbox sandbox.Sandbox) TestResults {
+func TestDeclarations(defs *declaration.Declarations, sandbox sandbox.Sandbox) TestResults {
 	testResults := TestResults{
 		Functions: map[string]FunctionTestResult{},
 	}

@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/blang/semver v3.5.1+incompatible // indirect
+	github.com/buildkite/interpolate v0.0.0-20200526001904-07f35b4ae251 // indirect
 	github.com/dyatlov/go-opengraph v0.0.0-20210112100619-dae8665a5b09 // indirect
 	github.com/go-ldap/ldap v3.0.3+incompatible // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect

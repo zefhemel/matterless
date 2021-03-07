@@ -33,7 +33,7 @@ func collectPrettyErrors(errorList []error, errorMessageParts []string, name str
 	return errorMessageParts
 }
 
-func Check(declarations Declarations) CheckResults {
+func Check(declarations *Declarations) CheckResults {
 	return CheckResults{
 		Functions:     checkFunctions(declarations),
 		Sources:       checkSources(declarations),
@@ -41,7 +41,7 @@ func Check(declarations Declarations) CheckResults {
 	}
 }
 
-func checkSubscriptions(declarations Declarations) map[string][]error {
+func checkSubscriptions(declarations *Declarations) map[string][]error {
 	subscriptionResults := make(map[string][]error)
 	for subscriptionName, subscriptionDef := range declarations.Subscriptions {
 		errorList := make([]error, 0, 5)
@@ -60,7 +60,7 @@ func checkSubscriptions(declarations Declarations) map[string][]error {
 	return subscriptionResults
 }
 
-func checkSources(declarations Declarations) map[string][]error {
+func checkSources(declarations *Declarations) map[string][]error {
 	sourceResults := make(map[string][]error)
 	for sourceName, sourceDef := range declarations.Sources {
 		errorList := make([]error, 0, 5)
@@ -78,7 +78,7 @@ func checkSources(declarations Declarations) map[string][]error {
 	return sourceResults
 }
 
-func checkFunctions(declarations Declarations) map[string][]error {
+func checkFunctions(declarations *Declarations) map[string][]error {
 	functionResults := make(map[string][]error)
 	for functionName, functionDef := range declarations.Functions {
 		errorList := make([]error, 0, 5)

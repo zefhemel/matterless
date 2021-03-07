@@ -1,4 +1,4 @@
-package interpreter_test
+package checker_test
 
 import (
 	_ "embed"
@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/zefhemel/matterless/pkg/checker"
 	"github.com/zefhemel/matterless/pkg/declaration"
-	"github.com/zefhemel/matterless/pkg/interpreter"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
@@ -18,7 +18,7 @@ func TestInterpreter(t *testing.T) {
 	defs, err := declaration.Parse([]string{test1Md})
 	assert.NoError(t, err)
 	sb := sandbox.NewMockSandbox(nil, "Ok", nil)
-	results := interpreter.TestDeclarations(defs, sb)
+	results := checker.TestDeclarations(defs, sb)
 	assert.Equal(t, nil, results.Functions["TestFunction1"].Error)
 }
 
@@ -26,7 +26,7 @@ func TestNodeInterpreter(t *testing.T) {
 	defs, err := declaration.Parse([]string{test1Md})
 	assert.NoError(t, err)
 	sb := sandbox.NewNodeSandbox()
-	results := interpreter.TestDeclarations(defs, sb)
+	results := checker.TestDeclarations(defs, sb)
 	assert.NoError(t, results.Functions["TestFunction1"].Error)
 	assert.Equal(t, "Hello world!", results.Functions["TestFunction1"].Logs)
 	assert.True(t, results.Functions["TestFunction1"].Result.(bool))

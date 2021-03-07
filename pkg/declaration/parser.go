@@ -13,10 +13,9 @@ import (
 var headerRegex = regexp.MustCompile("\\s*(\\w+)\\:?\\s*(.*)")
 
 type yamlSubscription struct {
-	Source                string   `yaml:"Source"`
-	Function              string   `yaml:"Function"`
-	Events                []string `yaml:"Events"`
-	PassSourceCredentials bool     `yaml:"PassSourceCredentials"`
+	Source   string   `yaml:"Source"`
+	Function string   `yaml:"Function"`
+	Events   []string `yaml:"Events"`
 }
 
 type yamlSource struct {
@@ -26,13 +25,14 @@ type yamlSource struct {
 }
 
 // Parse uses the GoldMark Markdown parser to parse definitions
-func Parse(messages []string) (Declarations, error) {
+func Parse(messages []string) (*Declarations, error) {
 	mdParser := goldmark.DefaultParser()
 
-	definitions := Declarations{
-		Functions:     map[string]FunctionDef{},
-		Sources:       map[string]SourceDef{},
-		Subscriptions: map[string]SubscriptionDef{},
+	decls := &Declarations{
+		Functions:     map[string]*FunctionDef{},
+		Sources:       map[string]*SourceDef{},
+		Subscriptions: map[string]*SubscriptionDef{},
+		Environment:   map[string]string{},
 	}
 	for _, message := range messages {
 		message := []byte(message)
@@ -47,7 +47,7 @@ func Parse(messages []string) (Declarations, error) {
 		processDefinition := func() error {
 			switch currentDeclarationType {
 			case "Function":
-				definitions.Functions[currentDeclarationName] = FunctionDef{
+				decls.Functions[currentDeclarationName] = &FunctionDef{
 					Name:     currentDeclarationName,
 					Language: currentLanguage,
 					Code:     currentBody,
@@ -58,11 +58,10 @@ func Parse(messages []string) (Declarations, error) {
 				if err != nil {
 					return err
 				}
-				definitions.Subscriptions[currentDeclarationName] = SubscriptionDef{
-					Source:                yamlD.Source,
-					Function:              yamlD.Function,
-					EventTypes:            yamlD.Events,
-					PassSourceCredentials: yamlD.PassSourceCredentials,
+				decls.Subscriptions[currentDeclarationName] = &SubscriptionDef{
+					Source:     yamlD.Source,
+					Function:   yamlD.Function,
+					EventTypes: yamlD.Events,
 				}
 			case "Source":
 				var yamlS yamlSource
@@ -70,10 +69,15 @@ func Parse(messages []string) (Declarations, error) {
 				if err != nil {
 					return err
 				}
-				definitions.Sources[currentDeclarationName] = SourceDef{
+				decls.Sources[currentDeclarationName] = &SourceDef{
 					Type:  yamlS.Type,
 					URL:   yamlS.URL,
 					Token: yamlS.Token,
+				}
+			case "Environment":
+				err := yaml.Unmarshal([]byte(currentBody), &decls.Environment)
+				if err != nil {
+					return err
 				}
 			}
 			return nil
@@ -94,7 +98,7 @@ func Parse(messages []string) (Declarations, error) {
 				currentBody = strings.Join(allCode, "")
 			case *ast.ThematicBreak:
 				if err := processDefinition(); err != nil {
-					return definitions, err
+					return decls, err
 				}
 				// Reset all
 				currentBody = ""
@@ -104,8 +108,8 @@ func Parse(messages []string) (Declarations, error) {
 			}
 		}
 		if err := processDefinition(); err != nil {
-			return definitions, err
+			return decls, err
 		}
 	}
-	return definitions, nil
+	return decls, nil
 }

@@ -1,13 +1,15 @@
 PACKAGE=github.com/zefhemel/matterless
 
 build:
-	go build ${PACKAGE}/cmd/matterless
+	go build ${PACKAGE}/cmd/mls-bot
+	go build ${PACKAGE}/cmd/mls
 
 run: build
-	./matterless
+	./mls-bot
 
 install:
-	go install ${PACKAGE}/cmd/matterless
+	go install ${PACKAGE}/cmd/mls-bot
+	go install ${PACKAGE}/cmd/mls
 
 test:
 	go test ${PACKAGE}/pkg/...

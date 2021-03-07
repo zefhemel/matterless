@@ -1,9 +1,10 @@
 package declaration
 
 type Declarations struct {
-	Sources       map[string]SourceDef
-	Functions     map[string]FunctionDef
-	Subscriptions map[string]SubscriptionDef
+	Sources       map[string]*SourceDef
+	Functions     map[string]*FunctionDef
+	Subscriptions map[string]*SubscriptionDef
+	Environment   map[string]string
 }
 
 type FunctionDef struct {
@@ -14,10 +15,9 @@ type FunctionDef struct {
 }
 
 type SubscriptionDef struct {
-	Source                string
-	Function              string
-	EventTypes            []string
-	PassSourceCredentials bool
+	Source     string
+	Function   string
+	EventTypes []string
 }
 
 type SourceDef struct {
