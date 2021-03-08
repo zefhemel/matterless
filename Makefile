@@ -13,3 +13,6 @@ install:
 
 test:
 	go test ${PACKAGE}/pkg/...
+
+mls-test: build
+	./mls test.md

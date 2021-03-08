@@ -33,6 +33,7 @@ func NewApplication(logCallback func(kind, message string)) *Application {
 }
 
 func (app *Application) Eval(code string) error {
+	log.Debug("Parsing and checking definitions...")
 	decls, err := declaration.Parse(code)
 	if err != nil {
 		return err
@@ -42,6 +43,7 @@ func (app *Application) Eval(code string) error {
 		// Error while checking
 		return errors.Wrap(errors.New(results.String()), "declaration check")
 	}
+	log.Debug("Testing functions...")
 	testResults := checker.TestDeclarations(decls, app.sandbox)
 	for _, functionResult := range testResults.Functions {
 		if functionResult.Logs != "" {
@@ -52,6 +54,7 @@ func (app *Application) Eval(code string) error {
 		return errors.Wrap(errors.New(testResults.String()), "test run")
 	}
 
+	log.Debug("Starting listeners...")
 	// First, stop all event sources
 	for sourceName, eventSource := range app.eventSources {
 		log.Debug("Stopping listener: ", sourceName)

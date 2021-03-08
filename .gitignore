@@ -3,10 +3,4 @@ mattermost-redux
 /.env
 /mls
 /mls-bot
-/.idea/.gitignore
-/.idea/codeStyles/codeStyleConfig.xml
-/.idea/jsLibraryMappings.xml
-/.idea/matterless.iml
-/.idea/modules.xml
-/.idea/inspectionProfiles/Project_Default.xml
-/.idea/vcs.xml
+/.idea
