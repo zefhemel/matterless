@@ -18,9 +18,10 @@ func TestParser(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "TestFunction1", decls.Functions["TestFunction1"].Name)
 	assert.Equal(t, "TestFunction2", decls.Functions["TestFunction2"].Name)
-	assert.Equal(t, "JavaScript", decls.Functions["TestFunction2"].Language)
+	assert.Equal(t, "javascript", decls.Functions["TestFunction2"].Language)
 	assert.Equal(t, "1234", decls.Sources["Me"].Token)
 	assert.Equal(t, "posted", decls.Subscriptions["TestSubscription"].EventTypes[0])
 	assert.Equal(t, "http://localhost:8065", decls.Environment["MattermostURL"])
 	assert.Equal(t, "1234", decls.Environment["MattermostToken"])
+	assert.Equal(t, "javascript", decls.Libraries[""].Language)
 }

@@ -69,6 +69,8 @@ func (mb *MatterlessBot) Start() error {
 		return err
 	}
 
+	mb.loadDeclarations()
+
 	for evt := range mb.eventSource.Events() {
 		log.Debug("Received event", evt)
 
@@ -255,6 +257,28 @@ func (mb *MatterlessBot) handleLogChannelLeaving(p *model.Post, channel *model.C
 				delete(mb.channelNameCache, channel.Name)
 			}
 			log.Info("Deleted channel ", channel.Name, "Success: ", success)
+		}
+	}
+}
+
+func (mb *MatterlessBot) loadDeclarations() {
+	channels, resp := mb.mmClient.GetChannelsForTeamForUser(mb.team.Id, "me", "")
+	logAPIResponse(resp, "load all channels")
+	for _, ch := range channels {
+		if ch.Type == model.CHANNEL_DIRECT {
+			log.Debugf("Processing direct channel: %+v", ch)
+			posts, resp := mb.mmClient.GetPostsForChannel(ch.Id, 0, 100, "")
+			logAPIResponse(resp, "get posts for direct channel")
+			// Note: posts are ordered in reverse-chronological order
+			for _, postID := range posts.Order {
+				post := posts.Posts[postID]
+				if post.Message[0] == '#' {
+					log.Debug("Found a declaration block", post.Message)
+					mb.handleDirect(post)
+					log.Debug("Loading at boot done for this channel")
+					break
+				}
+			}
 		}
 	}
 }

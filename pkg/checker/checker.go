@@ -22,10 +22,11 @@ func TestDeclarations(defs *declaration.Declarations, sandbox sandbox.Sandbox) T
 	testResults := TestResults{
 		Functions: map[string]FunctionTestResult{},
 	}
-	for funcName, funcDef := range defs.Functions {
+
+	for name, def := range defs.Functions {
 		ftr := FunctionTestResult{}
-		ftr.Result, ftr.Logs, ftr.Error = sandbox.Invoke(struct{}{}, funcDef.Code, map[string]string{})
-		testResults.Functions[funcName] = ftr
+		ftr.Result, ftr.Logs, ftr.Error = sandbox.Invoke(struct{}{}, defs.CompileFunctionCode(def.Code), map[string]string{})
+		testResults.Functions[name] = ftr
 	}
 	return testResults
 }

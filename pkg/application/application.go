@@ -38,6 +38,8 @@ func (app *Application) Eval(code string) error {
 	if err != nil {
 		return err
 	}
+	decls.Normalize()
+
 	results := declaration.Check(decls)
 	if results.String() != "" {
 		// Error while checking
@@ -91,7 +93,7 @@ func (app *Application) eventProcessor(source eventsource.EventSource, decls *de
 			if util.StringSliceContains(subscriptionDef.EventTypes, wsEvent.EventType()) {
 				functionDef := decls.Functions[subscriptionDef.Function]
 				log.Debug("Now triggering event to ", subscriptionDef.Function)
-				_, log, err := sb.Invoke(wsEvent, functionDef.Code, decls.Environment)
+				_, log, err := sb.Invoke(wsEvent, decls.CompileFunctionCode(functionDef.Code), decls.Environment)
 				if err != nil {
 					app.logCallback(subscriptionDef.Function, err.Error())
 				}

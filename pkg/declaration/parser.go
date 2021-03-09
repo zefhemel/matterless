@@ -33,6 +33,7 @@ func Parse(code string) (*Declarations, error) {
 		Sources:       map[string]*SourceDef{},
 		Subscriptions: map[string]*SubscriptionDef{},
 		Environment:   map[string]string{},
+		Libraries:     map[string]*FunctionDef{},
 	}
 	codeBytes := []byte(code)
 	node := mdParser.Parse(text.NewReader(codeBytes))
@@ -46,6 +47,12 @@ func Parse(code string) (*Declarations, error) {
 		switch currentDeclarationType {
 		case "Function":
 			decls.Functions[currentDeclarationName] = &FunctionDef{
+				Name:     currentDeclarationName,
+				Language: currentLanguage,
+				Code:     currentBody,
+			}
+		case "Library":
+			decls.Libraries[currentDeclarationName] = &FunctionDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
 				Code:     currentBody,

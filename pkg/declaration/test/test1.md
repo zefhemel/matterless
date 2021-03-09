@@ -9,7 +9,7 @@ export default function(event) {
 ------
 # Function TestFunction2
 
-```JavaScript
+```javascript
 export default function (event) {
   console.log("Hello world 2!");
 }
@@ -37,4 +37,16 @@ Events:
 ```yaml
 MattermostURL: http://localhost:8065
 MattermostToken: 1234
+```
+
+---
+# Library
+
+```javascript
+import connect from "./mm_client.mjs";
+
+// Connects to mattermost via env settings
+function connect() {
+    return connect(process.env.MM_URL, process.env.MM_TOKEN);
+}
 ```

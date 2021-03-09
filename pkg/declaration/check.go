@@ -10,6 +10,7 @@ type CheckResults struct {
 	Functions     map[string][]error
 	Sources       map[string][]error
 	Subscriptions map[string][]error
+	Libraries     map[string][]error
 }
 
 func (cr *CheckResults) String() string {
@@ -22,6 +23,9 @@ func (cr *CheckResults) String() string {
 	}
 	for subscriptionName, subscriptionErrors := range cr.Subscriptions {
 		errorMessageParts = collectPrettyErrors(subscriptionErrors, errorMessageParts, subscriptionName, "Subscription")
+	}
+	for libraryName, libraryErrors := range cr.Functions {
+		errorMessageParts = collectPrettyErrors(libraryErrors, errorMessageParts, libraryName, "Library")
 	}
 	return strings.Join(errorMessageParts, "\n")
 }
@@ -38,6 +42,7 @@ func Check(declarations *Declarations) CheckResults {
 		Functions:     checkFunctions(declarations),
 		Sources:       checkSources(declarations),
 		Subscriptions: checkSubscriptions(declarations),
+		Libraries:     checkLibraries(declarations),
 	}
 }
 
@@ -79,16 +84,28 @@ func checkSources(declarations *Declarations) map[string][]error {
 }
 
 func checkFunctions(declarations *Declarations) map[string][]error {
-	functionResults := make(map[string][]error)
-	for functionName, functionDef := range declarations.Functions {
+	results := make(map[string][]error)
+	for name, def := range declarations.Functions {
 		errorList := make([]error, 0, 5)
-		if functionName == "" {
+		if name == "" {
 			errorList = append(errorList, errors.New("Empty function name"))
 		}
-		if functionDef.Code == "" {
+		if def.Code == "" {
 			errorList = append(errorList, errors.New("Empty function body"))
 		}
-		functionResults[functionName] = errorList
+		results[name] = errorList
 	}
-	return functionResults
+	return results
+}
+
+func checkLibraries(declarations *Declarations) map[string][]error {
+	results := make(map[string][]error)
+	for name, def := range declarations.Functions {
+		errorList := make([]error, 0, 5)
+		if def.Code == "" {
+			errorList = append(errorList, errors.New("Empty library body"))
+		}
+		results[name] = errorList
+	}
+	return results
 }
