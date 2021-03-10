@@ -1,70 +1,84 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"bytes"
+	_ "embed"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"os"
 	"os/exec"
-	"strings"
+	"text/template"
 )
 
-type JSONObject = interface{}
+//go:embed templates/template.js
+var jsTemplate string
 
-func run(runnerType string, code string, env map[string]string) (inputChannel chan JSONObject, resultChannel chan JSONObject, logChannel chan JSONObject, err error) {
-	if err := os.WriteFile("function.mjs", []byte(code), 0600); err != nil {
-		return nil, nil, nil, err
+func wrapScript(code string) string {
+	data := struct {
+		Code string
+	}{
+		Code: code,
+	}
+	tmpl, err := template.New("sourceTemplate").Parse(jsTemplate)
+	if err != nil {
+		log.Error("Could not render javascript:", err)
+		return ""
+	}
+	var out bytes.Buffer
+	if err := tmpl.Execute(&out, data); err != nil {
+		log.Error("Could not render javascript:", err)
+		return ""
+	}
+	return out.String()
+}
+
+func run(runnerType string, code string, env []string, processStdin io.ReadCloser, processStdout io.WriteCloser, processStderr io.WriteCloser) error {
+	if err := os.WriteFile("function.mjs", []byte(wrapScript(code)), 0600); err != nil {
+		return err
 	}
 	cmd := exec.Command("node", "function.mjs")
-	cmd.Env = make([]string, 0, 10)
-	for envKey, envVal := range env {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", envKey, envVal))
-	}
+
+	cmd.Env = env
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "stdin pipe")
+		return errors.Wrap(err, "stdin pipe")
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "stdout pipe")
+		return errors.Wrap(err, "stdout pipe")
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "stderr pipe")
+		return errors.Wrap(err, "stderr pipe")
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "start")
+		return errors.Wrap(err, "start")
 	}
 
-	inputChannel = make(chan JSONObject)
-	resultChannel = make(chan JSONObject)
-	logChannel = make(chan JSONObject)
-
-	stdoutDecoder := json.NewDecoder(stdout)
-	stdinEncoder := json.NewEncoder(stdin)
-
 	go func() {
-		for inputEvent := range inputEvents {
-			if err := stdinEncoder.Encode(inputEvent); err != nil {
-				log.Error("Could not encode object", err)
-				continue
-			}
-			var result JSONObject
-			if err := stdoutDecoder.Decode(&result); err != nil {
-				log.Error("Could not encode from stream", err)
-				continue
-			}
-			resultChannel <- result
+		if _, err := io.Copy(processStdout, stdout); err != nil {
+			log.Error("Piping stdout", err)
 		}
 	}()
-	err = nil
-	return
+	go func() {
+		if _, err := io.Copy(processStderr, stderr); err != nil {
+			log.Error("Piping stderr", err)
+		}
+	}()
+	go func() {
+		_, err = io.Copy(stdin, processStdin)
+		stdin.Close()
+	}()
+	if err := cmd.Wait(); err != nil {
+		os.Exit(cmd.ProcessState.ExitCode())
+	}
+	return nil
 }
 
 func main() {
-
+	if err := run("node", os.Args[1], os.Environ(), os.Stdin, os.Stdout, os.Stderr); err != nil {
+		log.Fatal(err)
+	}
 }

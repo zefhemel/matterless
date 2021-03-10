@@ -25,7 +25,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Info("HEre")
 	for {
-		time.Sleep(1 * time.Minute)
+		time.Sleep(30 * time.Second)
+		app.FlushSandbox()
+		log.Info("Flushed sandbox")
 	}
 }

@@ -17,7 +17,7 @@ type Application struct {
 
 	// Runtime
 	eventSources map[string]eventsource.EventSource
-	sandbox      sandbox.Sandbox
+	sandbox      *sandbox.NodeDockerSandbox
 
 	// Callbacks
 	// TODO: Consider switching to channels instead?
@@ -103,4 +103,8 @@ func (app *Application) eventProcessor(source eventsource.EventSource, decls *de
 			}
 		}
 	}
+}
+
+func (app *Application) FlushSandbox() {
+	app.sandbox.Cleanup()
 }

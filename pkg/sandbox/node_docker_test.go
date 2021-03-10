@@ -1,13 +1,15 @@
 package sandbox_test
 
 import (
+	"github.com/zefhemel/matterless/pkg/util"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
-func DisabledTestNodeDockerSandbox(t *testing.T) {
+func TestNodeDockerSandbox(t *testing.T) {
 	sillyEvent := map[string]string{
 		"name": "Zef",
 	}
@@ -35,16 +37,23 @@ func DisabledTestNodeDockerSandbox(t *testing.T) {
 	code = `
 	function handle() {
 		console.log("That's all folks!");
+		return {status: "ok"};
 	}	
 	`
-	resp, logs, err = s.Invoke(sillyEvent, code, emptyEnv)
-	assert.NoError(t, err, "invoking")
-	assert.Equal(t, map[string]interface{}{}, resp, "empty response")
-	assert.Equal(t, "That's all folks!", logs, "logs")
+
+	for i := 0; i < 10; i++ {
+		resp, logs, err = s.Invoke(sillyEvent, code, emptyEnv)
+		assert.NoError(t, err, "invoking")
+		assert.Equal(t, `{"status":"ok"}`, util.MustJsonString(resp), "empty response")
+		assert.Equal(t, "That's all folks!", logs, "logs")
+	}
 
 	invalidSyntax := `
 		console.
 	`
 	_, _, err = s.Invoke(sillyEvent, invalidSyntax, emptyEnv)
 	assert.Error(t, err, "invoking")
+	assert.True(t, strings.Contains(err.Error(), "Unexpected identifier"), "Parse error found")
+
+	s.Cleanup()
 }
