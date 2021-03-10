@@ -10,10 +10,20 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 )
 
-type NodeDockerSandbox struct {
+var pingEvent = struct{}{}
+
+const logRunDivider = "!!EOL!!\n"
+
+// DockerSandbox implements a simple sandbox using docker
+type DockerSandbox struct {
 	runningInstances map[string]*instance
+	cleanupInterval  time.Duration
+	keepAlive        time.Duration
+	ticker           *time.Ticker
+	stop             chan struct{}
 }
 
 type instance struct {
@@ -21,6 +31,7 @@ type instance struct {
 	stdinPipe    io.WriteCloser
 	logChannel   chan string
 	resultReader *bufio.Reader
+	lastInvoked  time.Time
 }
 
 func (inst *instance) kill() error {
@@ -32,9 +43,7 @@ func (inst *instance) kill() error {
 	return nil
 }
 
-var pingEvent struct{} = struct{}{}
-
-func (s *NodeDockerSandbox) boot(code string, env map[string]string) (*instance, error) {
+func (s *DockerSandbox) boot(code string, env map[string]string) (*instance, error) {
 	inst, ok := s.runningInstances[code]
 	if !ok {
 		var err error
@@ -62,7 +71,7 @@ func newInstance(code string, env map[string]string) (*instance, error) {
 	for envKey, envVal := range env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", envKey, envVal))
 	}
-	args = append(args, "-i", "zefhemel/matterless-runner-docker-node", code)
+	args = append(args, "-i", "zefhemel/matterless-runner-docker", "node", code)
 	inst.cmd = exec.Command("docker", args...)
 	stdoutPipe, err := inst.cmd.StdoutPipe()
 	if err != nil {
@@ -102,14 +111,13 @@ func newInstance(code string, env map[string]string) (*instance, error) {
 	return inst, nil
 }
 
-func (s *NodeDockerSandbox) Invoke(event interface{}, code string, env map[string]string) (interface{}, string, error) {
+func (s *DockerSandbox) Invoke(event interface{}, code string, env map[string]string) (interface{}, string, error) {
 	inst, err := s.boot(code, env)
 	if err != nil {
 		return nil, "", err
 	}
 
-	//log.Info("Got back from boot", inst.cmd.ProcessState)
-
+	inst.lastInvoked = time.Now()
 	response, logMesssages, err := inst.invoke(event)
 	if err != nil {
 		return nil, "", err
@@ -117,17 +125,18 @@ func (s *NodeDockerSandbox) Invoke(event interface{}, code string, env map[strin
 	return response, strings.TrimSpace(strings.Join(logMesssages, "\n")), nil
 }
 
-func (s *NodeDockerSandbox) Cleanup() {
-	for _, inst := range s.runningInstances {
-		log.Info("Killing an instance now...")
-		if err := inst.kill(); err != nil {
-			log.Error("Error killing instance", err)
+func (s *DockerSandbox) cleanup() {
+	now := time.Now()
+	for id, inst := range s.runningInstances {
+		if inst.lastInvoked.Add(s.keepAlive).Before(now) {
+			log.Info("Killing an instance now...", inst)
+			if err := inst.kill(); err != nil {
+				log.Error("Error killing instance", err)
+			}
+			delete(s.runningInstances, id)
 		}
 	}
-	s.runningInstances = map[string]*instance{}
 }
-
-const logRunDivider = "!!EOL!!\n"
 
 func (inst *instance) invoke(event interface{}) (interface{}, []string, error) {
 	fmt.Fprintf(inst.stdinPipe, "%s\n", util.MustJsonString(event))
@@ -161,10 +170,34 @@ func (inst *instance) invoke(event interface{}) (interface{}, []string, error) {
 	return result, logMessages, nil
 }
 
-func NewNodeDockerSandbox() *NodeDockerSandbox {
-	return &NodeDockerSandbox{
-		runningInstances: map[string]*instance{},
+func (s *DockerSandbox) Stop() {
+	s.ticker.Stop()
+	s.stop <- struct{}{}
+}
+
+func (s *DockerSandbox) cleanupJob() {
+	for {
+		select {
+		case <-s.stop:
+			return
+		case <-s.ticker.C:
+			s.cleanup()
+		}
 	}
 }
 
-var _ Sandbox = &NodeDockerSandbox{}
+func NewDockerSandbox(cleanupInterval time.Duration, keepAlive time.Duration) *DockerSandbox {
+	sb := &DockerSandbox{
+		cleanupInterval:  cleanupInterval,
+		keepAlive:        keepAlive,
+		runningInstances: map[string]*instance{},
+		ticker:           time.NewTicker(cleanupInterval),
+		stop:             make(chan struct{}),
+	}
+	if cleanupInterval != 0 {
+		go sb.cleanupJob()
+	}
+	return sb
+}
+
+var _ Sandbox = &DockerSandbox{}

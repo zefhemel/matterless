@@ -17,7 +17,7 @@ type Application struct {
 
 	// Runtime
 	eventSources map[string]eventsource.EventSource
-	sandbox      *sandbox.NodeDockerSandbox
+	sandbox      *sandbox.DockerSandbox
 
 	// Callbacks
 	// TODO: Consider switching to channels instead?
@@ -28,7 +28,7 @@ func NewApplication(logCallback func(kind, message string)) *Application {
 	return &Application{
 		eventSources: map[string]eventsource.EventSource{},
 		logCallback:  logCallback,
-		sandbox:      sandbox.NewNodeDockerSandbox(),
+		sandbox:      sandbox.NewDockerSandbox(0, 0),
 	}
 }
 
@@ -79,7 +79,7 @@ func (app *Application) Eval(code string) error {
 }
 
 func (app *Application) eventProcessor(source eventsource.EventSource, decls *declaration.Declarations) {
-	sb := sandbox.NewNodeDockerSandbox()
+	sb := sandbox.NewDockerSandbox(0, 0)
 	for evt := range source.Events() {
 		wsEvent, ok := evt.(*model.WebSocketEvent)
 		if !ok {
@@ -103,8 +103,4 @@ func (app *Application) eventProcessor(source eventsource.EventSource, decls *de
 			}
 		}
 	}
-}
-
-func (app *Application) FlushSandbox() {
-	app.sandbox.Cleanup()
 }

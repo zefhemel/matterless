@@ -11,16 +11,30 @@ import (
 	"text/template"
 )
 
-//go:embed templates/template.js
+//go:embed templates/template.mjs
 var jsTemplate string
 
-func wrapScript(code string) string {
+type runnerConfig struct {
+	bin            string
+	template       string
+	scriptFilename string
+}
+
+var runnerTypes = map[string]runnerConfig{
+	"node": {
+		bin:            "node",
+		scriptFilename: "function.mjs",
+		template:       jsTemplate,
+	},
+}
+
+func wrapScript(runnerConfig runnerConfig, code string) string {
 	data := struct {
 		Code string
 	}{
 		Code: code,
 	}
-	tmpl, err := template.New("sourceTemplate").Parse(jsTemplate)
+	tmpl, err := template.New("sourceTemplate").Parse(runnerConfig.template)
 	if err != nil {
 		log.Error("Could not render javascript:", err)
 		return ""
@@ -33,11 +47,11 @@ func wrapScript(code string) string {
 	return out.String()
 }
 
-func run(runnerType string, code string, env []string, processStdin io.ReadCloser, processStdout io.WriteCloser, processStderr io.WriteCloser) error {
-	if err := os.WriteFile("function.mjs", []byte(wrapScript(code)), 0600); err != nil {
+func run(runnerConfig runnerConfig, code string, env []string, processStdin io.ReadCloser, processStdout io.WriteCloser, processStderr io.WriteCloser) error {
+	if err := os.WriteFile(runnerConfig.scriptFilename, []byte(wrapScript(runnerConfig, code)), 0600); err != nil {
 		return err
 	}
-	cmd := exec.Command("node", "function.mjs")
+	cmd := exec.Command(runnerConfig.bin, runnerConfig.scriptFilename)
 
 	cmd.Env = env
 	stdin, err := cmd.StdinPipe()
@@ -78,7 +92,10 @@ func run(runnerType string, code string, env []string, processStdin io.ReadClose
 }
 
 func main() {
-	if err := run("node", os.Args[1], os.Environ(), os.Stdin, os.Stdout, os.Stderr); err != nil {
+	if len(os.Args) != 3 {
+		log.Fatal("Expected two arguments: [runnerType] [script]")
+	}
+	if err := run(runnerTypes[os.Args[1]], os.Args[2], os.Environ(), os.Stdin, os.Stdout, os.Stderr); err != nil {
 		log.Fatal(err)
 	}
 }

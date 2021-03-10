@@ -1,4 +1,5 @@
 PACKAGE=github.com/zefhemel/matterless
+DOCKER_RUNNER_IMAGE=zefhemel/matterless-runner-docker
 
 build:
 	go build ${PACKAGE}/cmd/mls-bot
@@ -16,8 +17,8 @@ mls-test: build
 
 build-docker: build
 	GOARCH=arm64 GOOS=linux go build ${PACKAGE}/cmd/mls-lambda
-	cp mls-lambda runners/node-docker/
-	docker build -t zefhemel/matterless-runner-docker-node runners/node-docker
+	cp mls-lambda runners/docker/
+	docker build -t ${DOCKER_RUNNER_IMAGE} runners/docker
 
 push: build
-	docker push zefhemel/matterless-runner-docker-node
+	docker push ${DOCKER_RUNNER_IMAGE}

@@ -4,17 +4,18 @@ import (
 	"github.com/zefhemel/matterless/pkg/util"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
-func TestNodeDockerSandbox(t *testing.T) {
+func TestDockerSandbox(t *testing.T) {
 	sillyEvent := map[string]string{
 		"name": "Zef",
 	}
 	emptyEnv := map[string]string{}
-	s := sandbox.NewNodeDockerSandbox()
+	s := sandbox.NewDockerSandbox(10*time.Second, 15*time.Second)
 	code := `
 	function handle(evt) {
 		console.log('Log message');
@@ -55,5 +56,4 @@ func TestNodeDockerSandbox(t *testing.T) {
 	assert.Error(t, err, "invoking")
 	assert.True(t, strings.Contains(err.Error(), "Unexpected identifier"), "Parse error found")
 
-	s.Cleanup()
 }
