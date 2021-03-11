@@ -10,7 +10,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
-func TestDockerSandbox(t *testing.T) {
+func DisabledTestDockerSandbox(t *testing.T) {
 	sillyEvent := map[string]string{
 		"name": "Zef",
 	}

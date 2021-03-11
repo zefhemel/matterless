@@ -25,7 +25,7 @@ func TestDeclarations(defs *declaration.Declarations, sandbox sandbox.Sandbox) T
 
 	for name, def := range defs.Functions {
 		ftr := FunctionTestResult{}
-		ftr.Result, ftr.Logs, ftr.Error = sandbox.Invoke(struct{}{}, defs.CompileFunctionCode(def.Code), map[string]string{})
+		ftr.Result, ftr.Logs, ftr.Error = sandbox.Invoke(struct{}{}, defs.CompileFunctionCode(def.Code), defs.Environment)
 		testResults.Functions[name] = ftr
 	}
 	return testResults

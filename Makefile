@@ -6,13 +6,13 @@ build:
 	go build ${PACKAGE}/cmd/mls
 	go build ${PACKAGE}/cmd/mls-lambda
 
-run: build
+run-bot: build
 	./mls-bot
 
 test:
 	go test ${PACKAGE}/pkg/...
 
-mls-test: build
+run-mls-test: build
 	./mls test.md
 
 build-docker: build

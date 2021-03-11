@@ -10,6 +10,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,6 +33,7 @@ type instance struct {
 	logChannel   chan string
 	resultReader *bufio.Reader
 	lastInvoked  time.Time
+	runLock      sync.Mutex
 }
 
 func (inst *instance) kill() error {
@@ -49,13 +51,13 @@ func (s *DockerSandbox) boot(code string, env map[string]string) (*instance, err
 		var err error
 		inst, err = newInstance(code, env)
 		if err != nil {
+			log.Error("Failed to instantiate", err)
 			return nil, err
 		}
 		if _, _, err := inst.invoke(pingEvent); err != nil {
-			log.Info("Failed sending ping event", err)
+			log.Error("Failed sending ping event", err)
 			return nil, err
 		}
-
 		s.runningInstances[code] = inst
 	}
 	return inst, nil
@@ -127,6 +129,7 @@ func (s *DockerSandbox) Invoke(event interface{}, code string, env map[string]st
 
 func (s *DockerSandbox) cleanup() {
 	now := time.Now()
+	log.Infof("Cleaning up %d running functions...", len(s.runningInstances))
 	for id, inst := range s.runningInstances {
 		if inst.lastInvoked.Add(s.keepAlive).Before(now) {
 			log.Info("Killing an instance now...", inst)
@@ -139,6 +142,8 @@ func (s *DockerSandbox) cleanup() {
 }
 
 func (inst *instance) invoke(event interface{}) (interface{}, []string, error) {
+	inst.runLock.Lock()
+	defer inst.runLock.Unlock()
 	fmt.Fprintf(inst.stdinPipe, "%s\n", util.MustJsonString(event))
 
 	logMessages := make([]string, 0, 10)
@@ -191,10 +196,10 @@ func NewDockerSandbox(cleanupInterval time.Duration, keepAlive time.Duration) *D
 		cleanupInterval:  cleanupInterval,
 		keepAlive:        keepAlive,
 		runningInstances: map[string]*instance{},
-		ticker:           time.NewTicker(cleanupInterval),
 		stop:             make(chan struct{}),
 	}
 	if cleanupInterval != 0 {
+		sb.ticker = time.NewTicker(cleanupInterval)
 		go sb.cleanupJob()
 	}
 	return sb

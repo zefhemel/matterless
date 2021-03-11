@@ -9,6 +9,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/eventsource"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/util"
+	"time"
 )
 
 type Application struct {
@@ -28,7 +29,8 @@ func NewApplication(logCallback func(kind, message string)) *Application {
 	return &Application{
 		eventSources: map[string]eventsource.EventSource{},
 		logCallback:  logCallback,
-		sandbox:      sandbox.NewDockerSandbox(0, 0),
+		// TODO: Make this configurable
+		sandbox: sandbox.NewDockerSandbox(30*time.Second, 1*time.Minute),
 	}
 }
 
@@ -79,7 +81,6 @@ func (app *Application) Eval(code string) error {
 }
 
 func (app *Application) eventProcessor(source eventsource.EventSource, decls *declaration.Declarations) {
-	sb := sandbox.NewDockerSandbox(0, 0)
 	for evt := range source.Events() {
 		wsEvent, ok := evt.(*model.WebSocketEvent)
 		if !ok {
@@ -93,7 +94,7 @@ func (app *Application) eventProcessor(source eventsource.EventSource, decls *de
 			if util.StringSliceContains(subscriptionDef.EventTypes, wsEvent.EventType()) {
 				functionDef := decls.Functions[subscriptionDef.Function]
 				log.Debug("Now triggering event to ", subscriptionDef.Function)
-				_, log, err := sb.Invoke(wsEvent, decls.CompileFunctionCode(functionDef.Code), decls.Environment)
+				_, log, err := app.sandbox.Invoke(wsEvent, decls.CompileFunctionCode(functionDef.Code), decls.Environment)
 				if err != nil {
 					app.logCallback(subscriptionDef.Function, err.Error())
 				}
