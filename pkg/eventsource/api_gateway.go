@@ -58,6 +58,15 @@ func (ag *APIGatewaySource) Start() error {
 			log.Fatalf("ListenAndServe(): %v", err)
 		}
 	}()
+	// Wait loop to wait for server to boot
+	for {
+		_, err := http.Get(fmt.Sprintf("http://localhost:%d", ag.def.BindPort))
+		if err == nil {
+			break
+		}
+		log.Debug("Server still starting... ", err)
+		time.Sleep(100 * time.Millisecond)
+	}
 	return nil
 }
 
