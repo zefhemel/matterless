@@ -23,9 +23,13 @@ func TestInterpreter(t *testing.T) {
 }
 
 func TestNodeInterpreter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	defs, err := definition.Parse(test1Md)
 	assert.NoError(t, err)
-	sb := sandbox.NewNodeSandbox()
+	sb := sandbox.NewDockerSandbox(0, 0)
 	results := checker.TestDeclarations(defs, sb)
 	assert.NoError(t, results.Functions["TestFunction1"].Error)
 	assert.Equal(t, "Hello world!", results.Functions["TestFunction1"].Logs)

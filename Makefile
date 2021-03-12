@@ -12,6 +12,9 @@ run-bot: build
 test:
 	go test ${PACKAGE}/pkg/...
 
+test-short:
+	go test -short ${PACKAGE}/pkg/...
+
 run-mls-test: build
 	./mls test.md
 

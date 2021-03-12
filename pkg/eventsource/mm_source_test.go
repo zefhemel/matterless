@@ -11,7 +11,10 @@ import (
 	"testing"
 )
 
-func TestNewMatterMostSource(t *testing.T) {
+func TestMatterMostSource(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 	mmSource, err := eventsource.NewMatterMostSource(&definition.MattermostClientDef{
 		URL:   os.Getenv("mm_test_url"),
 		Token: os.Getenv("mm_test_token"),
