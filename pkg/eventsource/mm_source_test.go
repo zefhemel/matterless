@@ -4,26 +4,26 @@ import (
 	"github.com/mattermost/mattermost-server/model"
 	log "github.com/sirupsen/logrus"
 	assert "github.com/stretchr/testify/assert"
+	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventsource"
 	"os"
 	"reflect"
 	"testing"
 )
 
-func DisabledTestNewMatterMostSource(t *testing.T) {
-	mmSource, err := eventsource.NewMatterMostSource(os.Getenv("mm_test_url"), os.Getenv("mm_test_token"))
+func TestNewMatterMostSource(t *testing.T) {
+	mmSource, err := eventsource.NewMatterMostSource(&definition.MattermostClientDef{
+		URL:   os.Getenv("mm_test_url"),
+		Token: os.Getenv("mm_test_token"),
+		Events: map[string][]definition.FunctionID{
+			"hello": {"HelloFunction"},
+		},
+	}, func(name definition.FunctionID, event interface{}) interface{} {
+		log.Info("Called", name, event)
+		assert.IsType(t, reflect.TypeOf(model.WebSocketEvent{}), reflect.TypeOf(event))
+		return struct{}{}
+	})
 	assert.NoError(t, err)
 	assert.NoError(t, mmSource.Start())
-	evt := <-mmSource.Events()
-	assert.IsType(t, reflect.TypeOf(model.WebSocketEvent{}), reflect.TypeOf(evt))
-	//log.Info(evt)
-	mmSource.Stop()
-	_, ok := <-mmSource.Events()
-	assert.Equal(t, false, ok, "event stream should be closed at this point")
-	// Start again
-	assert.NoError(t, mmSource.Start())
-	evt = <-mmSource.Events()
-	assert.IsType(t, reflect.TypeOf(model.WebSocketEvent{}), reflect.TypeOf(evt))
-	log.Info(evt)
 	mmSource.Stop()
 }

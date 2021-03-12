@@ -1,4 +1,4 @@
-package declaration
+package definition
 
 import (
 	"regexp"
@@ -12,28 +12,16 @@ import (
 
 var headerRegex = regexp.MustCompile("\\s*(\\w+)\\:?\\s*(.*)")
 
-type yamlSubscription struct {
-	Source   string   `yaml:"Source"`
-	Function string   `yaml:"Function"`
-	Events   []string `yaml:"Events"`
-}
-
-type yamlSource struct {
-	Type  string `yaml:"Type"`
-	URL   string `yaml:"URL"`
-	Token string `yaml:"Token"`
-}
-
 // Parse uses the GoldMark Markdown parser to parse definitions
-func Parse(code string) (*Declarations, error) {
+func Parse(code string) (*Definitions, error) {
 	mdParser := goldmark.DefaultParser()
 
-	decls := &Declarations{
-		Functions:     map[string]*FunctionDef{},
-		Sources:       map[string]*SourceDef{},
-		Subscriptions: map[string]*SubscriptionDef{},
-		Environment:   map[string]string{},
-		Libraries:     map[string]*FunctionDef{},
+	decls := &Definitions{
+		Functions:         map[FunctionID]*FunctionDef{},
+		MattermostClients: map[string]*MattermostClientDef{},
+		APIGateways:       map[string]*APIGatewayDef{},
+		Environment:       map[string]string{},
+		Libraries:         map[string]*FunctionDef{},
 	}
 	codeBytes := []byte(code)
 	node := mdParser.Parse(text.NewReader(codeBytes))
@@ -46,7 +34,7 @@ func Parse(code string) (*Declarations, error) {
 	processDefinition := func() error {
 		switch currentDeclarationType {
 		case "Function":
-			decls.Functions[currentDeclarationName] = &FunctionDef{
+			decls.Functions[FunctionID(currentDeclarationName)] = &FunctionDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
 				Code:     currentBody,
@@ -57,28 +45,20 @@ func Parse(code string) (*Declarations, error) {
 				Language: currentLanguage,
 				Code:     currentBody,
 			}
-		case "Subscription":
-			var yamlD yamlSubscription
-			err := yaml.Unmarshal([]byte(currentBody), &yamlD)
+		case "MattermostClient":
+			var def MattermostClientDef
+			err := yaml.Unmarshal([]byte(currentBody), &def)
 			if err != nil {
 				return err
 			}
-			decls.Subscriptions[currentDeclarationName] = &SubscriptionDef{
-				Source:     yamlD.Source,
-				Function:   yamlD.Function,
-				EventTypes: yamlD.Events,
-			}
-		case "Source":
-			var yamlS yamlSource
-			err := yaml.Unmarshal([]byte(currentBody), &yamlS)
+			decls.MattermostClients[currentDeclarationName] = &def
+		case "APIGateway":
+			var def APIGatewayDef
+			err := yaml.Unmarshal([]byte(currentBody), &def)
 			if err != nil {
 				return err
 			}
-			decls.Sources[currentDeclarationName] = &SourceDef{
-				Type:  yamlS.Type,
-				URL:   yamlS.URL,
-				Token: yamlS.Token,
-			}
+			decls.APIGateways[currentDeclarationName] = &def
 		case "Environment":
 			err := yaml.Unmarshal([]byte(currentBody), &decls.Environment)
 			if err != nil {

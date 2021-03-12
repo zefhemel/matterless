@@ -124,7 +124,7 @@ func (s *DockerSandbox) Invoke(event interface{}, code string, env map[string]st
 	if err != nil {
 		return nil, "", err
 	}
-	return response, strings.TrimSpace(strings.Join(logMesssages, "\n")), nil
+	return response, strings.TrimSpace(strings.Join(logMesssages, "")), nil
 }
 
 func (s *DockerSandbox) cleanup() {

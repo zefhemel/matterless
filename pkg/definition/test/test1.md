@@ -15,20 +15,12 @@ export default function (event) {
 }
 ```
 ---
-# Source: Me
+# MattermostClient: Me
 This is some documentation
 
 ```yaml
-URL: $MattermostURL
-Token: $MattermostToken
-```
----
-# Subscription: TestSubscription
-```yaml
-Source: Me
-Function: TestFunction1
-Events: 
-- posted
+url: $MattermostURL
+token: $MattermostToken
 ```
 
 ---
@@ -49,4 +41,14 @@ import connect from "./mm_client.mjs";
 function connect() {
     return connect(process.env.MM_URL, process.env.MM_TOKEN);
 }
+```
+
+---
+# APIGateway: MyHTTP
+```yaml
+endpoints:
+    - path: /test
+      methods:
+        - GET
+      function: TestFunction2
 ```

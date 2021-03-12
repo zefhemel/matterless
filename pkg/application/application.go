@@ -1,20 +1,18 @@
 package application
 
 import (
-	"github.com/mattermost/mattermost-server/model"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/checker"
-	"github.com/zefhemel/matterless/pkg/declaration"
+	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventsource"
 	"github.com/zefhemel/matterless/pkg/sandbox"
-	"github.com/zefhemel/matterless/pkg/util"
 	"time"
 )
 
 type Application struct {
-	// Declarations
-	declarations *declaration.Declarations
+	// Definitions
+	declarations *definition.Definitions
 
 	// Runtime
 	eventSources map[string]eventsource.EventSource
@@ -36,13 +34,13 @@ func NewApplication(logCallback func(kind, message string)) *Application {
 
 func (app *Application) Eval(code string) error {
 	log.Debug("Parsing and checking definitions...")
-	decls, err := declaration.Parse(code)
+	decls, err := definition.Parse(code)
 	if err != nil {
 		return err
 	}
 	decls.Normalize()
 
-	results := declaration.Check(decls)
+	results := definition.Check(decls)
 	if results.String() != "" {
 		// Error while checking
 		return errors.Wrap(errors.New(results.String()), "declaration check")
@@ -66,42 +64,47 @@ func (app *Application) Eval(code string) error {
 	}
 
 	// Rebuild the whole thing
-	for sourceName, sourceDef := range decls.Sources {
-		mmSource, err := eventsource.NewMatterMostSource(sourceDef.URL, sourceDef.Token)
+	for name, def := range decls.MattermostClients {
+		mmSource, err := eventsource.NewMatterMostSource(def, func(name definition.FunctionID, event interface{}) interface{} {
+			functionDef := decls.Functions[name]
+			log.Debug("Now triggering event to ", name)
+			_, log, err := app.sandbox.Invoke(event, decls.CompileFunctionCode(functionDef.Code), decls.Environment)
+			if err != nil {
+				app.logCallback(string(name), err.Error())
+			}
+			if log != "" {
+				app.logCallback(string(name), log)
+			}
+			return nil
+		})
 		if err != nil {
 			return err
 		}
-		app.eventSources[sourceName] = mmSource
+		app.eventSources[name] = mmSource
 		mmSource.Start()
-		log.Debug("Starting listener: ", sourceName)
-		go app.eventProcessor(mmSource, decls)
+		log.Debug("Starting Mattermost client: ", name)
+	}
+
+	for name, def := range decls.APIGateways {
+		apiG := eventsource.NewAPIGatewaySource(def, func(name definition.FunctionID, event interface{}) interface{} {
+			functionDef := decls.Functions[name]
+			log.Debug("Now triggering event to ", name)
+			result, log, err := app.sandbox.Invoke(event, decls.CompileFunctionCode(functionDef.Code), decls.Environment)
+			if err != nil {
+				app.logCallback(string(name), err.Error())
+			}
+			if log != "" {
+				app.logCallback(string(name), log)
+			}
+			return result
+		})
+		if err != nil {
+			return err
+		}
+		app.eventSources[name] = apiG
+		apiG.Start()
+		log.Debug("Starting Mattermost client: ", name)
 	}
 
 	return nil
-}
-
-func (app *Application) eventProcessor(source eventsource.EventSource, decls *declaration.Declarations) {
-	for evt := range source.Events() {
-		wsEvent, ok := evt.(*model.WebSocketEvent)
-		if !ok {
-			log.Debug("Got non websocket event", evt)
-			continue
-		}
-
-		log.Debug("Got event to process ", wsEvent)
-
-		for _, subscriptionDef := range decls.Subscriptions {
-			if util.StringSliceContains(subscriptionDef.EventTypes, wsEvent.EventType()) {
-				functionDef := decls.Functions[subscriptionDef.Function]
-				log.Debug("Now triggering event to ", subscriptionDef.Function)
-				_, log, err := app.sandbox.Invoke(wsEvent, decls.CompileFunctionCode(functionDef.Code), decls.Environment)
-				if err != nil {
-					app.logCallback(subscriptionDef.Function, err.Error())
-				}
-				if log != "" {
-					app.logCallback(subscriptionDef.Function, log)
-				}
-			}
-		}
-	}
 }

@@ -7,6 +7,7 @@ require (
 	github.com/buildkite/interpolate v0.0.0-20200526001904-07f35b4ae251 // indirect
 	github.com/dyatlov/go-opengraph v0.0.0-20210112100619-dae8665a5b09 // indirect
 	github.com/go-ldap/ldap v3.0.3+incompatible // indirect
+	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/joho/godotenv v1.3.0 // indirect
 	github.com/mattermost/mattermost-server v5.11.1+incompatible // indirect

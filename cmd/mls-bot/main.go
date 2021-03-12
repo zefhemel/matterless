@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/zefhemel/matterless/pkg/bot"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
@@ -26,5 +27,9 @@ func main() {
 	err = mb.Start()
 	if err != nil {
 		log.Error(err)
+	}
+
+	for {
+		time.Sleep(30 * time.Second)
 	}
 }

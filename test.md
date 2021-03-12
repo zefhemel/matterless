@@ -4,11 +4,14 @@ MM_URL: http://host.docker.internal:8065
 MM_TOKEN: xuwwa9z56jgb3b859zmasu1n7w
 ```
 ----
-# Source: TestBot
+# MattermostClient: MyBot
 ```yaml
-Type: Mattermost
-URL: $MM_URL
-Token: $MM_TOKEN
+url: $MM_URL
+token: $MM_TOKEN
+events:
+  posted: 
+  - PingPong
+  - Help
 ```
 ----
 # Function: PingPong
@@ -23,9 +26,11 @@ async function handle(event) {
     }    
 }
 ```
-----
+
+---
 # Function: Help
 ```javascript
+//help
 async function handle(event) {
     event = cleanEvent(event);
     if(event.event == "posted" && event.post.message === "help") {
@@ -40,22 +45,6 @@ Awesome stuff here.`
         })
     }
 }
-```
----
-# Subscription: PingSubscription
-```yaml
-Source: TestBot
-Events:
-- posted
-Function: PingPong
-```
----
-# Subscription: HelpSubscription
-```yaml
-Source: TestBot
-Events:
-- posted
-Function: Help
 ```
 ---
 # Library
@@ -73,4 +62,29 @@ function cleanEvent(event) {
     }
     return event;
 }
+```
+---
+# Function: MyHTTPTest
+```javascript
+function handle(event) {
+    console.log("HTTP event", event);
+    return {
+        status: 200,
+        headers: {
+            "X-Zef": "Awesome"
+        },
+        body: "Hello world!"
+    };
+}
+```
+
+---
+# APIGateway: MyHTTP
+```yaml
+endpoints:
+    - path: /test
+      methods:
+        - GET
+        - POST
+      function: MyHTTPTest
 ```

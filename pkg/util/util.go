@@ -16,3 +16,21 @@ func ReverseStringSlice(ss []string) []string {
 	}
 	return ss2
 }
+
+func FlatStringMap(m map[string][]string) map[string]string {
+	m2 := map[string]string{}
+	for k, vs := range m {
+		if len(vs) > 0 {
+			m2[k] = vs[0]
+		}
+	}
+	return m2
+}
+
+func ListStringMap(m map[string]string) map[string][]string {
+	m2 := map[string][]string{}
+	for k, v := range m {
+		m2[k] = []string{v}
+	}
+	return m2
+}

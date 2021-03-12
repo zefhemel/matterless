@@ -1,6 +1,7 @@
 package eventsource
 
 import (
+	"github.com/zefhemel/matterless/pkg/definition"
 	"strings"
 	"time"
 
@@ -9,44 +10,35 @@ import (
 )
 
 type MatterMostSource struct {
-	wsClient *model.WebSocketClient
-	token    string
-	events   chan interface{}
-	stopping chan struct{}
-	stopped  chan struct{}
+	wsClient           *model.WebSocketClient
+	token              string
+	def                *definition.MattermostClientDef
+	stopping           chan struct{}
+	stopped            chan struct{}
+	functionInvokeFunc FunctionInvokeFunc
 }
 
-func NewMatterMostSource(url, token string) (*MatterMostSource, error) {
-	wsURL := strings.Replace(url, "http:", "ws:", 1)
+type FunctionInvokeFunc func(name definition.FunctionID, event interface{}) interface{}
+
+func NewMatterMostSource(def *definition.MattermostClientDef, functionInvokeFunc FunctionInvokeFunc) (*MatterMostSource, error) {
+	wsURL := strings.Replace(def.URL, "http:", "ws:", 1)
 	wsURL = strings.Replace(wsURL, "https:", "wss:", 1)
 	log.Debug("Websocket URL: ", wsURL)
 	mms := &MatterMostSource{
-		stopping: make(chan struct{}),
-		stopped:  make(chan struct{}),
+		stopping:           make(chan struct{}),
+		stopped:            make(chan struct{}),
+		def:                def,
+		functionInvokeFunc: functionInvokeFunc,
 	}
 
 	var err *model.AppError
-	mms.wsClient, err = model.NewWebSocketClient4(wsURL, token)
+	mms.wsClient, err = model.NewWebSocketClient4(wsURL, def.Token)
 	if err != nil {
 		log.Error("Connecting to websocket", err)
 		return nil, err
 	}
 
 	return mms, nil
-}
-
-// Events filtered by SubscribedEvents
-func (mms *MatterMostSource) Events() chan interface{} {
-	return mms.events
-}
-
-func stringSliceContains(stringSlice []string, needle string) bool {
-	for _, s := range stringSlice {
-		if needle == s {
-			return true
-		}
-	}
-	return false
 }
 
 func (mms *MatterMostSource) Start() error {
@@ -58,16 +50,21 @@ func (mms *MatterMostSource) Start() error {
 
 	mms.wsClient.Listen()
 
-	// Initialize event channel
-	mms.events = make(chan interface{})
-
 	go func() {
 	eventLoop:
 		for {
 			select {
 			case evt, ok := <-mms.wsClient.EventChannel:
 				if ok {
-					mms.events <- evt
+					if eventListeners, ok := mms.def.Events[evt.Event]; ok {
+						for _, eventListener := range eventListeners {
+							mms.functionInvokeFunc(eventListener, evt)
+						}
+					} else if eventListeners, ok := mms.def.Events["all"]; ok {
+						for _, eventListener := range eventListeners {
+							mms.functionInvokeFunc(eventListener, evt)
+						}
+					}
 				} else {
 					// Channel closed, likely due to socket disconnect. Reconnect
 				reconnectLoop:
@@ -87,7 +84,6 @@ func (mms *MatterMostSource) Start() error {
 				break eventLoop
 			}
 		}
-		close(mms.events)
 		mms.wsClient.Close()
 		mms.stopped <- struct{}{}
 	}()

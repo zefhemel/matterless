@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/zefhemel/matterless/pkg/checker"
-	"github.com/zefhemel/matterless/pkg/declaration"
+	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
@@ -15,7 +15,7 @@ import (
 var test1Md string
 
 func TestInterpreter(t *testing.T) {
-	defs, err := declaration.Parse(test1Md)
+	defs, err := definition.Parse(test1Md)
 	assert.NoError(t, err)
 	sb := sandbox.NewMockSandbox(nil, "Ok", nil)
 	results := checker.TestDeclarations(defs, sb)
@@ -23,7 +23,7 @@ func TestInterpreter(t *testing.T) {
 }
 
 func TestNodeInterpreter(t *testing.T) {
-	defs, err := declaration.Parse(test1Md)
+	defs, err := definition.Parse(test1Md)
 	assert.NoError(t, err)
 	sb := sandbox.NewNodeSandbox()
 	results := checker.TestDeclarations(defs, sb)

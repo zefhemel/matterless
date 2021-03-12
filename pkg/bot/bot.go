@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"github.com/zefhemel/matterless/pkg/application"
+	"github.com/zefhemel/matterless/pkg/definition"
 	"net/http"
 	"strings"
 	"time"
@@ -42,7 +43,21 @@ func NewBot(url, token string) (*MatterlessBot, error) {
 	mb.mmClient.SetOAuthToken(token)
 
 	var err error
-	mb.eventSource, err = eventsource.NewMatterMostSource(url, token)
+	mb.eventSource, err = eventsource.NewMatterMostSource(&definition.MattermostClientDef{
+		URL:   url,
+		Token: token,
+		Events: map[string][]definition.FunctionID{
+			"all": {"CatchAll"},
+		},
+	}, func(name definition.FunctionID, event interface{}) interface{} {
+		log.Debug("Received event", event)
+		wsEvent := event.(*model.WebSocketEvent)
+
+		if wsEvent.EventType() == "posted" || wsEvent.EventType() == "post_edited" {
+			mb.handlePosted(wsEvent)
+		}
+		return nil
+	})
 	if err != nil {
 		log.Error("Connecting to websocket", err)
 		return nil, err
@@ -71,15 +86,6 @@ func (mb *MatterlessBot) Start() error {
 
 	mb.loadDeclarations()
 
-	for evt := range mb.eventSource.Events() {
-		log.Debug("Received event", evt)
-
-		wsEvent := evt.(*model.WebSocketEvent)
-
-		if wsEvent.EventType() == "posted" || wsEvent.EventType() == "post_edited" {
-			mb.handlePosted(wsEvent)
-		}
-	}
 	return nil
 }
 

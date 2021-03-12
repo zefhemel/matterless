@@ -28,3 +28,31 @@ function handle(event) {
   console.
 }
 ```
+
+---
+# Function: MyHTTPTest
+```javascript
+function handle(event) {
+    console.log("HTTP event", event);
+    return {
+        status: 200,
+        body: "Hello world!"
+    };
+}
+```
+
+---
+# Source: MyHTTP
+```yaml
+Type: APIGateway
+Path: /test
+Methods:
+- GET
+```
+
+---
+# Subscription: MyHTTPTestSubscription
+```yaml
+Source: MyHTTP
+Function: MyHTTPTest
+```
