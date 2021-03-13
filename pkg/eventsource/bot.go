@@ -14,6 +14,7 @@ type BotSource struct {
 	mms                *MatterMostSource
 	adminClient        *model.Client4
 	functionInvokeFunc FunctionInvokeFunc
+	BotUserClient      *model.Client4
 }
 
 func NewBotSource(adminClient *model.Client4, botName string, def *definition.BotDef, functionInvokeFunc FunctionInvokeFunc) (*BotSource, error) {
@@ -25,9 +26,6 @@ func NewBotSource(adminClient *model.Client4, botName string, def *definition.Bo
 	}
 
 	botUser, resp := adminClient.GetUserByUsername(def.Username, "")
-	if resp.Error != nil {
-		return nil, errors.Wrap(resp.Error, "lookup bot")
-	}
 	var userID string
 	if botUser == nil {
 		bot, resp := adminClient.CreateBot(&model.Bot{
@@ -87,6 +85,8 @@ func NewBotSource(adminClient *model.Client4, botName string, def *definition.Bo
 	}
 
 	bs.mms = mms
+	bs.BotUserClient = model.NewAPIv4Client(adminClient.Url)
+	bs.BotUserClient.SetOAuthToken(token.Token)
 
 	return bs, err
 }

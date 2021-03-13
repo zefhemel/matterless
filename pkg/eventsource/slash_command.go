@@ -83,7 +83,13 @@ func NewSlashCommandSource(adminClient *model.Client4, def *definition.SlashComm
 				Methods:  []string{"POST"},
 				Function: def.Function,
 			}},
-		}, invokeFunc),
+		}, func(name definition.FunctionID, event interface{}) interface{} {
+			resp := invokeFunc(name, event)
+			return &APIGatewayResponse{
+				Status: 200,
+				Body:   resp,
+			}
+		}),
 	}
 
 	// TODO: Let's not pull this from the environment variables here directly

@@ -75,23 +75,3 @@ function handle(event) {
     };
 }
 ```
----
-# SlashCommand: ZefCommand
-```yaml
-team_name: Dev
-trigger: zef
-function: ZefCommand
-```
-
----
-# Function: ZefCommand
-```javascript
-function handle(event) {
-    return {
-        status: 200,
-        body: {
-            text: "You told me this: " + event.form_values.text,
-        }
-    };
-}
-```

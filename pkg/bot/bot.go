@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"github.com/zefhemel/matterless/pkg/application"
 	"github.com/zefhemel/matterless/pkg/definition"
-	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/mattermost/mattermost-server/model"
-	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/eventsource"
 )
@@ -20,32 +19,33 @@ var helpText string
 
 // MatterlessBot represent the meeting bot object
 type MatterlessBot struct {
+	botSource        *eventsource.BotSource
 	userCache        map[string]*model.User
 	channelCache     map[string]*model.Channel
 	channelNameCache map[string]*model.Channel
 	team             *model.Team
-	mmClient         *model.Client4
-	eventSource      *eventsource.MatterMostSource
 	botUser          *model.User
 
 	userApps map[string]*application.Application
 }
 
 // NewBot creates a new instance of the bot event listener
-func NewBot(url, token string) (*MatterlessBot, error) {
+func NewBot(url, adminToken string) (*MatterlessBot, error) {
 	mb := &MatterlessBot{
 		userCache:        map[string]*model.User{},
 		channelCache:     map[string]*model.Channel{},
 		channelNameCache: map[string]*model.Channel{},
-		mmClient:         model.NewAPIv4Client(url),
 		userApps:         map[string]*application.Application{},
 	}
-	mb.mmClient.SetOAuthToken(token)
+	adminClient := model.NewAPIv4Client(url)
+	adminClient.SetOAuthToken(adminToken)
 
 	var err error
-	mb.eventSource, err = eventsource.NewMatterMostSource("", &definition.MattermostClientDef{
-		URL:   url,
-		Token: token,
+	mb.botSource, err = eventsource.NewBotSource(adminClient, "matterless", &definition.BotDef{
+		TeamNames:   []string{os.Getenv("team_name")},
+		Username:    "matterless",
+		DisplayName: "Matterless",
+		Description: "Matterless Bot",
 		Events: map[string][]definition.FunctionID{
 			"all": {"CatchAll"},
 		},
@@ -58,27 +58,25 @@ func NewBot(url, token string) (*MatterlessBot, error) {
 		}
 		return nil
 	})
+
 	if err != nil {
 		log.Error("Connecting to websocket", err)
 		return nil, err
 	}
 
 	var resp *model.Response
-	mb.botUser, resp = mb.mmClient.GetMe("")
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.Wrap(resp.Error, "Could not get bot account")
-	}
+	mb.team, resp = adminClient.GetTeamByName(os.Getenv("team_name"), "")
+	logAPIResponse(resp, "get bot team")
 
-	teams, resp := mb.mmClient.GetTeamsForUser(mb.botUser.Id, "")
-	logAPIResponse(resp, "get bot teams")
-	mb.team = teams[0] // TODO Come up with something better
+	mb.botUser, resp = mb.botSource.BotUserClient.GetMe("")
+	logAPIResponse(resp, "get bot user")
 
 	return mb, nil
 }
 
 // Start listens and handles incoming messages until the socket disconnects
 func (mb *MatterlessBot) Start() error {
-	err := mb.eventSource.Start()
+	err := mb.botSource.Start()
 
 	if err != nil {
 		return err
@@ -94,7 +92,7 @@ func (mb *MatterlessBot) lookupUser(userID string) *model.User {
 	if user != nil {
 		return user
 	} else {
-		mb.userCache[userID], _ = mb.mmClient.GetUser(userID, "")
+		mb.userCache[userID], _ = mb.botSource.BotUserClient.GetUser(userID, "")
 		return mb.userCache[userID]
 	}
 }
@@ -104,7 +102,7 @@ func (mb *MatterlessBot) lookupChannel(channelID string) *model.Channel {
 	if channel != nil {
 		return channel
 	} else {
-		mb.channelCache[channelID], _ = mb.mmClient.GetChannel(channelID, "")
+		mb.channelCache[channelID], _ = mb.botSource.BotUserClient.GetChannel(channelID, "")
 		return mb.channelCache[channelID]
 	}
 }
@@ -115,7 +113,7 @@ func (mb *MatterlessBot) lookupChannelByName(name string, teamID string) *model.
 	if channel != nil {
 		return channel
 	} else {
-		mb.channelNameCache[name], _ = mb.mmClient.GetChannelByName(name, teamID, "")
+		mb.channelNameCache[name], _ = mb.botSource.BotUserClient.GetChannelByName(name, teamID, "")
 		return mb.channelNameCache[name]
 	}
 }
@@ -133,7 +131,7 @@ func logAPIResponse(resp *model.Response, action string) {
 }
 
 func (mb *MatterlessBot) replyToPost(post *model.Post, message string) {
-	_, resp := mb.mmClient.CreatePost(&model.Post{
+	_, resp := mb.botSource.BotUserClient.CreatePost(&model.Post{
 		ParentId:  post.Id,
 		RootId:    post.Id,
 		Message:   message,
@@ -143,14 +141,14 @@ func (mb *MatterlessBot) replyToPost(post *model.Post, message string) {
 }
 
 func (mb *MatterlessBot) ensureReply(post *model.Post, message string) {
-	pl, _ := mb.mmClient.GetPostThread(post.Id, "")
+	pl, _ := mb.botSource.BotUserClient.GetPostThread(post.Id, "")
 	for _, p := range pl.Posts {
 		if p.UserId != mb.botUser.Id {
 			continue
 		}
 		if p.ParentId == post.Id {
 			p.Message = message
-			_, resp := mb.mmClient.UpdatePost(p.Id, p)
+			_, resp := mb.botSource.BotUserClient.UpdatePost(p.Id, p)
 			logAPIResponse(resp, "updating reply")
 			return
 		}
@@ -160,10 +158,11 @@ func (mb *MatterlessBot) ensureReply(post *model.Post, message string) {
 }
 
 func (mb *MatterlessBot) handleDirect(post *model.Post) {
+	client := mb.botSource.BotUserClient
 	if post.Message[0] == '#' {
 		userApp, ok := mb.userApps[post.UserId]
 		if !ok {
-			userApp = application.NewApplication(mb.mmClient, func(kind, message string) {
+			userApp = application.NewApplication(client, func(kind, message string) {
 				mb.postFunctionLog(post.UserId, kind, message)
 			})
 		}
@@ -171,14 +170,14 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 		err := userApp.Eval(post.Message)
 		if err != nil {
 			apiDelay()
-			_, resp := mb.mmClient.DeleteReaction(&model.Reaction{
+			_, resp := client.DeleteReaction(&model.Reaction{
 				UserId:    mb.botUser.Id,
 				PostId:    post.Id,
 				EmojiName: "white_check_mark",
 			})
 			logAPIResponse(resp, "delete declaration reaction")
 			apiDelay()
-			_, resp = mb.mmClient.SaveReaction(&model.Reaction{
+			_, resp = client.SaveReaction(&model.Reaction{
 				UserId:    mb.botUser.Id,
 				PostId:    post.Id,
 				EmojiName: "stop_sign",
@@ -189,7 +188,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 		}
 
 		apiDelay()
-		_, resp := mb.mmClient.DeleteReaction(&model.Reaction{
+		_, resp := client.DeleteReaction(&model.Reaction{
 			UserId:    mb.botUser.Id,
 			PostId:    post.Id,
 			EmojiName: "stop_sign",
@@ -197,7 +196,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 		logAPIResponse(resp, "delete declaration reaction")
 		apiDelay()
 		mb.ensureReply(post, "All good :thumbsup:")
-		_, resp = mb.mmClient.SaveReaction(&model.Reaction{
+		_, resp = client.SaveReaction(&model.Reaction{
 			UserId:    mb.botUser.Id,
 			PostId:    post.Id,
 			EmojiName: "white_check_mark",
@@ -206,7 +205,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 	} else {
 		switch post.Message {
 		case "ping":
-			_, resp := mb.mmClient.SaveReaction(&model.Reaction{
+			_, resp := client.SaveReaction(&model.Reaction{
 				UserId:    mb.botUser.Id,
 				PostId:    post.Id,
 				EmojiName: "ping_pong",
@@ -246,15 +245,16 @@ func (mb *MatterlessBot) handlePrivate(p *model.Post, channel *model.Channel) {
 
 // Note: not currently used
 func (mb *MatterlessBot) handleLogChannelLeaving(p *model.Post, channel *model.Channel) {
+	client := mb.botSource.BotUserClient
 	if p.Type == model.POST_LEAVE_CHANNEL {
-		members, resp := mb.mmClient.GetChannelMembers(channel.Id, 0, 5, "")
+		members, resp := client.GetChannelMembers(channel.Id, 0, 5, "")
 		if resp.Error != nil {
 			logAPIResponse(resp, "getting channel members")
 			return
 		}
 		if len(*members) == 1 {
 			// Just matterless bot left, close the channel
-			success, resp := mb.mmClient.DeleteChannel(channel.Id)
+			success, resp := client.DeleteChannel(channel.Id)
 			if !success {
 				logAPIResponse(resp, "deleting log channel")
 			} else {
@@ -268,12 +268,13 @@ func (mb *MatterlessBot) handleLogChannelLeaving(p *model.Post, channel *model.C
 }
 
 func (mb *MatterlessBot) loadDeclarations() {
-	channels, resp := mb.mmClient.GetChannelsForTeamForUser(mb.team.Id, "me", "")
+	client := mb.botSource.BotUserClient
+	channels, resp := client.GetChannelsForTeamForUser(mb.team.Id, "me", "")
 	logAPIResponse(resp, "load all channels")
 	for _, ch := range channels {
 		if ch.Type == model.CHANNEL_DIRECT {
 			log.Debugf("Processing direct channel: %+v", ch)
-			posts, resp := mb.mmClient.GetPostsForChannel(ch.Id, 0, 100, "")
+			posts, resp := client.GetPostsForChannel(ch.Id, 0, 100, "")
 			logAPIResponse(resp, "get posts for direct channel")
 			// Note: posts are ordered in reverse-chronological order
 			for _, postID := range posts.Order {

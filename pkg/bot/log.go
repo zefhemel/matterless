@@ -15,6 +15,7 @@ func safeChannelName(name string) string {
 }
 
 func (mb *MatterlessBot) postFunctionLog(userID string, functionName string, logMessage string) error {
+	client := mb.botSource.BotUserClient
 	user := mb.lookupUser(userID)
 	channelName := safeChannelName(fmt.Sprintf("matterless-logs-%s-%s", user.Username, functionName))
 	displayName := fmt.Sprintf("Matterless: Logs: %s: %s", user.Username, functionName)
@@ -23,9 +24,9 @@ func (mb *MatterlessBot) postFunctionLog(userID string, functionName string, log
 		return err
 	}
 	apiDelay()
-	_, resp := mb.mmClient.AddChannelMember(ch.Id, userID)
+	_, resp := client.AddChannelMember(ch.Id, userID)
 	logAPIResponse(resp, "add member")
-	_, resp = mb.mmClient.CreatePost(&model.Post{
+	_, resp = client.CreatePost(&model.Post{
 		ChannelId: ch.Id,
 		Message:   fmt.Sprintf("Log:\n```%s```", logMessage),
 	})
@@ -38,7 +39,7 @@ func (mb *MatterlessBot) ensureLogChannel(teamID, name, displayName string) (*mo
 		return existingChannel, nil
 	}
 
-	ch, resp := mb.mmClient.CreateChannel(&model.Channel{
+	ch, resp := mb.botSource.BotUserClient.CreateChannel(&model.Channel{
 		TeamId:      teamID,
 		Type:        model.CHANNEL_PRIVATE,
 		DisplayName: displayName,
