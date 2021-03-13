@@ -13,6 +13,8 @@ type Definitions struct {
 	// Sources
 	MattermostClients map[string]*MattermostClientDef
 	APIGateways       map[string]*APIGatewayDef
+	SlashCommands     map[string]*SlashCommandDef
+	Bots              map[string]*BotDef
 }
 
 type FunctionDef struct {
@@ -27,6 +29,15 @@ type MattermostClientDef struct {
 	Events map[string][]FunctionID `yaml:"events"`
 }
 
+type BotDef struct {
+	TeamNames   []string `yaml:"team_names"`
+	Username    string   `yaml:"username"`
+	DisplayName string   `yaml:"display_name"`
+	Description string   `yaml:"description"`
+
+	Events map[string][]FunctionID `yaml:"events"`
+}
+
 type EndpointDef struct {
 	Path     string     `yaml:"path"`
 	Methods  []string   `yaml:"methods"`
@@ -36,6 +47,12 @@ type EndpointDef struct {
 type APIGatewayDef struct {
 	BindPort  int           `yaml:"bind_port"`
 	Endpoints []EndpointDef `yaml:"endpoints"`
+}
+
+type SlashCommandDef struct {
+	TeamName string     `yaml:"team_name"`
+	Trigger  string     `yaml:"trigger"`
+	Function FunctionID `yaml:"function"`
 }
 
 // CompileFunctionCode appends all library code to a function to be eval'ed

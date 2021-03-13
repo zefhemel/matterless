@@ -1,17 +1,14 @@
-# Environment
+# Bot: SuperBot
 ```yaml
-MM_URL: http://host.docker.internal:8065
-MM_TOKEN: xuwwa9z56jgb3b859zmasu1n7w
-```
-----
-# MattermostClient: MyBot
-```yaml
-url: $MM_URL
-token: $MM_TOKEN
+team_names:
+  - Dev
+username: super-bot
+display_name: Super bot
+description: My Materless bot
 events:
-  posted: 
-  - PingPong
-  - Help
+  posted:
+    - PingPong
+    - Help
 ```
 ----
 # Function: PingPong
@@ -20,7 +17,7 @@ async function handle(event) {
     event = cleanEvent(event);
     if(event.event == "posted" && event.post.message === "ping") {
         console.log("Got ping, need to pong.");
-        let client = connect();
+        let client = mmConnect(process.env.SUPERBOT_URL, process.env.SUPERBOT_TOKEN);
         let me = await client.getMe();
         await client.addReaction(me.id, event.post.id, "ping_pong");
     }    
@@ -34,7 +31,7 @@ async function handle(event) {
 async function handle(event) {
     event = cleanEvent(event);
     if(event.event == "posted" && event.post.message === "help") {
-        let client = connect();
+        let client = mmConnect(process.env.SUPERBOT_URL, process.env.SUPERBOT_TOKEN);
         let post = event.post;
         await client.createPost({
             channel_id: post.channel_id,
@@ -51,11 +48,6 @@ Awesome stuff here.`
 ```javascript
 import mmConnect from "./mm_client.mjs";
 
-// Connects to mattermost via env settings
-function connect() {
-    return mmConnect(process.env.MM_URL, process.env.MM_TOKEN);
-}
-
 function cleanEvent(event) {
     if(event.event == "posted" || event.event == "post_edted") {
         event.post = JSON.parse(event.data.post);
@@ -64,27 +56,42 @@ function cleanEvent(event) {
 }
 ```
 ---
-# Function: MyHTTPTest
+# APIGateway: MyHTTP
+```yaml
+bind_port: 8222
+endpoints:
+    - path: /
+      methods:
+        - GET
+      function: HTTPIndex
+```
+---
+# Function: HTTPIndex
 ```javascript
 function handle(event) {
-    console.log("HTTP event", event);
     return {
         status: 200,
-        headers: {
-            "X-Zef": "Awesome"
-        },
         body: "Hello world!"
     };
 }
 ```
+---
+# SlashCommand: ZefCommand
+```yaml
+team_name: Dev
+trigger: zef
+function: ZefCommand
+```
 
 ---
-# APIGateway: MyHTTP
-```yaml
-endpoints:
-    - path: /test
-      methods:
-        - GET
-        - POST
-      function: MyHTTPTest
+# Function: ZefCommand
+```javascript
+function handle(event) {
+    return {
+        status: 200,
+        body: {
+            text: "You told me this: " + event.form_values.text,
+        }
+    };
+}
 ```

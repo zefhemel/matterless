@@ -40,19 +40,3 @@ function handle(event) {
     };
 }
 ```
-
----
-# Source: MyHTTP
-```yaml
-Type: APIGateway
-Path: /test
-Methods:
-- GET
-```
-
----
-# Subscription: MyHTTPTestSubscription
-```yaml
-Source: MyHTTP
-Function: MyHTTPTest
-```

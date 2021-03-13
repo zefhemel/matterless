@@ -10,6 +10,8 @@ type CheckResults struct {
 	Functions         map[FunctionID][]error
 	MattermostClients map[string][]error
 	APIGateways       map[string][]error
+	SlashCommands     map[string][]error
+	Bots              map[string][]error
 	Libraries         map[string][]error
 }
 
@@ -23,6 +25,12 @@ func (cr *CheckResults) String() string {
 	}
 	for name, errs := range cr.APIGateways {
 		errorMessageParts = collectPrettyErrors(errs, errorMessageParts, name, "APIGateway")
+	}
+	for name, errs := range cr.SlashCommands {
+		errorMessageParts = collectPrettyErrors(errs, errorMessageParts, name, "SlashCommand")
+	}
+	for name, errs := range cr.Bots {
+		errorMessageParts = collectPrettyErrors(errs, errorMessageParts, name, "Bot")
 	}
 	for libraryName, libraryErrors := range cr.Libraries {
 		errorMessageParts = collectPrettyErrors(libraryErrors, errorMessageParts, libraryName, "Library")
@@ -42,6 +50,8 @@ func Check(declarations *Definitions) CheckResults {
 		Functions:         checkFunctions(declarations),
 		MattermostClients: checkMattermostClients(declarations),
 		APIGateways:       checkAPIGateways(declarations),
+		SlashCommands:     checkSlashCommands(declarations),
+		Bots:              checkBots(declarations),
 		Libraries:         checkLibraries(declarations),
 	}
 }
@@ -83,6 +93,43 @@ func checkAPIGateways(declarations *Definitions) map[string][]error {
 					errorList = append(errorList, errors.New("no 'function' defined for endpoint"))
 				} else if !declarations.FunctionExists(endpointDef.Function) {
 					errorList = append(errorList, fmt.Errorf("function %s not found", endpointDef.Function))
+				}
+			}
+		}
+		results[name] = errorList
+	}
+	return results
+}
+
+func checkSlashCommands(declarations *Definitions) map[string][]error {
+	results := make(map[string][]error)
+	for name, def := range declarations.SlashCommands {
+		errorList := make([]error, 0, 5)
+		if def.TeamName == "" {
+			errorList = append(errorList, errors.New("no 'team_name' specified"))
+		}
+		if def.Trigger == "" {
+			errorList = append(errorList, errors.New("no 'trigger' specified"))
+		}
+		if !declarations.FunctionExists(def.Function) {
+			errorList = append(errorList, fmt.Errorf("function %s not found", def.Function))
+		}
+		results[name] = errorList
+	}
+	return results
+}
+
+func checkBots(declarations *Definitions) map[string][]error {
+	results := make(map[string][]error)
+	for name, def := range declarations.Bots {
+		errorList := make([]error, 0, 5)
+		if def.Username == "" {
+			errorList = append(errorList, errors.New("no 'username' specified"))
+		}
+		for _, functionIDs := range def.Events {
+			for _, functionID := range functionIDs {
+				if !declarations.FunctionExists(functionID) {
+					errorList = append(errorList, fmt.Errorf("function %s not found", functionID))
 				}
 			}
 		}

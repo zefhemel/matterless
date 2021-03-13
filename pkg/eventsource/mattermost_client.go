@@ -1,6 +1,7 @@
 package eventsource
 
 import (
+	"fmt"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 )
 
 type MatterMostSource struct {
+	clientName         string
 	wsClient           *model.WebSocketClient
 	token              string
 	def                *definition.MattermostClientDef
@@ -20,11 +22,12 @@ type MatterMostSource struct {
 
 type FunctionInvokeFunc func(name definition.FunctionID, event interface{}) interface{}
 
-func NewMatterMostSource(def *definition.MattermostClientDef, functionInvokeFunc FunctionInvokeFunc) (*MatterMostSource, error) {
+func NewMatterMostSource(clientName string, def *definition.MattermostClientDef, functionInvokeFunc FunctionInvokeFunc) (*MatterMostSource, error) {
 	wsURL := strings.Replace(def.URL, "http:", "ws:", 1)
 	wsURL = strings.Replace(wsURL, "https:", "wss:", 1)
 	log.Debug("Websocket URL: ", wsURL)
 	mms := &MatterMostSource{
+		clientName:         clientName,
 		stopping:           make(chan struct{}),
 		stopped:            make(chan struct{}),
 		def:                def,
@@ -88,6 +91,14 @@ func (mms *MatterMostSource) Start() error {
 		mms.stopped <- struct{}{}
 	}()
 	return nil
+}
+
+func (ag *MatterMostSource) ExposeEnvironment(env map[string]string) {
+	// clientName == empty is the matterless bot, let's not expose those credentials
+	if ag.clientName != "" {
+		env[fmt.Sprintf("%s_URL", strings.ToUpper(ag.clientName))] = ag.def.URL
+		env[fmt.Sprintf("%s_TOKEN", strings.ToUpper(ag.clientName))] = ag.def.Token
+	}
 }
 
 func (mms *MatterMostSource) Stop() {

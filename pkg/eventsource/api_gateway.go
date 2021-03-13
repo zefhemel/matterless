@@ -54,6 +54,7 @@ func (ag *APIGatewaySource) Start() error {
 	ag.wg.Add(1)
 	go func() {
 		defer ag.wg.Done()
+		log.Infof("Starting API Gateway on port %d", ag.def.BindPort)
 		if err := ag.server.ListenAndServe(); err != http.ErrServerClosed {
 			log.Fatalf("ListenAndServe(): %v", err)
 		}

@@ -52,3 +52,19 @@ endpoints:
         - GET
       function: TestFunction2
 ```
+
+---
+# SlashCommand: MyCommand
+```yaml
+trigger: test
+function: TestFunction1
+```
+
+---
+# Bot: MyBot
+```yaml
+username: my-bot
+events:
+  posted:
+  - TestFunction1
+```

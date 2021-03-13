@@ -20,6 +20,8 @@ func Parse(code string) (*Definitions, error) {
 		Functions:         map[FunctionID]*FunctionDef{},
 		MattermostClients: map[string]*MattermostClientDef{},
 		APIGateways:       map[string]*APIGatewayDef{},
+		SlashCommands:     map[string]*SlashCommandDef{},
+		Bots:              map[string]*BotDef{},
 		Environment:       map[string]string{},
 		Libraries:         map[string]*FunctionDef{},
 	}
@@ -59,6 +61,20 @@ func Parse(code string) (*Definitions, error) {
 				return err
 			}
 			decls.APIGateways[currentDeclarationName] = &def
+		case "SlashCommand":
+			var def SlashCommandDef
+			err := yaml.Unmarshal([]byte(currentBody), &def)
+			if err != nil {
+				return err
+			}
+			decls.SlashCommands[currentDeclarationName] = &def
+		case "Bot":
+			var def BotDef
+			err := yaml.Unmarshal([]byte(currentBody), &def)
+			if err != nil {
+				return err
+			}
+			decls.Bots[currentDeclarationName] = &def
 		case "Environment":
 			err := yaml.Unmarshal([]byte(currentBody), &decls.Environment)
 			if err != nil {

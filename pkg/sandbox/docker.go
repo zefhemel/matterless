@@ -141,6 +141,17 @@ func (s *DockerSandbox) cleanup() {
 	}
 }
 
+func (s *DockerSandbox) FlushAll() {
+	log.Infof("Stopping %d running functions...", len(s.runningInstances))
+	for _, inst := range s.runningInstances {
+		log.Info("Killing an instance now...", inst)
+		if err := inst.kill(); err != nil {
+			log.Error("Error killing instance", err)
+		}
+	}
+	s.runningInstances = map[string]*instance{}
+}
+
 func (inst *instance) invoke(event interface{}) (interface{}, []string, error) {
 	inst.runLock.Lock()
 	defer inst.runLock.Unlock()
@@ -178,6 +189,7 @@ func (inst *instance) invoke(event interface{}) (interface{}, []string, error) {
 func (s *DockerSandbox) Stop() {
 	s.ticker.Stop()
 	s.stop <- struct{}{}
+	s.FlushAll()
 }
 
 func (s *DockerSandbox) cleanupJob() {

@@ -25,4 +25,6 @@ func TestParser(t *testing.T) {
 	assert.Equal(t, "javascript", decls.Libraries[""].Language)
 	assert.Equal(t, "/test", decls.APIGateways["MyHTTP"].Endpoints[0].Path)
 	assert.Equal(t, definition.FunctionID("TestFunction2"), decls.APIGateways["MyHTTP"].Endpoints[0].Function)
+
+	assert.Equal(t, definition.FunctionID("TestFunction1"), decls.Bots["MyBot"].Events["posted"][0])
 }

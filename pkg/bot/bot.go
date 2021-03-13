@@ -43,7 +43,7 @@ func NewBot(url, token string) (*MatterlessBot, error) {
 	mb.mmClient.SetOAuthToken(token)
 
 	var err error
-	mb.eventSource, err = eventsource.NewMatterMostSource(&definition.MattermostClientDef{
+	mb.eventSource, err = eventsource.NewMatterMostSource("", &definition.MattermostClientDef{
 		URL:   url,
 		Token: token,
 		Events: map[string][]definition.FunctionID{
@@ -163,7 +163,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 	if post.Message[0] == '#' {
 		userApp, ok := mb.userApps[post.UserId]
 		if !ok {
-			userApp = application.NewApplication(func(kind, message string) {
+			userApp = application.NewApplication(mb.mmClient, func(kind, message string) {
 				mb.postFunctionLog(post.UserId, kind, message)
 			})
 		}
