@@ -86,6 +86,13 @@ func Parse(code string) (*Definitions, error) {
 	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
 		switch v := c.(type) {
 		case *ast.Heading:
+			if err := processDefinition(); err != nil {
+				return decls, err
+			}
+			// Reset all
+			currentBody = ""
+			currentLanguage = ""
+			// Process next
 			parts := headerRegex.FindStringSubmatch(string(v.Text(codeBytes)))
 			currentDeclarationType = parts[1]
 			currentDeclarationName = parts[2]
@@ -97,15 +104,6 @@ func Parse(code string) (*Definitions, error) {
 				allCode = append(allCode, string(seg.Value(codeBytes)))
 			}
 			currentBody = strings.Join(allCode, "")
-		case *ast.ThematicBreak:
-			if err := processDefinition(); err != nil {
-				return decls, err
-			}
-			// Reset all
-			currentBody = ""
-			currentDeclarationName = ""
-			currentDeclarationType = ""
-			currentLanguage = ""
 		}
 	}
 	if err := processDefinition(); err != nil {

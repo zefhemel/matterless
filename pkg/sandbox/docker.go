@@ -152,6 +152,11 @@ func (s *DockerSandbox) FlushAll() {
 	s.runningInstances = map[string]*instance{}
 }
 
+type jsError struct {
+	Message string `json:"message"`
+	Stack   string `json:"stack"`
+}
+
 func (inst *instance) invoke(event interface{}) (interface{}, []string, error) {
 	inst.runLock.Lock()
 	defer inst.runLock.Unlock()
@@ -179,6 +184,17 @@ func (inst *instance) invoke(event interface{}) (interface{}, []string, error) {
 		firstLineBuf := []byte(resp)
 		firstLineBuf = append(firstLineBuf, buf...)
 		return nil, nil, fmt.Errorf("From process: %s", firstLineBuf)
+	}
+	if errorMap, ok := result.(map[string]interface{}); ok {
+		if errorObj, ok := errorMap["error"]; ok {
+			var jsError jsError
+			err = json.Unmarshal([]byte(util.MustJsonString(errorObj)), &jsError)
+			if err != nil {
+				return nil, nil, fmt.Errorf("Runtime error: %s", util.MustJsonString(errorObj))
+			}
+			return nil, nil, fmt.Errorf("Runtime error: %s\n%s", jsError.Message, jsError.Stack)
+
+		}
 	}
 	// Wait for all log messages to flush
 	<-endOfLogChan

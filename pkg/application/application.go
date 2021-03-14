@@ -13,6 +13,7 @@ import (
 
 type Application struct {
 	// Definitions
+	code        string
 	definitions *definition.Definitions
 
 	// Runtime
@@ -48,8 +49,13 @@ func (app *Application) handleFunctionCall(name definition.FunctionID, event int
 	return result
 }
 
+func (app *Application) CurrentCode() string {
+	return app.code
+}
+
 func (app *Application) Eval(code string) error {
 	log.Debug("Parsing and checking definitions...")
+	app.code = code
 	decls, err := definition.Parse(code)
 	if err != nil {
 		return err
@@ -112,9 +118,9 @@ func (app *Application) Eval(code string) error {
 
 	log.Debug("Testing functions...")
 	testResults := checker.TestDeclarations(decls, app.sandbox)
-	for _, functionResult := range testResults.Functions {
+	for name, functionResult := range testResults.Functions {
 		if functionResult.Logs != "" {
-			app.logCallback("Function test", functionResult.Logs)
+			app.logCallback(string(name), functionResult.Logs)
 		}
 	}
 	if testResults.String() != "" {

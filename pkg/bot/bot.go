@@ -6,7 +6,6 @@ import (
 	"github.com/zefhemel/matterless/pkg/application"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/mattermost/mattermost-server/model"
@@ -26,7 +25,8 @@ type MatterlessBot struct {
 	team             *model.Team
 	botUser          *model.User
 
-	userApps map[string]*application.Application
+	postApps    map[string]*application.Application // post_id -> app
+	adminClient *model.Client4
 }
 
 // NewBot creates a new instance of the bot event listener
@@ -35,13 +35,14 @@ func NewBot(url, adminToken string) (*MatterlessBot, error) {
 		userCache:        map[string]*model.User{},
 		channelCache:     map[string]*model.Channel{},
 		channelNameCache: map[string]*model.Channel{},
-		userApps:         map[string]*application.Application{},
+		postApps:         map[string]*application.Application{},
+		adminClient:      model.NewAPIv4Client(url),
 	}
-	adminClient := model.NewAPIv4Client(url)
-	adminClient.SetOAuthToken(adminToken)
+
+	mb.adminClient.SetOAuthToken(adminToken)
 
 	var err error
-	mb.botSource, err = eventsource.NewBotSource(adminClient, "matterless", &definition.BotDef{
+	mb.botSource, err = eventsource.NewBotSource(mb.adminClient, "matterless", &definition.BotDef{
 		TeamNames:   []string{os.Getenv("team_name")},
 		Username:    "matterless",
 		DisplayName: "Matterless",
@@ -55,6 +56,8 @@ func NewBot(url, adminToken string) (*MatterlessBot, error) {
 
 		if wsEvent.EventType() == "posted" || wsEvent.EventType() == "post_edited" {
 			mb.handlePosted(wsEvent)
+		} else if wsEvent.EventType() == "post_deleted" {
+			mb.handleDeleted(wsEvent)
 		}
 		return nil
 	})
@@ -65,7 +68,7 @@ func NewBot(url, adminToken string) (*MatterlessBot, error) {
 	}
 
 	var resp *model.Response
-	mb.team, resp = adminClient.GetTeamByName(os.Getenv("team_name"), "")
+	mb.team, resp = mb.adminClient.GetTeamByName(os.Getenv("team_name"), "")
 	logAPIResponse(resp, "get bot team")
 
 	mb.botUser, resp = mb.botSource.BotUserClient.GetMe("")
@@ -157,51 +160,55 @@ func (mb *MatterlessBot) ensureReply(post *model.Post, message string) {
 	mb.replyToPost(post, message)
 }
 
+// :arrows_counterclockwise:
+
+func (mb *MatterlessBot) setOnlyReaction(post *model.Post, emoji string) {
+	client := mb.botSource.BotUserClient
+	for _, reaction := range post.Metadata.Reactions {
+		if reaction.UserId == mb.botUser.Id {
+			log.Debug("Deleting reaction ", reaction.EmojiName)
+			_, resp := client.DeleteReaction(reaction)
+			logAPIResponse(resp, "delete reaction")
+			apiDelay()
+		}
+	}
+	newReaction := &model.Reaction{
+		UserId:    mb.botUser.Id,
+		PostId:    post.Id,
+		EmojiName: emoji,
+	}
+	log.Debug("Adding reaction ", newReaction)
+	_, resp := client.SaveReaction(newReaction)
+	post.Metadata.Reactions = []*model.Reaction{newReaction}
+	logAPIResponse(resp, "save reaction")
+}
+
 func (mb *MatterlessBot) handleDirect(post *model.Post) {
 	client := mb.botSource.BotUserClient
 	if post.Message[0] == '#' {
-		userApp, ok := mb.userApps[post.UserId]
+		postApp, ok := mb.postApps[post.Id]
 		if !ok {
-			userApp = application.NewApplication(client, func(kind, message string) {
+			postApp = application.NewApplication(mb.adminClient, func(kind, message string) {
 				mb.postFunctionLog(post.UserId, kind, message)
 			})
 		}
-		mb.userApps[post.UserId] = userApp
-		err := userApp.Eval(post.Message)
+		mb.postApps[post.Id] = postApp
+		if postApp.CurrentCode() == post.Message {
+			log.Debug("Code hasn't modified, skipping")
+			return
+		}
+		// loading
+		mb.setOnlyReaction(post, "arrows_counterclockwise")
+
+		err := postApp.Eval(post.Message)
 		if err != nil {
-			apiDelay()
-			_, resp := client.DeleteReaction(&model.Reaction{
-				UserId:    mb.botUser.Id,
-				PostId:    post.Id,
-				EmojiName: "white_check_mark",
-			})
-			logAPIResponse(resp, "delete declaration reaction")
-			apiDelay()
-			_, resp = client.SaveReaction(&model.Reaction{
-				UserId:    mb.botUser.Id,
-				PostId:    post.Id,
-				EmojiName: "stop_sign",
-			})
-			logAPIResponse(resp, "set declaration reaction")
+			mb.setOnlyReaction(post, "stop_sign")
 			mb.ensureReply(post, err.Error())
 			return
 		}
 
-		apiDelay()
-		_, resp := client.DeleteReaction(&model.Reaction{
-			UserId:    mb.botUser.Id,
-			PostId:    post.Id,
-			EmojiName: "stop_sign",
-		})
-		logAPIResponse(resp, "delete declaration reaction")
-		apiDelay()
+		mb.setOnlyReaction(post, "white_check_mark")
 		mb.ensureReply(post, "All good :thumbsup:")
-		_, resp = client.SaveReaction(&model.Reaction{
-			UserId:    mb.botUser.Id,
-			PostId:    post.Id,
-			EmojiName: "white_check_mark",
-		})
-		logAPIResponse(resp, "save declaration reaction")
 	} else {
 		switch post.Message {
 		case "ping":
@@ -228,42 +235,6 @@ func (mb *MatterlessBot) handlePosted(evt *model.WebSocketEvent) {
 	switch channel.Type {
 	case model.CHANNEL_DIRECT:
 		mb.handleDirect(&post)
-	case model.CHANNEL_PRIVATE:
-		mb.handlePrivate(&post, channel)
-	}
-}
-
-// Note: currently does nothing
-func (mb *MatterlessBot) handlePrivate(p *model.Post, channel *model.Channel) {
-	if strings.HasPrefix(channel.Name, "mls-bot-logs-") {
-		// Log channel
-
-		// TODO: Re-enable when figuring out how to recreate channels
-		//mb.handleLogChannelLeaving(p, channel)
-	}
-}
-
-// Note: not currently used
-func (mb *MatterlessBot) handleLogChannelLeaving(p *model.Post, channel *model.Channel) {
-	client := mb.botSource.BotUserClient
-	if p.Type == model.POST_LEAVE_CHANNEL {
-		members, resp := client.GetChannelMembers(channel.Id, 0, 5, "")
-		if resp.Error != nil {
-			logAPIResponse(resp, "getting channel members")
-			return
-		}
-		if len(*members) == 1 {
-			// Just matterless bot left, close the channel
-			success, resp := client.DeleteChannel(channel.Id)
-			if !success {
-				logAPIResponse(resp, "deleting log channel")
-			} else {
-				// Update caches
-				delete(mb.channelCache, channel.Id)
-				delete(mb.channelNameCache, channel.Name)
-			}
-			log.Info("Deleted channel ", channel.Name, "Success: ", success)
-		}
 	}
 }
 
@@ -282,10 +253,22 @@ func (mb *MatterlessBot) loadDeclarations() {
 				if post.Message[0] == '#' {
 					log.Debug("Found a declaration block", post.Message)
 					mb.handleDirect(post)
-					log.Debug("Loading at boot done for this channel")
-					break
 				}
 			}
+			log.Debug("Loading at boot done for this channel")
 		}
+	}
+}
+
+func (mb *MatterlessBot) handleDeleted(evt *model.WebSocketEvent) {
+	post := model.Post{}
+	err := json.Unmarshal([]byte(evt.Data["post"].(string)), &post)
+	if err != nil {
+		log.Error("Could not unmarshall post", err)
+		return
+	}
+	if postApp, ok := mb.postApps[post.Id]; ok {
+		log.Info("Unloading app")
+		postApp.Stop()
 	}
 }
