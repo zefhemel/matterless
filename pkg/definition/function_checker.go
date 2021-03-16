@@ -1,15 +1,14 @@
-package checker
+package definition
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
 type TestResults struct {
-	Functions map[definition.FunctionID]FunctionTestResult
+	Functions map[FunctionID]FunctionTestResult
 }
 
 type FunctionTestResult struct {
@@ -18,9 +17,9 @@ type FunctionTestResult struct {
 	Result interface{}
 }
 
-func TestDeclarations(defs *definition.Definitions, sandbox sandbox.Sandbox) TestResults {
+func TestDeclarations(defs *Definitions, sandbox sandbox.Sandbox) TestResults {
 	testResults := TestResults{
-		Functions: map[definition.FunctionID]FunctionTestResult{},
+		Functions: map[FunctionID]FunctionTestResult{},
 	}
 
 	for name, def := range defs.Functions {

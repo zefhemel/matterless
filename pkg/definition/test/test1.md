@@ -68,3 +68,18 @@ events:
   posted:
   - TestFunction1
 ```
+
+---
+# Cron: EveryMinute
+```yaml
+schedule: 0 * * * * *
+function: MyRepeatedTask
+```
+
+---
+# Function: MyRepeatedTask
+```javascript
+function handle() {
+    console.log("Triggered");
+}
+```

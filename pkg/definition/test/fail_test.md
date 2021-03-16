@@ -25,3 +25,9 @@ events:
 endpoints:
     - function: MyHTTPTest
 ```
+---
+# Cron: TestCron
+```yaml
+schedule: bla
+function: NonExisting
+```

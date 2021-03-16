@@ -3,6 +3,7 @@ package definition
 import (
 	"errors"
 	"fmt"
+	"github.com/robfig/cron"
 	"strings"
 )
 
@@ -12,6 +13,7 @@ type CheckResults struct {
 	APIGateways       map[string][]error
 	SlashCommands     map[string][]error
 	Bots              map[string][]error
+	Crons             map[string][]error
 	Libraries         map[string][]error
 }
 
@@ -31,6 +33,9 @@ func (cr *CheckResults) String() string {
 	}
 	for name, errs := range cr.Bots {
 		errorMessageParts = collectPrettyErrors(errs, errorMessageParts, name, "Bot")
+	}
+	for name, errs := range cr.Crons {
+		errorMessageParts = collectPrettyErrors(errs, errorMessageParts, name, "Cron")
 	}
 	for libraryName, libraryErrors := range cr.Libraries {
 		errorMessageParts = collectPrettyErrors(libraryErrors, errorMessageParts, libraryName, "Library")
@@ -52,6 +57,7 @@ func Check(declarations *Definitions) CheckResults {
 		APIGateways:       checkAPIGateways(declarations),
 		SlashCommands:     checkSlashCommands(declarations),
 		Bots:              checkBots(declarations),
+		Crons:             checkCrons(declarations),
 		Libraries:         checkLibraries(declarations),
 	}
 }
@@ -132,6 +138,25 @@ func checkBots(declarations *Definitions) map[string][]error {
 					errorList = append(errorList, fmt.Errorf("function %s not found", functionID))
 				}
 			}
+		}
+		results[name] = errorList
+	}
+	return results
+}
+
+func checkCrons(declarations *Definitions) map[string][]error {
+	results := make(map[string][]error)
+	for name, def := range declarations.Crons {
+		errorList := make([]error, 0, 5)
+		if def.Schedule == "" {
+			errorList = append(errorList, errors.New("no 'schedule' specified"))
+		}
+
+		if _, err := cron.Parse(def.Schedule); err != nil {
+			errorList = append(errorList, fmt.Errorf("invalid 'schedule' format: %s", err))
+		}
+		if !declarations.FunctionExists(def.Function) {
+			errorList = append(errorList, fmt.Errorf("function %s not found", def.Function))
 		}
 		results[name] = errorList
 	}

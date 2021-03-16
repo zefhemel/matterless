@@ -14,6 +14,7 @@ type Definitions struct {
 	APIGateways       map[string]*APIGatewayDef
 	SlashCommands     map[string]*SlashCommandDef
 	Bots              map[string]*BotDef
+	Crons             map[string]*CronDef
 }
 
 type FunctionDef struct {
@@ -53,6 +54,11 @@ type APIGatewayDef struct {
 type SlashCommandDef struct {
 	TeamName string     `yaml:"team_name"`
 	Trigger  string     `yaml:"trigger"`
+	Function FunctionID `yaml:"function"`
+}
+
+type CronDef struct {
+	Schedule string     `yaml:"schedule"`
 	Function FunctionID `yaml:"function"`
 }
 

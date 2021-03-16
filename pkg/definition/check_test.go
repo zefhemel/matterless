@@ -23,5 +23,5 @@ func TestCheck(t *testing.T) {
 	assert.Equal(t, "no 'token' specified", results.MattermostClients["NoToken"][0].Error())
 
 	assert.Equal(t, "no 'path' defined for endpoint", results.APIGateways["NoHTTPPath"][0].Error())
-
+	assert.Equal(t, "invalid 'schedule' format: Expected 5 to 6 fields, found 1: bla", results.Crons["TestCron"][0].Error())
 }

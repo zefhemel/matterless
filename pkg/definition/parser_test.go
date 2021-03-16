@@ -25,6 +25,8 @@ func TestParser(t *testing.T) {
 	assert.Equal(t, "javascript", decls.Libraries[""].Language)
 	assert.Equal(t, "/test", decls.APIGateways["MyHTTP"].Endpoints[0].Path)
 	assert.Equal(t, definition.FunctionID("TestFunction2"), decls.APIGateways["MyHTTP"].Endpoints[0].Function)
-
 	assert.Equal(t, definition.FunctionID("TestFunction1"), decls.Bots["MyBot"].Events["posted"][0])
+
+	assert.Equal(t, "0 * * * * *", decls.Crons["EveryMinute"].Schedule)
+	assert.Equal(t, definition.FunctionID("MyRepeatedTask"), decls.Crons["EveryMinute"].Function)
 }

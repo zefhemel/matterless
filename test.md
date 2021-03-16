@@ -91,3 +91,17 @@ function handle(event) {
     };
 }
 ```
+
+# Cron: Often
+```yaml
+schedule: "0 */5 * * * *"
+function: SayHi
+```
+
+# Function: SayHi
+```javascript
+function handle(event) {
+    if(isWarmupEvent(event)) return;
+    console.log(event.schedule)
+}
+```

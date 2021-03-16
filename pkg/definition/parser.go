@@ -22,6 +22,7 @@ func Parse(code string) (*Definitions, error) {
 		APIGateways:       map[string]*APIGatewayDef{},
 		SlashCommands:     map[string]*SlashCommandDef{},
 		Bots:              map[string]*BotDef{},
+		Crons:             map[string]*CronDef{},
 		Environment:       map[string]string{},
 		Libraries:         map[string]*FunctionDef{},
 	}
@@ -75,6 +76,13 @@ func Parse(code string) (*Definitions, error) {
 				return err
 			}
 			decls.Bots[currentDeclarationName] = &def
+		case "Cron":
+			var def CronDef
+			err := yaml.Unmarshal([]byte(currentBody), &def)
+			if err != nil {
+				return err
+			}
+			decls.Crons[currentDeclarationName] = &def
 		case "Environment":
 			err := yaml.Unmarshal([]byte(currentBody), &decls.Environment)
 			if err != nil {

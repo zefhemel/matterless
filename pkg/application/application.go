@@ -4,7 +4,6 @@ import (
 	"github.com/mattermost/mattermost-server/model"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/checker"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventsource"
 	"github.com/zefhemel/matterless/pkg/sandbox"
@@ -66,15 +65,15 @@ func (app *Application) CurrentCode() string {
 func (app *Application) Eval(code string) error {
 	log.Debug("Parsing and checking definitions...")
 	app.code = code
-	decls, err := definition.Parse(code)
+	defs, err := definition.Parse(code)
 	if err != nil {
 		return err
 	}
-	decls.Normalize()
+	defs.Normalize()
 
-	app.definitions = decls
+	app.definitions = defs
 
-	results := definition.Check(decls)
+	results := definition.Check(defs)
 	if results.String() != "" {
 		// Error while checking
 		return errors.Wrap(errors.New(results.String()), "declaration check")
@@ -84,31 +83,32 @@ func (app *Application) Eval(code string) error {
 	app.Stop()
 
 	// Rebuild the whole thing
-	for name, def := range decls.MattermostClients {
+	for name, def := range defs.MattermostClients {
 		mmSource, err := eventsource.NewMatterMostSource(name, def, app.InvokeFunction)
 		if err != nil {
 			return err
 		}
 		app.eventSources[name] = mmSource
 		mmSource.Start()
-		mmSource.ExtendDefinitions(decls)
+		mmSource.ExtendDefinitions(defs)
 		log.Debug("Starting Mattermost client: ", name)
 	}
 
-	for name, def := range decls.Bots {
+	for name, def := range defs.Bots {
 		botSource, err := eventsource.NewBotSource(app.adminClient, name, def, app.InvokeFunction)
 		if err != nil {
 			return err
 		}
 		app.eventSources[name] = botSource
 		botSource.Start()
-		botSource.ExtendDefinitions(decls)
+		botSource.ExtendDefinitions(defs)
 		log.Debug("Starting Bot: ", name)
 	}
 
 	// Not processing API Gateways here, done externally
 
-	for name, def := range decls.SlashCommands {
+	// Slash commands
+	for name, def := range defs.SlashCommands {
 		scmd := eventsource.NewSlashCommandSource(app.adminClient, app.appName, name, def, app.InvokeFunction)
 		if err != nil {
 			return err
@@ -116,11 +116,22 @@ func (app *Application) Eval(code string) error {
 		app.eventSources[name] = scmd
 		log.Debug("Starting Slashcommand: ", name)
 		scmd.Start()
-		scmd.ExtendDefinitions(decls)
+		scmd.ExtendDefinitions(defs)
+	}
+
+	for name, def := range defs.Crons {
+		c := eventsource.NewCronSource(def, app.InvokeFunction)
+		if err != nil {
+			return err
+		}
+		app.eventSources[name] = c
+		log.Debug("Starting cron: ", name)
+		c.Start()
+		c.ExtendDefinitions(defs)
 	}
 
 	log.Debug("Testing functions...")
-	testResults := checker.TestDeclarations(decls, app.sandbox)
+	testResults := definition.TestDeclarations(defs, app.sandbox)
 	for name, functionResult := range testResults.Functions {
 		if functionResult.Logs != "" {
 			app.logCallback(string(name), functionResult.Logs)
