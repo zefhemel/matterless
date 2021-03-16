@@ -1,7 +1,7 @@
 FROM node:15.11.0-alpine3.10
-ADD package.json .
+ADD . /app
+WORKDIR /app
+RUN ./setup.sh
 RUN npm install --legacy-peer-deps --ignore-scripts
-ADD mm_client.mjs .
-ADD mls-lambda /usr/local/bin
 
 ENTRYPOINT ["mls-lambda"]

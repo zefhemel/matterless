@@ -198,16 +198,17 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 			return
 		}
 		// loading
-		mb.setOnlyReaction(post, "arrows_counterclockwise")
+		//mb.setOnlyReaction(post, "arrows_counterclockwise")
+		mb.ensureReply(post, "Processing...")
 
 		err := postApp.Eval(post.Message)
 		if err != nil {
-			mb.setOnlyReaction(post, "stop_sign")
+			//mb.setOnlyReaction(post, "stop_sign")
 			mb.ensureReply(post, err.Error())
 			return
 		}
 
-		mb.setOnlyReaction(post, "white_check_mark")
+		//mb.setOnlyReaction(post, "white_check_mark")
 		mb.ensureReply(post, "All good :thumbsup:")
 	} else {
 		switch post.Message {

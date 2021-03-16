@@ -43,3 +43,7 @@ rl.on('line', function(line){
         }
     }
 });
+
+function isWarmupEvent(evt) {
+    return Object.keys(evt) === 0;
+}

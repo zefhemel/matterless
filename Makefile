@@ -18,10 +18,9 @@ test-short:
 run-mls-test: build
 	./mls test.md
 
-build-docker: build
-	GOARCH=arm64 GOOS=linux go build ${PACKAGE}/cmd/mls-lambda
-	cp mls-lambda runners/docker/
+docker:
+	GOARCH=amd64 GOOS=linux go build -o runners/docker/mls-lambda.x86_64 ${PACKAGE}/cmd/mls-lambda
+	GOARCH=arm64 GOOS=linux go build -o runners/docker/mls-lambda.aarch64 ${PACKAGE}/cmd/mls-lambda
+	docker buildx build --platform linux/amd64,linux/arm64 -t ${DOCKER_RUNNER_IMAGE} --push runners/docker
 	docker build -t ${DOCKER_RUNNER_IMAGE} runners/docker
 
-push: build
-	docker push ${DOCKER_RUNNER_IMAGE}
