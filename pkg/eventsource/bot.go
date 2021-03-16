@@ -91,16 +91,16 @@ func NewBotSource(adminClient *model.Client4, botName string, def *definition.Bo
 	return bs, err
 }
 
-func (ag *BotSource) ExposeEnvironment(env map[string]string) {
-	env[fmt.Sprintf("%s_URL", strings.ToUpper(ag.botName))] = ag.adminClient.Url
-	env[fmt.Sprintf("%s_TOKEN", strings.ToUpper(ag.botName))] = ag.mms.def.Token
+func (bs *BotSource) ExtendDefinitions(defs *definition.Definitions) {
+	defs.Environment[fmt.Sprintf("%s_URL", strings.ToUpper(bs.botName))] = bs.adminClient.Url
+	defs.Environment[fmt.Sprintf("%s_TOKEN", strings.ToUpper(bs.botName))] = bs.mms.def.Token
 }
 
-func (ag *BotSource) Start() error {
-	return ag.mms.Start()
+func (bs *BotSource) Start() error {
+	return bs.mms.Start()
 }
 
-func (ag *BotSource) Stop() {
+func (bs *BotSource) Stop() {
 
 }
 

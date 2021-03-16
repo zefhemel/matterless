@@ -93,11 +93,11 @@ func (mms *MatterMostSource) Start() error {
 	return nil
 }
 
-func (ag *MatterMostSource) ExposeEnvironment(env map[string]string) {
+func (mms *MatterMostSource) ExtendDefinitions(defs *definition.Definitions) {
 	// clientName == empty is the matterless bot, let's not expose those credentials
-	if ag.clientName != "" {
-		env[fmt.Sprintf("%s_URL", strings.ToUpper(ag.clientName))] = ag.def.URL
-		env[fmt.Sprintf("%s_TOKEN", strings.ToUpper(ag.clientName))] = ag.def.Token
+	if mms.clientName != "" {
+		defs.Environment[fmt.Sprintf("%s_URL", strings.ToUpper(mms.clientName))] = mms.def.URL
+		defs.Environment[fmt.Sprintf("%s_TOKEN", strings.ToUpper(mms.clientName))] = mms.def.Token
 	}
 }
 

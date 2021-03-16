@@ -5,7 +5,7 @@ import (
 	"github.com/mattermost/mattermost-server/model"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/definition"
-	"github.com/zefhemel/matterless/pkg/util"
+	"net/http"
 	"os"
 )
 
@@ -13,7 +13,7 @@ type SlashCommandSource struct {
 	externalURL string
 	commandID   string
 	adminClient *model.Client4
-	apiGateway  *APIGatewaySource
+	sourceName  string
 	def         *definition.SlashCommandDef
 }
 
@@ -58,8 +58,7 @@ func (s *SlashCommandSource) Start() error {
 		}
 		s.commandID = cmd.Id
 	}
-
-	return s.apiGateway.Start()
+	return nil
 }
 
 func (s *SlashCommandSource) Stop() {
@@ -69,31 +68,42 @@ func (s *SlashCommandSource) Stop() {
 			log.Error("Could not remove command", resp.Error)
 		}
 	}
-	s.apiGateway.Stop()
 }
 
-func NewSlashCommandSource(adminClient *model.Client4, def *definition.SlashCommandDef, invokeFunc FunctionInvokeFunc) *SlashCommandSource {
+func (s *SlashCommandSource) ExtendDefinitions(defs *definition.Definitions) {
+	// Extend the API Gateway and add a /callback endpoint
+	defs.APIGateways[s.sourceName] = &definition.APIGatewayDef{
+		Endpoints: []definition.EndpointDef{{
+			Path:     "/callback",
+			Methods:  []string{"POST"},
+			Function: s.def.Function,
+			PreProcess: func(event interface{}) interface{} {
+				if apiGatewayEvent, ok := event.(*definition.APIGatewayRequestEvent); ok {
+					// Use the form values to the top level of the event, ignore everything else
+					return apiGatewayEvent.FormValues
+				} else {
+					return event
+				}
+			},
+			PostProcess: func(result interface{}) interface{} {
+				return &definition.APIGatewayResponse{
+					Status: http.StatusOK,
+					Body:   result,
+				}
+			},
+		}},
+	}
+}
+
+func NewSlashCommandSource(adminClient *model.Client4, appName, sourceName string, def *definition.SlashCommandDef, invokeFunc FunctionInvokeFunc) *SlashCommandSource {
 	scs := &SlashCommandSource{
 		adminClient: adminClient,
 		def:         def,
-		apiGateway: NewAPIGatewaySource(&definition.APIGatewayDef{
-			BindPort: util.FindFreePort(8200),
-			Endpoints: []definition.EndpointDef{{
-				Path:     "/callback",
-				Methods:  []string{"POST"},
-				Function: def.Function,
-			}},
-		}, func(name definition.FunctionID, event interface{}) interface{} {
-			resp := invokeFunc(name, event)
-			return &APIGatewayResponse{
-				Status: 200,
-				Body:   resp,
-			}
-		}),
+		sourceName:  sourceName,
 	}
 
 	// TODO: Let's not pull this from the environment variables here directly
-	scs.externalURL = fmt.Sprintf("http://%s:%d/callback", os.Getenv("external_host"), scs.apiGateway.def.BindPort)
+	scs.externalURL = fmt.Sprintf("%s/%s/%s/callback", os.Getenv("api_url"), appName, sourceName)
 
 	return scs
 }

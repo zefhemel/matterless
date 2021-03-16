@@ -75,3 +75,19 @@ function handle(event) {
     };
 }
 ```
+
+# SlashCommand: MySlashCommand
+```yaml
+team_name: Dev
+trigger: zef-slash
+function: ZefSlash
+```
+
+# Function: ZefSlash
+```javascript
+function handle(event) {
+    return {
+        text: "Sup: " + event.text
+    };
+}
+```

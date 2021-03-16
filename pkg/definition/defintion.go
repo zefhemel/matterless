@@ -5,10 +5,9 @@ import "strings"
 type FunctionID string
 
 type Definitions struct {
-	Functions   map[FunctionID]*FunctionDef
 	Environment map[string]string
-	// For now we just support the empty library name
-	Libraries map[string]*FunctionDef
+	Functions   map[FunctionID]*FunctionDef
+	Libraries   map[string]*FunctionDef // For now we just support the empty library name
 
 	// Sources
 	MattermostClients map[string]*MattermostClientDef
@@ -42,10 +41,12 @@ type EndpointDef struct {
 	Path     string     `yaml:"path"`
 	Methods  []string   `yaml:"methods"`
 	Function FunctionID `yaml:"function"`
+	// Not super happy with this solution, but allows you to pre and post process the function invocation
+	PreProcess  func(event interface{}) interface{}
+	PostProcess func(result interface{}) interface{}
 }
 
 type APIGatewayDef struct {
-	BindPort  int           `yaml:"bind_port"`
 	Endpoints []EndpointDef `yaml:"endpoints"`
 }
 

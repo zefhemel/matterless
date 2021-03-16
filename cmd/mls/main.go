@@ -8,6 +8,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/application"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -39,20 +40,34 @@ func main() {
 	adminClient := model.NewAPIv4Client(os.Getenv("server"))
 	adminClient.SetOAuthToken(os.Getenv("token"))
 
-	app := application.NewApplication(adminClient, func(kind, message string) {
+	apiBindPort, err := strconv.Atoi(os.Getenv("api_bind_port"))
+	if err != nil {
+		log.Fatal("Could not parse $api_bind_port: ", err)
+	}
+
+	appContainer := application.NewContainer(apiBindPort)
+
+	defaultApp := application.NewApplication(adminClient, "default", func(kind, message string) {
 		log.Infof("%s: %s", kind, message)
 	})
-	err = app.Eval(string(data))
+	appContainer.Register("default", defaultApp)
+
+	if err := appContainer.Start(); err != nil {
+		log.Fatal("Could not start app container", err)
+	}
+
+	err = defaultApp.Eval(string(data))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Handle Ctr-c gracefully
+	// Handle Ctrl-c gracefully
 	killing := make(chan os.Signal)
 	signal.Notify(killing, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-killing
-		app.Stop()
+		defaultApp.Stop()
+		appContainer.Stop()
 		os.Exit(0)
 	}()
 
@@ -78,7 +93,7 @@ func main() {
 						log.Fatalf("Could not open file %s: %s", filename, err)
 						continue eventLoop
 					}
-					err = app.Eval(string(data))
+					err = defaultApp.Eval(string(data))
 					if err != nil {
 						log.Errorf("Error processing %s: %s", filename, err)
 						continue eventLoop

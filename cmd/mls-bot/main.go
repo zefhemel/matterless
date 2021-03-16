@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/zefhemel/matterless/pkg/bot"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -17,7 +18,12 @@ func main() {
 		return
 	}
 
-	mb, err := bot.NewBot(os.Getenv("server"), os.Getenv("token"))
+	apiBindPort, err := strconv.Atoi(os.Getenv("api_bind_port"))
+	if err != nil {
+		log.Fatal("Could not parse $api_bind_port: ", err)
+	}
+
+	mb, err := bot.NewBot(os.Getenv("server"), os.Getenv("token"), apiBindPort)
 	if err != nil {
 		log.Printf("Error connecting: %+v \n", err)
 		return

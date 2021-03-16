@@ -25,17 +25,17 @@ type MatterlessBot struct {
 	team             *model.Team
 	botUser          *model.User
 
-	postApps    map[string]*application.Application // post_id -> app
-	adminClient *model.Client4
+	appContainer *application.Container
+	adminClient  *model.Client4
 }
 
 // NewBot creates a new instance of the bot event listener
-func NewBot(url, adminToken string) (*MatterlessBot, error) {
+func NewBot(url string, adminToken string, apiGatewayBindPort int) (*MatterlessBot, error) {
 	mb := &MatterlessBot{
 		userCache:        map[string]*model.User{},
 		channelCache:     map[string]*model.Channel{},
 		channelNameCache: map[string]*model.Channel{},
-		postApps:         map[string]*application.Application{},
+		appContainer:     application.NewContainer(apiGatewayBindPort),
 		adminClient:      model.NewAPIv4Client(url),
 	}
 
@@ -79,9 +79,11 @@ func NewBot(url, adminToken string) (*MatterlessBot, error) {
 
 // Start listens and handles incoming messages until the socket disconnects
 func (mb *MatterlessBot) Start() error {
-	err := mb.botSource.Start()
+	if err := mb.botSource.Start(); err != nil {
+		return err
+	}
 
-	if err != nil {
+	if err := mb.appContainer.Start(); err != nil {
 		return err
 	}
 
@@ -186,13 +188,13 @@ func (mb *MatterlessBot) setOnlyReaction(post *model.Post, emoji string) {
 func (mb *MatterlessBot) handleDirect(post *model.Post) {
 	client := mb.botSource.BotUserClient
 	if post.Message[0] == '#' {
-		postApp, ok := mb.postApps[post.Id]
-		if !ok {
-			postApp = application.NewApplication(mb.adminClient, func(kind, message string) {
+		postApp := mb.appContainer.Get(post.Id)
+		if postApp == nil {
+			postApp = application.NewApplication(mb.adminClient, post.Id, func(kind, message string) {
 				mb.postFunctionLog(post.UserId, kind, message)
 			})
 		}
-		mb.postApps[post.Id] = postApp
+		mb.appContainer.Register(post.Id, postApp)
 		if postApp.CurrentCode() == post.Message {
 			log.Debug("Code hasn't modified, skipping")
 			return
@@ -268,8 +270,8 @@ func (mb *MatterlessBot) handleDeleted(evt *model.WebSocketEvent) {
 		log.Error("Could not unmarshall post", err)
 		return
 	}
-	if postApp, ok := mb.postApps[post.Id]; ok {
+	if postApp := mb.appContainer.Get(post.Id); postApp != nil {
 		log.Info("Unloading app")
-		postApp.Stop()
+		mb.appContainer.UnRegister(post.Id)
 	}
 }

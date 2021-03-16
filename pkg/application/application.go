@@ -24,10 +24,12 @@ type Application struct {
 	// Callbacks
 	// TODO: Consider switching to channels instead?
 	logCallback func(kind string, message string)
+	appName     string
 }
 
-func NewApplication(adminClient *model.Client4, logCallback func(kind, message string)) *Application {
+func NewApplication(adminClient *model.Client4, appName string, logCallback func(kind, message string)) *Application {
 	return &Application{
+		appName:      appName,
 		adminClient:  adminClient,
 		eventSources: map[string]eventsource.EventSource{},
 		logCallback:  logCallback,
@@ -36,7 +38,15 @@ func NewApplication(adminClient *model.Client4, logCallback func(kind, message s
 	}
 }
 
-func (app *Application) handleFunctionCall(name definition.FunctionID, event interface{}) interface{} {
+// Only for testing
+func NewMockApplication(appName string, defs *definition.Definitions) *Application {
+	return &Application{
+		appName:     appName,
+		definitions: defs,
+	}
+}
+
+func (app *Application) InvokeFunction(name definition.FunctionID, event interface{}) interface{} {
 	functionDef := app.definitions.Functions[name]
 	log.Debug("Now triggering event to ", name)
 	result, log, err := app.sandbox.Invoke(event, app.definitions.CompileFunctionCode(functionDef.Code), app.definitions.Environment)
@@ -75,45 +85,38 @@ func (app *Application) Eval(code string) error {
 
 	// Rebuild the whole thing
 	for name, def := range decls.MattermostClients {
-		mmSource, err := eventsource.NewMatterMostSource(name, def, app.handleFunctionCall)
+		mmSource, err := eventsource.NewMatterMostSource(name, def, app.InvokeFunction)
 		if err != nil {
 			return err
 		}
 		app.eventSources[name] = mmSource
 		mmSource.Start()
-		mmSource.ExposeEnvironment(decls.Environment)
+		mmSource.ExtendDefinitions(decls)
 		log.Debug("Starting Mattermost client: ", name)
 	}
 
 	for name, def := range decls.Bots {
-		botSource, err := eventsource.NewBotSource(app.adminClient, name, def, app.handleFunctionCall)
+		botSource, err := eventsource.NewBotSource(app.adminClient, name, def, app.InvokeFunction)
 		if err != nil {
 			return err
 		}
 		app.eventSources[name] = botSource
 		botSource.Start()
-		botSource.ExposeEnvironment(decls.Environment)
+		botSource.ExtendDefinitions(decls)
 		log.Debug("Starting Bot: ", name)
 	}
 
-	for name, def := range decls.APIGateways {
-		apiG := eventsource.NewAPIGatewaySource(def, app.handleFunctionCall)
-		if err != nil {
-			return err
-		}
-		app.eventSources[name] = apiG
-		log.Debug("Starting API Gateway: ", name)
-		apiG.Start()
-	}
+	// Not processing API Gateways here, done externally
 
 	for name, def := range decls.SlashCommands {
-		scmd := eventsource.NewSlashCommandSource(app.adminClient, def, app.handleFunctionCall)
+		scmd := eventsource.NewSlashCommandSource(app.adminClient, app.appName, name, def, app.InvokeFunction)
 		if err != nil {
 			return err
 		}
 		app.eventSources[name] = scmd
 		log.Debug("Starting Slashcommand: ", name)
 		scmd.Start()
+		scmd.ExtendDefinitions(decls)
 	}
 
 	log.Debug("Testing functions...")
@@ -139,4 +142,8 @@ func (app *Application) Stop() {
 	// Then stop all functions in sandbox
 	log.Debug("Stopping sandbox")
 	app.sandbox.FlushAll()
+}
+
+func (app *Application) Definitions() *definition.Definitions {
+	return app.definitions
 }
