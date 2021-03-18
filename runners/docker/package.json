@@ -9,9 +9,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "aws-sdk": "^2.865.0",
     "babel-polyfill": "^6.26.0",
     "isomorphic-fetch": "^3.0.0",
+    "markdown-it": "^12.0.4",
     "mattermost-redux": "^5.32.0",
-    "tslib": "^2.1.0"
+    "tslib": "^2.1.0",
+    "yaml": "^1.10.2"
   }
 }

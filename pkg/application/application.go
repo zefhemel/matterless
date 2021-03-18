@@ -1,17 +1,22 @@
 package application
 
 import (
+	"fmt"
 	"github.com/mattermost/mattermost-server/model"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventsource"
 	"github.com/zefhemel/matterless/pkg/sandbox"
+	"github.com/zefhemel/matterless/pkg/store"
+	"github.com/zefhemel/matterless/pkg/util"
 	"time"
 )
 
 type Application struct {
 	// Definitions
+	appName     string
 	code        string
 	definitions *definition.Definitions
 
@@ -23,17 +28,28 @@ type Application struct {
 	// Callbacks
 	// TODO: Consider switching to channels instead?
 	logCallback func(kind string, message string)
-	appName     string
+
+	// API
+	apiToken  string
+	dataStore store.Store
+	cfg       config.Config
 }
 
-func NewApplication(adminClient *model.Client4, appName string, logCallback func(kind, message string)) *Application {
+func NewApplication(cfg config.Config, adminClient *model.Client4, appName string, logCallback func(kind, message string)) *Application {
+	dataStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/%s", cfg.LevelDBDatabasesPath, util.SafeFilename(appName)))
+	if err != nil {
+		log.Fatal("Could not create data store for ", appName)
+	}
 	return &Application{
+		cfg:          cfg,
 		appName:      appName,
 		adminClient:  adminClient,
 		eventSources: map[string]eventsource.EventSource{},
 		logCallback:  logCallback,
 		// TODO: Make this configurable
-		sandbox: sandbox.NewDockerSandbox(30*time.Second, 1*time.Minute),
+		sandbox:   sandbox.NewDockerSandbox(30*time.Second, 1*time.Minute),
+		dataStore: dataStore,
+		apiToken:  util.TokenGenerator(),
 	}
 }
 
@@ -79,6 +95,8 @@ func (app *Application) Eval(code string) error {
 		return errors.Wrap(errors.New(results.String()), "declaration check")
 	}
 
+	app.extendEnviron()
+
 	log.Debug("Starting listeners...")
 	app.Stop()
 
@@ -109,7 +127,7 @@ func (app *Application) Eval(code string) error {
 
 	// Slash commands
 	for name, def := range defs.SlashCommands {
-		scmd := eventsource.NewSlashCommandSource(app.adminClient, app.appName, name, def, app.InvokeFunction)
+		scmd := eventsource.NewSlashCommandSource(app.cfg, app.adminClient, app.appName, name, def)
 		if err != nil {
 			return err
 		}
@@ -153,6 +171,11 @@ func (app *Application) Stop() {
 	// Then stop all functions in sandbox
 	log.Debug("Stopping sandbox")
 	app.sandbox.FlushAll()
+}
+
+func (app *Application) Close() error {
+	app.Stop()
+	return app.dataStore.Close()
 }
 
 func (app *Application) Definitions() *definition.Definitions {

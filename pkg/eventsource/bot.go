@@ -1,11 +1,9 @@
 package eventsource
 
 import (
-	"fmt"
 	"github.com/mattermost/mattermost-server/model"
 	"github.com/pkg/errors"
 	"github.com/zefhemel/matterless/pkg/definition"
-	"strings"
 )
 
 type BotSource struct {
@@ -13,11 +11,11 @@ type BotSource struct {
 	def                *definition.BotDef
 	mms                *MatterMostSource
 	adminClient        *model.Client4
-	functionInvokeFunc FunctionInvokeFunc
+	functionInvokeFunc definition.FunctionInvokeFunc
 	BotUserClient      *model.Client4
 }
 
-func NewBotSource(adminClient *model.Client4, botName string, def *definition.BotDef, functionInvokeFunc FunctionInvokeFunc) (*BotSource, error) {
+func NewBotSource(adminClient *model.Client4, botName string, def *definition.BotDef, functionInvokeFunc definition.FunctionInvokeFunc) (*BotSource, error) {
 	bs := &BotSource{
 		botName:            botName,
 		def:                def,
@@ -92,8 +90,7 @@ func NewBotSource(adminClient *model.Client4, botName string, def *definition.Bo
 }
 
 func (bs *BotSource) ExtendDefinitions(defs *definition.Definitions) {
-	defs.Environment[fmt.Sprintf("%s_URL", strings.ToUpper(bs.botName))] = bs.adminClient.Url
-	defs.Environment[fmt.Sprintf("%s_TOKEN", strings.ToUpper(bs.botName))] = bs.mms.def.Token
+	bs.mms.ExtendDefinitions(defs)
 }
 
 func (bs *BotSource) Start() error {

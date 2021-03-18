@@ -45,5 +45,5 @@ rl.on('line', function(line){
 });
 
 function isWarmupEvent(evt) {
-    return Object.keys(evt) === 0;
+    return Object.keys(evt).length === 0;
 }

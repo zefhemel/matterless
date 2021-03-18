@@ -10,6 +10,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -88,10 +89,13 @@ func (ag *APIGateway) handleEndpoint(appName string, gatewayName string, endPoin
 		fmt.Fprintf(writer, "Error: %s", err)
 		return
 	}
-	result := ag.functionInvokeFunc(appName, gatewayName, endPoint.Function, evt)
-
-	if endPoint.PostProcess != nil {
-		result = endPoint.PostProcess(result)
+	var result interface{}
+	if endPoint.Decorate != nil {
+		result = endPoint.Decorate(evt, func(name definition.FunctionID, event interface{}) interface{} {
+			return ag.functionInvokeFunc(appName, gatewayName, name, event)
+		})
+	} else {
+		result = ag.functionInvokeFunc(appName, gatewayName, endPoint.Function, evt)
 	}
 
 	var apiGatewayResp definition.APIGatewayResponse
@@ -120,6 +124,21 @@ func (ag *APIGateway) handleEndpoint(appName string, gatewayName string, endPoin
 }
 
 func (ag *APIGateway) buildRouter() {
+	ag.rootRouter.HandleFunc("/info", func(writer http.ResponseWriter, request *http.Request) {
+		defer request.Body.Close()
+		writer.Header().Set("content-type", "text/plain")
+		writer.WriteHeader(http.StatusOK)
+		fmt.Fprint(writer, "Endpoints exposed:\n\n")
+
+		for appName, app := range ag.appMap {
+			for name, def := range app.Definitions().APIGateways {
+				for _, endpointDef := range def.Endpoints {
+					fmt.Fprintf(writer, "/%s/%s%s (methods: %s)\n", appName, name, endpointDef.Path, strings.Join(endpointDef.Methods, ", "))
+				}
+			}
+		}
+	})
+	ag.exposeAPIRoute()
 	ag.rootRouter.HandleFunc("/{app}/{gateway}/{endpointPath:.*}", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
@@ -151,7 +170,7 @@ func (ag *APIGateway) buildRouter() {
 	})
 }
 
-func (ag *APIGateway) buildEvent(endPoint definition.EndpointDef, request *http.Request) (interface{}, error) {
+func (ag *APIGateway) buildEvent(endPoint definition.EndpointDef, request *http.Request) (*definition.APIGatewayRequestEvent, error) {
 	vars := mux.Vars(request)
 	evt := &definition.APIGatewayRequestEvent{
 		Path:          fmt.Sprintf("/%s", vars["endpointPath"]),
@@ -171,9 +190,6 @@ func (ag *APIGateway) buildEvent(endPoint definition.EndpointDef, request *http.
 			return nil, errors.Wrap(err, "parsing json body")
 		}
 		evt.JSONBody = jsonBody
-	}
-	if endPoint.PreProcess != nil {
-		return endPoint.PreProcess(evt), nil
 	}
 	return evt, nil
 }

@@ -2,13 +2,12 @@ package main
 
 import (
 	"github.com/fsnotify/fsnotify"
-	"github.com/joho/godotenv"
 	"github.com/mattermost/mattermost-server/model"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/application"
+	config "github.com/zefhemel/matterless/pkg/config"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 )
@@ -21,14 +20,10 @@ import (
 func main() {
 	log.SetLevel(log.DebugLevel)
 
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-		return
-	}
+	cfg := config.FromEnv()
 
 	filename := "matterless.md"
-	if len(os.Args) > 0 {
+	if len(os.Args) > 1 {
 		filename = os.Args[1]
 	}
 
@@ -37,17 +32,12 @@ func main() {
 		log.Fatalf("Could not open file %s: %s", filename, err)
 	}
 
-	adminClient := model.NewAPIv4Client(os.Getenv("server"))
-	adminClient.SetOAuthToken(os.Getenv("token"))
+	adminClient := model.NewAPIv4Client(cfg.MattermostURL)
+	adminClient.SetOAuthToken(cfg.AdminToken)
 
-	apiBindPort, err := strconv.Atoi(os.Getenv("api_bind_port"))
-	if err != nil {
-		log.Fatal("Could not parse $api_bind_port: ", err)
-	}
+	appContainer := application.NewContainer(cfg.APIBindPort)
 
-	appContainer := application.NewContainer(apiBindPort)
-
-	defaultApp := application.NewApplication(adminClient, "default", func(kind, message string) {
+	defaultApp := application.NewApplication(cfg, adminClient, "default", func(kind, message string) {
 		log.Infof("%s: %s", kind, message)
 	})
 	appContainer.Register("default", defaultApp)
@@ -66,7 +56,7 @@ func main() {
 	signal.Notify(killing, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-killing
-		defaultApp.Stop()
+		defaultApp.Close()
 		appContainer.Stop()
 		os.Exit(0)
 	}()

@@ -26,7 +26,7 @@ type cronEvent struct {
 	Schedule string `json:"schedule"`
 }
 
-func NewCronSource(def *definition.CronDef, functionInvokeFunc FunctionInvokeFunc) *CronSource {
+func NewCronSource(def *definition.CronDef, functionInvokeFunc definition.FunctionInvokeFunc) *CronSource {
 	c := cron.New()
 	c.AddFunc(def.Schedule, func() {
 		functionInvokeFunc(def.Function, &cronEvent{def.Schedule})

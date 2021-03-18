@@ -2,28 +2,17 @@ package main
 
 import (
 	"github.com/zefhemel/matterless/pkg/bot"
-	"os"
-	"strconv"
+	"github.com/zefhemel/matterless/pkg/config"
 	"time"
 
-	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 )
 
 func main() {
 	log.SetLevel(log.DebugLevel)
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-		return
-	}
 
-	apiBindPort, err := strconv.Atoi(os.Getenv("api_bind_port"))
-	if err != nil {
-		log.Fatal("Could not parse $api_bind_port: ", err)
-	}
-
-	mb, err := bot.NewBot(os.Getenv("server"), os.Getenv("token"), apiBindPort)
+	cfg := config.FromEnv()
+	mb, err := bot.NewBot(cfg)
 	if err != nil {
 		log.Printf("Error connecting: %+v \n", err)
 		return

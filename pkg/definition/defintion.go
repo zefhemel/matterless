@@ -1,8 +1,11 @@
 package definition
 
-import "strings"
+import (
+	"strings"
+)
 
 type FunctionID string
+type FunctionInvokeFunc func(name FunctionID, event interface{}) interface{}
 
 type Definitions struct {
 	Environment map[string]string
@@ -42,9 +45,8 @@ type EndpointDef struct {
 	Path     string     `yaml:"path"`
 	Methods  []string   `yaml:"methods"`
 	Function FunctionID `yaml:"function"`
-	// Not super happy with this solution, but allows you to pre and post process the function invocation
-	PreProcess  func(event interface{}) interface{}
-	PostProcess func(result interface{}) interface{}
+	// Not super happy with this solution, but allows you to put in custom behavior
+	Decorate func(event *APIGatewayRequestEvent, invokeFunc FunctionInvokeFunc) *APIGatewayResponse
 }
 
 type APIGatewayDef struct {

@@ -4,8 +4,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"github.com/zefhemel/matterless/pkg/application"
+	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
-	"os"
 	"time"
 
 	"github.com/mattermost/mattermost-server/model"
@@ -27,23 +27,25 @@ type MatterlessBot struct {
 
 	appContainer *application.Container
 	adminClient  *model.Client4
+	cfg          config.Config
 }
 
 // NewBot creates a new instance of the bot event listener
-func NewBot(url string, adminToken string, apiGatewayBindPort int) (*MatterlessBot, error) {
+func NewBot(cfg config.Config) (*MatterlessBot, error) {
 	mb := &MatterlessBot{
+		cfg:              cfg,
 		userCache:        map[string]*model.User{},
 		channelCache:     map[string]*model.Channel{},
 		channelNameCache: map[string]*model.Channel{},
-		appContainer:     application.NewContainer(apiGatewayBindPort),
-		adminClient:      model.NewAPIv4Client(url),
+		appContainer:     application.NewContainer(cfg.APIBindPort),
+		adminClient:      model.NewAPIv4Client(cfg.MattermostURL),
 	}
 
-	mb.adminClient.SetOAuthToken(adminToken)
+	mb.adminClient.SetOAuthToken(cfg.AdminToken)
 
 	var err error
 	mb.botSource, err = eventsource.NewBotSource(mb.adminClient, "matterless", &definition.BotDef{
-		TeamNames:   []string{os.Getenv("team_name")},
+		TeamNames:   []string{cfg.TeamName},
 		Username:    "matterless",
 		DisplayName: "Matterless",
 		Description: "Matterless Bot",
@@ -68,7 +70,7 @@ func NewBot(url string, adminToken string, apiGatewayBindPort int) (*MatterlessB
 	}
 
 	var resp *model.Response
-	mb.team, resp = mb.adminClient.GetTeamByName(os.Getenv("team_name"), "")
+	mb.team, resp = mb.adminClient.GetTeamByName(cfg.TeamName, "")
 	logAPIResponse(resp, "get bot team")
 
 	mb.botUser, resp = mb.botSource.BotUserClient.GetMe("")
@@ -190,7 +192,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 	if post.Message[0] == '#' {
 		postApp := mb.appContainer.Get(post.Id)
 		if postApp == nil {
-			postApp = application.NewApplication(mb.adminClient, post.Id, func(kind, message string) {
+			postApp = application.NewApplication(mb.cfg, mb.adminClient, post.Id, func(kind, message string) {
 				mb.postFunctionLog(post.UserId, kind, message)
 			})
 		}

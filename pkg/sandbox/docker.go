@@ -37,7 +37,13 @@ type instance struct {
 }
 
 func (inst *instance) kill() error {
+	// Don't kill until current run is over, if any
+	inst.runLock.Lock()
+	inst.runLock.Unlock()
+
+	// Close stdin to signal shutdown
 	inst.stdinPipe.Close()
+	// TODO: Put a timeout on this, then force kill
 	if err := inst.cmd.Wait(); err != nil {
 		return fmt.Errorf("Failed to run: %s", err)
 	}

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"github.com/mattermost/mattermost-server/model"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -80,19 +80,11 @@ func (s *SlashCommandSource) ExtendDefinitions(defs *definition.Definitions) {
 		Endpoints: []definition.EndpointDef{{
 			Path:     "/callback",
 			Methods:  []string{"POST"},
-			Function: s.def.Function,
-			PreProcess: func(event interface{}) interface{} {
-				if apiGatewayEvent, ok := event.(*definition.APIGatewayRequestEvent); ok {
-					// Use the form values to the top level of the event, ignore everything else
-					return apiGatewayEvent.FormValues
-				} else {
-					return event
-				}
-			},
-			PostProcess: func(result interface{}) interface{} {
+			Function: "",
+			Decorate: func(event *definition.APIGatewayRequestEvent, invokeFunc definition.FunctionInvokeFunc) *definition.APIGatewayResponse {
 				return &definition.APIGatewayResponse{
 					Status: http.StatusOK,
-					Body:   result,
+					Body:   invokeFunc(s.def.Function, event.FormValues),
 				}
 			},
 		}},
@@ -103,7 +95,7 @@ func (s *SlashCommandSource) ExtendDefinitions(defs *definition.Definitions) {
 
 }
 
-func NewSlashCommandSource(adminClient *model.Client4, appName, sourceName string, def *definition.SlashCommandDef, invokeFunc FunctionInvokeFunc) *SlashCommandSource {
+func NewSlashCommandSource(cfg config.Config, adminClient *model.Client4, appName, sourceName string, def *definition.SlashCommandDef) *SlashCommandSource {
 	scs := &SlashCommandSource{
 		adminClient: adminClient,
 		def:         def,
@@ -111,7 +103,7 @@ func NewSlashCommandSource(adminClient *model.Client4, appName, sourceName strin
 	}
 
 	// TODO: Let's not pull this from the environment variables here directly
-	scs.externalURL = fmt.Sprintf("%s/%s/%s/callback", os.Getenv("api_url"), appName, sourceName)
+	scs.externalURL = fmt.Sprintf("%s/%s/%s/callback", cfg.APIExternalURL, appName, sourceName)
 
 	return scs
 }

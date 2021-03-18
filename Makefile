@@ -6,6 +6,10 @@ build:
 	go build ${PACKAGE}/cmd/mls
 	go build ${PACKAGE}/cmd/mls-lambda
 
+install:
+	go install ${PACKAGE}/cmd/mls-bot
+	go install ${PACKAGE}/cmd/mls
+
 run-bot: build
 	./mls-bot
 
@@ -21,6 +25,10 @@ run-mls-test: build
 docker:
 	GOARCH=amd64 GOOS=linux go build -o runners/docker/mls-lambda.x86_64 ${PACKAGE}/cmd/mls-lambda
 	GOARCH=arm64 GOOS=linux go build -o runners/docker/mls-lambda.aarch64 ${PACKAGE}/cmd/mls-lambda
-	docker buildx build --platform linux/amd64,linux/arm64 -t ${DOCKER_RUNNER_IMAGE} --push runners/docker
 	docker build -t ${DOCKER_RUNNER_IMAGE} runners/docker
 
+docker-publish:
+	GOARCH=amd64 GOOS=linux go build -o runners/docker/mls-lambda.x86_64 ${PACKAGE}/cmd/mls-lambda
+	GOARCH=arm64 GOOS=linux go build -o runners/docker/mls-lambda.aarch64 ${PACKAGE}/cmd/mls-lambda
+	docker buildx build --platform linux/amd64,linux/arm64 -t ${DOCKER_RUNNER_IMAGE} --push runners/docker
+	docker build -t ${DOCKER_RUNNER_IMAGE} runners/docker

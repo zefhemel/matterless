@@ -17,12 +17,10 @@ type MatterMostSource struct {
 	def                *definition.MattermostClientDef
 	stopping           chan struct{}
 	stopped            chan struct{}
-	functionInvokeFunc FunctionInvokeFunc
+	functionInvokeFunc definition.FunctionInvokeFunc
 }
 
-type FunctionInvokeFunc func(name definition.FunctionID, event interface{}) interface{}
-
-func NewMatterMostSource(clientName string, def *definition.MattermostClientDef, functionInvokeFunc FunctionInvokeFunc) (*MatterMostSource, error) {
+func NewMatterMostSource(clientName string, def *definition.MattermostClientDef, functionInvokeFunc definition.FunctionInvokeFunc) (*MatterMostSource, error) {
 	wsURL := strings.Replace(def.URL, "http:", "ws:", 1)
 	wsURL = strings.Replace(wsURL, "https:", "wss:", 1)
 	log.Debug("Websocket URL: ", wsURL)
