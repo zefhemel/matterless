@@ -42,7 +42,7 @@ func TestHTTP(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "simpleValue", response.Value)
 
-	response, err = sendOp(ts.URL, "delete", "simpleKey")
+	response, err = sendOp(ts.URL, "del", "simpleKey")
 	assert.NoError(t, err)
 	assert.Equal(t, "ok", response.Status)
 
