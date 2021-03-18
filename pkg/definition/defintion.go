@@ -1,11 +1,18 @@
 package definition
 
 import (
+	"bytes"
+	_ "embed"
+	log "github.com/sirupsen/logrus"
 	"strings"
+	"text/template"
 )
 
 type FunctionID string
 type FunctionInvokeFunc func(name FunctionID, event interface{}) interface{}
+
+//go:embed template/definition.template
+var markdownTemplate string
 
 type Definitions struct {
 	Environment map[string]string
@@ -76,4 +83,18 @@ func (decls *Definitions) CompileFunctionCode(code string) string {
 func (decls *Definitions) FunctionExists(id FunctionID) bool {
 	_, found := decls.Functions[id]
 	return found
+}
+
+func (decls *Definitions) Markdown() string {
+	tmpl, err := template.New("sourceTemplate").Parse(markdownTemplate)
+	if err != nil {
+		log.Error("Could not render markdown:", err)
+		return ""
+	}
+	var out bytes.Buffer
+	if err := tmpl.Execute(&out, decls); err != nil {
+		log.Error("Could not render markdown:", err)
+		return ""
+	}
+	return out.String()
 }

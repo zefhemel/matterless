@@ -4,3 +4,4 @@ mattermost-redux
 /mls
 /mls-bot
 /.idea
+/data/

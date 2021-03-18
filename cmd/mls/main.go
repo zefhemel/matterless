@@ -51,6 +51,9 @@ func main() {
 		log.Fatal(err)
 	}
 
+	log.Info("Definitions successfully loaded! Here's what's live:")
+	log.Info(defaultApp.Definitions().Markdown())
+
 	// Handle Ctrl-c gracefully
 	killing := make(chan os.Signal)
 	signal.Notify(killing, os.Interrupt, syscall.SIGTERM)
@@ -88,6 +91,8 @@ func main() {
 						log.Errorf("Error processing %s: %s", filename, err)
 						continue eventLoop
 					}
+					log.Info("Definitions successfully reloaded! Here's what's live:")
+					log.Info(defaultApp.Definitions().Markdown())
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {

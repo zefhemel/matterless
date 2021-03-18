@@ -3,6 +3,7 @@ package bot
 import (
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"github.com/zefhemel/matterless/pkg/application"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
@@ -213,7 +214,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 		}
 
 		//mb.setOnlyReaction(post, "white_check_mark")
-		mb.ensureReply(post, "All good :thumbsup:")
+		mb.ensureReply(post, fmt.Sprintf("All good :thumbsup:\n\n%s", postApp.Definitions().Markdown()))
 	} else {
 		switch post.Message {
 		case "ping":

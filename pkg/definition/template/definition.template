@@ -1,0 +1,45 @@
+{{ $root := . }}
+## Environment
+These are the variables exposed to all functions:
+{{ range $key, $env := .Environment }}
+- `{{ $key }}`{{ end }}
+
+## Functions
+{{ range $key, $env := .Functions }}
+- `{{ $key }}`{{ end }}
+
+{{if .Bots}}
+## Bots
+{{ range $name, $def := .Bots }}
+- `{{$name}}` (`@{{$def.Username}}`), responding to the following events:{{ range $eventName, $eventsTriggered := .Events }}
+    - `{{$eventName}}` triggering functions {{range $eventsTriggered}}`{{.}}` {{end}}
+{{ end }}{{ end }}{{ end }}
+
+{{if .MattermostClients}}
+## MattermostClients
+{{ range $name, $def := .MattermostClients }}
+- `{{$name}}`, responding to the following events:{{ range $eventName, $eventsTriggered := .Events }}
+    - `{{$eventName}}` triggering functions {{range $eventsTriggered}}`{{.}}` {{end}}{{ end }}{{ end }}{{ end }}
+
+{{if .SlashCommands}}
+## Slash commands
+{{ range $key, $env := .SlashCommands }}
+- `/{{$env.Trigger}}` (invoking `{{$env.Function}}`){{ end }}
+{{end}}
+{{if .Crons}}
+## Crons
+{{ range $name, $def := .Crons }}
+- `{{$def.Schedule}}` (invoking `{{$def.Function}}`){{ end }}
+{{end}}
+
+{{if .APIGateways}}
+## API Gateway
+{{ range $key, $env := .APIGateways }}
+- [`{{$key}}`]({{$root.Environment.API_URL}}/{{$key}}) with endpoints:{{ range .Endpoints }}
+   - [`{{.Path}}`]({{$root.Environment.API_URL}}/{{$key}}{{.Path}}) {{if .Function}}triggering function `{{.Function}}`{{else}}triggering internal logic{{end}}{{end}}{{end}}{{end}}
+
+{{if .Crons}}
+## Crons
+{{ range $name, $def := .Crons }}
+- `{{$def.Schedule}}` (invoking `{{$def.Function}}`){{ end }}
+{{end}}
