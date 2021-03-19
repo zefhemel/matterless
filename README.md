@@ -7,7 +7,7 @@ Conceptually Matterless is inspired by _serverless_ (hence the name), where appl
 
 **Note:** Matterless is early stage of development, please only use it for development and testing purposes. The APIs here may be changed at any time.
 
-There is a [video demo of a somewhat earlier version available here](https://cln.sh/gnC8Md).
+There is a [video demo of a somewhat earlier version available here](https://cln.sh/gnC8Md). To have a look at some simple example applications, check out the [samples](https://github.com/zefhemel/matterless/tree/master/samples) folder.
 
 ## What is a Matterless application
 A Matterless application consists of a number of _definitions_ written in Markdown. Currently the following _definition types_ are supported:
@@ -256,7 +256,7 @@ $ mls-bot
 
 You should now get a bunch of output in the console, and be pinged on Mattermost about the creation of the `matterless` bot! To test if it works, send it a "ping" message (it should attach a ping-pong reaction). Then to build your first app, copy and paste the example at the top this README.
 
-![](screenshots/matterless-bot-success.png)
+![](https://raw.githubusercontent.com/zefhemel/matterless/master/screenshots/matterless-bot-success.png)
 
 Alternatively, copy & paste your code into a file and run it via `mls`:
 
