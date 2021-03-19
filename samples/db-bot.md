@@ -37,7 +37,7 @@ events:
 Implements the actual logic for the commands.
 
 ```javascript
-import {Store, Mattermost} from "./api.mjs";
+import {Store, Mattermost} from "matterless";
 import YAML from "yaml";
 
 let client = new Mattermost(process.env.DATABASEBOT_URL, process.env.DATABASEBOT_TOKEN);

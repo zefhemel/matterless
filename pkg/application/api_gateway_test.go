@@ -14,25 +14,21 @@ func TestNewHTTPServer(t *testing.T) {
 	s := application.NewAPIGateway(8123,
 		map[string]*application.Application{
 			"test": application.NewMockApplication("test", &definition.Definitions{
-				APIGateways: map[string]*definition.APIGatewayDef{
-					"api_test": {
-						Endpoints: []definition.EndpointDef{
-							{
-								Path:     "/ping",
-								Methods:  []string{"GET"},
-								Function: "PingFunc",
-							},
-							{
-								Path:     "/json",
-								Methods:  []string{"GET"},
-								Function: "JsonFunc",
-							},
-						},
+				APIs: []*definition.EndpointDef{
+					{
+						Path:     "/ping",
+						Methods:  []string{"GET"},
+						Function: "PingFunc",
+					},
+					{
+						Path:     "/json",
+						Methods:  []string{"GET"},
+						Function: "JsonFunc",
 					},
 				},
 			}),
 		},
-		func(appName string, apigatewayName string, name definition.FunctionID, event interface{}) interface{} {
+		func(appName string, name definition.FunctionID, event interface{}) interface{} {
 			log.Infof("Called %s with event %+v", name, event)
 			if name == "PingFunc" {
 				return &definition.APIGatewayResponse{
@@ -54,13 +50,13 @@ func TestNewHTTPServer(t *testing.T) {
 			return nil
 		})
 	s.Start()
-	resp, err := http.Get("http://127.0.0.1:8123/test/api_test/ping")
+	resp, err := http.Get("http://127.0.0.1:8123/test/ping")
 	assert.NoError(t, err)
 	buf, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 	assert.Equal(t, "pong", string(buf))
 	assert.Equal(t, "Test", resp.Header.Get("TestHeader"))
-	resp, err = http.Get("http://127.0.0.1:8123/test/api_test/json")
+	resp, err = http.Get("http://127.0.0.1:8123/test/json")
 	assert.NoError(t, err)
 	buf, err = io.ReadAll(resp.Body)
 	assert.NoError(t, err)

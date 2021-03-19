@@ -3,7 +3,7 @@
 ```
 function handle(event) {
     return {
-            text: "Hey there: " + event.form_values.text
+            text: "Hey there: " + event.text
     };
 }
 ```
@@ -11,14 +11,9 @@ function handle(event) {
 # SlashCommand: Zef
 ```
 trigger: zef-test
+auto_complete: true
+auto_complete_desc: Zef's awesome command
+auto_complete_hint: your-name
 team_name: Dev
 function: LogEvent
-```
-
-----
-# Bot: SuperZefBot
-```
-team_names:
-- Dev
-username: super-zef-bot
 ```

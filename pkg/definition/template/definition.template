@@ -32,11 +32,10 @@ These are the variables exposed to all functions:
 - `{{$def.Schedule}}` (invoking `{{$def.Function}}`){{ end }}
 {{end}}
 
-{{if .APIGateways}}
-## API Gateway
-{{ range $key, $env := .APIGateways }}
-- [`{{$key}}`]({{$root.Environment.API_URL}}/{{$key}}) with endpoints:{{ range .Endpoints }}
-   - [`{{.Path}}`]({{$root.Environment.API_URL}}/{{$key}}{{.Path}}) {{if .Function}}triggering function `{{.Function}}`{{else}}triggering internal logic{{end}}{{end}}{{end}}{{end}}
+{{if .APIs}}
+## APIs
+{{ range .APIs }}
+- [`{{.Path}}`]({{$root.Environment.API_URL}}{{.Path}}) {{if .Function}}triggering function `{{.Function}}`{{else}}triggering internal logic{{end}}{{end}}{{end}}
 
 {{if .Crons}}
 ## Crons

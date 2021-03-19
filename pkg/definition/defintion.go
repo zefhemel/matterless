@@ -21,10 +21,10 @@ type Definitions struct {
 
 	// Sources
 	MattermostClients map[string]*MattermostClientDef
-	APIGateways       map[string]*APIGatewayDef
+	APIs              []*EndpointDef
 	SlashCommands     map[string]*SlashCommandDef
 	Bots              map[string]*BotDef
-	Crons             map[string]*CronDef
+	Crons             []*CronDef
 }
 
 type FunctionDef struct {
@@ -56,13 +56,16 @@ type EndpointDef struct {
 	Decorate func(event *APIGatewayRequestEvent, invokeFunc FunctionInvokeFunc) *APIGatewayResponse
 }
 
-type APIGatewayDef struct {
-	Endpoints []EndpointDef `yaml:"endpoints"`
-}
+type APIDef []EndpointDef
 
 type SlashCommandDef struct {
-	TeamName string     `yaml:"team_name"`
-	Trigger  string     `yaml:"trigger"`
+	TeamName string `yaml:"team_name"`
+	Trigger  string `yaml:"trigger"`
+
+	AutoComplete     bool   `yaml:"auto_complete"`
+	AutoCompleteDesc string `yaml:"auto_complete_desc"`
+	AutoCompleteHint string `yaml:"auto_complete_hint"`
+
 	Function FunctionID `yaml:"function"`
 }
 
@@ -96,5 +99,5 @@ func (decls *Definitions) Markdown() string {
 		log.Error("Could not render markdown:", err)
 		return ""
 	}
-	return out.String()
+	return strings.TrimSpace(out.String())
 }

@@ -3,5 +3,6 @@ ADD . /app
 WORKDIR /app
 RUN ./setup.sh
 RUN npm install --legacy-peer-deps --ignore-scripts
+ADD node_modules/matterless node_modules/matterless
 
 ENTRYPOINT ["mls-lambda"]

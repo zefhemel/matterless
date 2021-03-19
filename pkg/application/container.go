@@ -13,7 +13,7 @@ func NewContainer(apiGatewayBindPort int) *Container {
 	appMap := map[string]*Application{}
 	return &Container{
 		apps: appMap,
-		apiGateway: NewAPIGateway(apiGatewayBindPort, appMap, func(appName string, gatewayName string, name definition.FunctionID, event interface{}) interface{} {
+		apiGateway: NewAPIGateway(apiGatewayBindPort, appMap, func(appName string, name definition.FunctionID, event interface{}) interface{} {
 			return appMap[appName].InvokeFunction(name, event)
 		}),
 	}

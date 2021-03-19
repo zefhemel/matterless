@@ -123,9 +123,6 @@ func (app *Application) Eval(code string) error {
 		log.Debug("Starting Bot: ", name)
 	}
 
-	// Not processing API Gateways here, done externally
-
-	// Slash commands
 	for name, def := range defs.SlashCommands {
 		scmd := eventsource.NewSlashCommandSource(app.cfg, app.adminClient, app.appName, name, def)
 		if err != nil {
@@ -137,16 +134,14 @@ func (app *Application) Eval(code string) error {
 		scmd.ExtendDefinitions(defs)
 	}
 
-	for name, def := range defs.Crons {
-		c := eventsource.NewCronSource(def, app.InvokeFunction)
-		if err != nil {
-			return err
-		}
-		app.eventSources[name] = c
-		log.Debug("Starting cron: ", name)
-		c.Start()
-		c.ExtendDefinitions(defs)
+	c := eventsource.NewCronSource(defs.Crons, app.InvokeFunction)
+	if err != nil {
+		return err
 	}
+	app.eventSources["_cron"] = c
+	log.Debug("Starting cron")
+	c.Start()
+	c.ExtendDefinitions(defs)
 
 	log.Debug("Testing functions...")
 	testResults := definition.TestDeclarations(defs, app.sandbox)

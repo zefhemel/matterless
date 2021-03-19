@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-type FunctionInvokeFunc func(appName string, gatewayName string, name definition.FunctionID, event interface{}) interface{}
+type FunctionInvokeFunc func(appName string, name definition.FunctionID, event interface{}) interface{}
 
 type APIGateway struct {
 	bindPort   int
@@ -82,8 +82,8 @@ func (ag *APIGateway) Stop() {
 	ag.wg.Wait()
 }
 
-func (ag *APIGateway) handleEndpoint(appName string, gatewayName string, endPoint definition.EndpointDef, writer http.ResponseWriter, request *http.Request) {
-	evt, err := ag.buildEvent(endPoint, request)
+func (ag *APIGateway) handleEndpoint(appName string, endPoint *definition.EndpointDef, writer http.ResponseWriter, request *http.Request) {
+	evt, err := ag.buildEvent(request)
 	if err != nil {
 		writer.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(writer, "Error: %s", err)
@@ -92,10 +92,10 @@ func (ag *APIGateway) handleEndpoint(appName string, gatewayName string, endPoin
 	var result interface{}
 	if endPoint.Decorate != nil {
 		result = endPoint.Decorate(evt, func(name definition.FunctionID, event interface{}) interface{} {
-			return ag.functionInvokeFunc(appName, gatewayName, name, event)
+			return ag.functionInvokeFunc(appName, name, event)
 		})
 	} else {
-		result = ag.functionInvokeFunc(appName, gatewayName, endPoint.Function, evt)
+		result = ag.functionInvokeFunc(appName, endPoint.Function, evt)
 	}
 
 	var apiGatewayResp definition.APIGatewayResponse
@@ -131,36 +131,29 @@ func (ag *APIGateway) buildRouter() {
 		fmt.Fprint(writer, "Endpoints exposed:\n\n")
 
 		for appName, app := range ag.appMap {
-			for name, def := range app.Definitions().APIGateways {
-				for _, endpointDef := range def.Endpoints {
-					fmt.Fprintf(writer, "/%s/%s%s (methods: %s)\n", appName, name, endpointDef.Path, strings.Join(endpointDef.Methods, ", "))
-				}
+			for _, endpointDef := range app.Definitions().APIs {
+				fmt.Fprintf(writer, "/%s/%s (methods: %s)\n", appName, endpointDef.Path, strings.Join(endpointDef.Methods, ", "))
 			}
 		}
 	})
 	ag.exposeAPIRoute()
-	ag.rootRouter.HandleFunc("/{app}/{gateway}/{endpointPath:.*}", func(w http.ResponseWriter, r *http.Request) {
+	ag.rootRouter.HandleFunc("/{app}/{endpointPath:.*}", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
 		appName := vars["app"]
-		gatewayName := vars["gateway"]
 		endpointPath := fmt.Sprintf("/%s", vars["endpointPath"])
 		if app, ok := ag.appMap[appName]; ok {
 			handled := false
-			for name, def := range app.Definitions().APIGateways {
-				if gatewayName == name {
-					for _, endpointDef := range def.Endpoints {
-						if endpointPath == endpointDef.Path {
-							ag.handleEndpoint(appName, gatewayName, endpointDef, w, r)
-							handled = true
-						}
-					}
+			for _, endpointDef := range app.Definitions().APIs {
+				if endpointPath == endpointDef.Path {
+					ag.handleEndpoint(appName, endpointDef, w, r)
+					handled = true
 				}
 			}
 			if !handled {
 				w.WriteHeader(http.StatusNotFound)
-				log.Infof("No handler for %s/%s", appName, gatewayName)
-				fmt.Fprintf(w, "No such path: %s/%s", appName, gatewayName)
+				log.Infof("No handler for %s%s", appName, endpointPath)
+				fmt.Fprintf(w, "No such path: %s%s", appName, endpointPath)
 			}
 		} else {
 			w.WriteHeader(http.StatusNotFound)
@@ -170,7 +163,7 @@ func (ag *APIGateway) buildRouter() {
 	})
 }
 
-func (ag *APIGateway) buildEvent(endPoint definition.EndpointDef, request *http.Request) (*definition.APIGatewayRequestEvent, error) {
+func (ag *APIGateway) buildEvent(request *http.Request) (*definition.APIGatewayRequestEvent, error) {
 	vars := mux.Vars(request)
 	evt := &definition.APIGatewayRequestEvent{
 		Path:          fmt.Sprintf("/%s", vars["endpointPath"]),

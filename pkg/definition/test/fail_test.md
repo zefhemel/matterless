@@ -20,14 +20,13 @@ events:
   - GoodFunction
 ```
 ---
-# APIGateway: NoHTTPPath
+# API
 ```yaml
-endpoints:
-    - function: MyHTTPTest
+- function: MyHTTPTest
 ```
 ---
 # Cron: TestCron
 ```yaml
-schedule: bla
-function: NonExisting
+- schedule: bla
+  function: NonExisting
 ```

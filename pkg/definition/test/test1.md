@@ -1,7 +1,7 @@
 # Function: TestFunction1
 
 ```
-export default function(event) {
+function handle(event) {
   console.log("Hello world!");
 }
 ```
@@ -10,7 +10,7 @@ export default function(event) {
 # Function TestFunction2
 
 ```javascript
-export default function (event) {
+function handle(event) {
   console.log("Hello world 2!");
 }
 ```
@@ -35,22 +35,18 @@ MattermostToken: 1234
 # Library
 
 ```javascript
-import connect from "./mm_client.mjs";
-
-// Connects to mattermost via env settings
-function connect() {
-    return connect(process.env.MM_URL, process.env.MM_TOKEN);
+function myFunction() {
+    
 }
 ```
 
 ---
-# APIGateway: MyHTTP
+# API
 ```yaml
-endpoints:
-    - path: /test
-      methods:
-        - GET
-      function: TestFunction2
+- path: /test
+  methods:
+    - GET
+  function: TestFunction2
 ```
 
 ---
@@ -70,10 +66,10 @@ events:
 ```
 
 ---
-# Cron: EveryMinute
+# Cron
 ```yaml
-schedule: 0 * * * * *
-function: MyRepeatedTask
+- schedule: 0 * * * * *
+  function: MyRepeatedTask
 ```
 
 ---

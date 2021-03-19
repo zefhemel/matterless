@@ -52,6 +52,7 @@ func main() {
 	}
 
 	log.Info("Definitions successfully loaded! Here's what's live:")
+	log.Debugf("All defs: %+v", defaultApp.Definitions())
 	log.Info(defaultApp.Definitions().Markdown())
 
 	// Handle Ctrl-c gracefully

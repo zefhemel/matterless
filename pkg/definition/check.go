@@ -10,10 +10,10 @@ import (
 type CheckResults struct {
 	Functions         map[FunctionID][]error
 	MattermostClients map[string][]error
-	APIGateways       map[string][]error
+	APIs              []error
+	Crons             []error
 	SlashCommands     map[string][]error
 	Bots              map[string][]error
-	Crons             map[string][]error
 	Libraries         map[string][]error
 }
 
@@ -25,18 +25,14 @@ func (cr *CheckResults) String() string {
 	for name, errs := range cr.MattermostClients {
 		errorMessageParts = collectPrettyErrors(errs, errorMessageParts, name, "MattermostClient")
 	}
-	for name, errs := range cr.APIGateways {
-		errorMessageParts = collectPrettyErrors(errs, errorMessageParts, name, "APIGateway")
-	}
+	errorMessageParts = collectPrettyErrors(cr.APIs, errorMessageParts, "", "API")
 	for name, errs := range cr.SlashCommands {
 		errorMessageParts = collectPrettyErrors(errs, errorMessageParts, name, "SlashCommand")
 	}
 	for name, errs := range cr.Bots {
 		errorMessageParts = collectPrettyErrors(errs, errorMessageParts, name, "Bot")
 	}
-	for name, errs := range cr.Crons {
-		errorMessageParts = collectPrettyErrors(errs, errorMessageParts, name, "Cron")
-	}
+	errorMessageParts = collectPrettyErrors(cr.Crons, errorMessageParts, "", "Cron")
 	for libraryName, libraryErrors := range cr.Libraries {
 		errorMessageParts = collectPrettyErrors(libraryErrors, errorMessageParts, libraryName, "Library")
 	}
@@ -54,7 +50,7 @@ func Check(declarations *Definitions) CheckResults {
 	return CheckResults{
 		Functions:         checkFunctions(declarations),
 		MattermostClients: checkMattermostClients(declarations),
-		APIGateways:       checkAPIGateways(declarations),
+		APIs:              checkAPIs(declarations),
 		SlashCommands:     checkSlashCommands(declarations),
 		Bots:              checkBots(declarations),
 		Crons:             checkCrons(declarations),
@@ -84,27 +80,19 @@ func checkMattermostClients(declarations *Definitions) map[string][]error {
 	return results
 }
 
-func checkAPIGateways(declarations *Definitions) map[string][]error {
-	results := make(map[string][]error)
-	for name, def := range declarations.APIGateways {
-		errorList := make([]error, 0, 5)
-		if def.Endpoints == nil {
-			errorList = append(errorList, errors.New("no 'endpoints' defined"))
-		} else {
-			for _, endpointDef := range def.Endpoints {
-				if endpointDef.Path == "" {
-					errorList = append(errorList, errors.New("no 'path' defined for endpoint"))
-				}
-				if endpointDef.Function == "" {
-					errorList = append(errorList, errors.New("no 'function' defined for endpoint"))
-				} else if !declarations.FunctionExists(endpointDef.Function) {
-					errorList = append(errorList, fmt.Errorf("function %s not found", endpointDef.Function))
-				}
-			}
+func checkAPIs(declarations *Definitions) []error {
+	errorList := make([]error, 0, 5)
+	for _, endpointDef := range declarations.APIs {
+		if endpointDef.Path == "" {
+			errorList = append(errorList, errors.New("no 'path' defined for endpoint"))
 		}
-		results[name] = errorList
+		if endpointDef.Function == "" {
+			errorList = append(errorList, errors.New("no 'function' defined for endpoint"))
+		} else if !declarations.FunctionExists(endpointDef.Function) {
+			errorList = append(errorList, fmt.Errorf("function %s not found", endpointDef.Function))
+		}
 	}
-	return results
+	return errorList
 }
 
 func checkSlashCommands(declarations *Definitions) map[string][]error {
@@ -144,10 +132,9 @@ func checkBots(declarations *Definitions) map[string][]error {
 	return results
 }
 
-func checkCrons(declarations *Definitions) map[string][]error {
-	results := make(map[string][]error)
-	for name, def := range declarations.Crons {
-		errorList := make([]error, 0, 5)
+func checkCrons(declarations *Definitions) []error {
+	errorList := make([]error, 0, 5)
+	for _, def := range declarations.Crons {
 		if def.Schedule == "" {
 			errorList = append(errorList, errors.New("no 'schedule' specified"))
 		}
@@ -158,9 +145,8 @@ func checkCrons(declarations *Definitions) map[string][]error {
 		if !declarations.FunctionExists(def.Function) {
 			errorList = append(errorList, fmt.Errorf("function %s not found", def.Function))
 		}
-		results[name] = errorList
 	}
-	return results
+	return errorList
 }
 
 func checkFunctions(declarations *Definitions) map[FunctionID][]error {

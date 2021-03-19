@@ -29,13 +29,12 @@ function whoAmI() {
 }
 ```
 ---
-# APIGateway: MyHTTP
+# API
 ```yaml
-endpoints:
-    - path: /test
-      methods:
-        - GET
-      function: TestFunction
+- path: /test
+  methods:
+    - GET
+  function: TestFunction
 ```
 ---
 # SlashCommand: MyCommand

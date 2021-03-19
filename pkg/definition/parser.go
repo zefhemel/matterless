@@ -19,10 +19,10 @@ func Parse(code string) (*Definitions, error) {
 	decls := &Definitions{
 		Functions:         map[FunctionID]*FunctionDef{},
 		MattermostClients: map[string]*MattermostClientDef{},
-		APIGateways:       map[string]*APIGatewayDef{},
+		APIs:              []*EndpointDef{},
 		SlashCommands:     map[string]*SlashCommandDef{},
 		Bots:              map[string]*BotDef{},
-		Crons:             map[string]*CronDef{},
+		Crons:             []*CronDef{},
 		Environment:       map[string]string{},
 		Libraries:         map[string]*FunctionDef{},
 	}
@@ -55,13 +55,13 @@ func Parse(code string) (*Definitions, error) {
 				return err
 			}
 			decls.MattermostClients[currentDeclarationName] = &def
-		case "APIGateway":
-			var def APIGatewayDef
+		case "API":
+			var def []*EndpointDef
 			err := yaml.Unmarshal([]byte(currentBody), &def)
 			if err != nil {
 				return err
 			}
-			decls.APIGateways[currentDeclarationName] = &def
+			decls.APIs = def
 		case "SlashCommand":
 			var def SlashCommandDef
 			err := yaml.Unmarshal([]byte(currentBody), &def)
@@ -77,12 +77,12 @@ func Parse(code string) (*Definitions, error) {
 			}
 			decls.Bots[currentDeclarationName] = &def
 		case "Cron":
-			var def CronDef
+			var def []*CronDef
 			err := yaml.Unmarshal([]byte(currentBody), &def)
 			if err != nil {
 				return err
 			}
-			decls.Crons[currentDeclarationName] = &def
+			decls.Crons = def
 		case "Environment":
 			err := yaml.Unmarshal([]byte(currentBody), &decls.Environment)
 			if err != nil {

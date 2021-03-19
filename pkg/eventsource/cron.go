@@ -7,7 +7,7 @@ import (
 
 type CronSource struct {
 	cron *cron.Cron
-	def  *definition.CronDef
+	defs []*definition.CronDef
 }
 
 func (cs *CronSource) Start() error {
@@ -26,14 +26,18 @@ type cronEvent struct {
 	Schedule string `json:"schedule"`
 }
 
-func NewCronSource(def *definition.CronDef, functionInvokeFunc definition.FunctionInvokeFunc) *CronSource {
+func NewCronSource(defs []*definition.CronDef, functionInvokeFunc definition.FunctionInvokeFunc) *CronSource {
 	c := cron.New()
-	c.AddFunc(def.Schedule, func() {
-		functionInvokeFunc(def.Function, &cronEvent{def.Schedule})
-	})
+	for _, def := range defs {
+		// variable capture
+		myDef := def
+		c.AddFunc(def.Schedule, func() {
+			functionInvokeFunc(myDef.Function, &cronEvent{myDef.Schedule})
+		})
+	}
 	return &CronSource{
 		cron: c,
-		def:  def,
+		defs: defs,
 	}
 }
 
