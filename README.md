@@ -1,7 +1,11 @@
 # Matterless
 Matterless is a tool to quickly and iteratively develop and run Mattermost "applications": extensions of Mattermost that may include bots, slash commands and other types of integrations. When run in "bot mode", users can manage
 Matterless applications as direct messages to the `@matterless` bot, which will immediately parse, validate and
-activate them. Generally this happens in a matter of seconds, allowing for a **very rapid code and run cycle**. Matterless can also be run in CLI-mode, in which case it is pointed at an application file (which you can edit in your favorite IDE) that will be hot-reloaded whenever it has been updated.
+activate them. Generally this happens in a matter of seconds, allowing for a **very rapid code and run cycle**.
+
+![](https://raw.githubusercontent.com/zefhemel/matterless/master/screenshots/matterless-bot-success.png)
+
+Matterless can also be run in CLI-mode, in which case it is pointed at an application file (which you can edit in your favorite IDE) that will be hot-reloaded whenever it has been updated.
 
 Conceptually Matterless is inspired by _serverless_ (hence the name), where applications are built using many off-the-shelf services and components glued together by lambda functions that respond to events.
 
@@ -264,8 +268,6 @@ $ mls-bot
 ```
 
 You should now get a bunch of output in the console, and be pinged on Mattermost about the creation of the `matterless` bot! To test if it works, send it a "ping" message (it should attach a ping-pong reaction). Then to build your first app, copy and paste the example at the top this README.
-
-![](https://raw.githubusercontent.com/zefhemel/matterless/master/screenshots/matterless-bot-success.png)
 
 Alternatively, copy & paste your code into a file and run it via `mls`:
 
