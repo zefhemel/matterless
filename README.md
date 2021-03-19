@@ -62,15 +62,17 @@ The general structure for a Mattermost definition is a header (at any level, e.g
 These are the _definition types_ currently supported and how to use them.
 
 ## Function: MyFunction
-Currently the only language supported is JavaScript, which is run using node.js (in ES6 with modules mode) that is run in a docker container. The function that will be invoked needs to be called `handle` and take a single argument: `event`, which will receive event data (depending on how the function will be triggered) and may or may not return a result..
+Currently the only language supported is JavaScript, which is run using node.js (in ES6 with modules mode) that is run in a docker container. The function that will be invoked needs to be called `handle` and take a single argument: `event`, which will receive event data (depending on how the function will be triggered) and may or may not return a result.
 
-While technically in most cases a node.js process instance with your function code inside it will be reused (it's not relaunched for every invocation), you should assume a stateless environment. While you can technically you have full access to all node.js APIS and the entire docker file system (yes, you could probably run a bitcoin miner in there), your function may be killed at any time along with all its in-memory and disk state. In fact, in the current implementation will indeed happen after a brief amount of time of inactivity.
+While technically in most cases a node.js process instance with your function code inside it will be reused (it's not relaunched for every invocation), you should assume a stateless environment. While technically you have full access to all node.js APIS and the entire docker file system (yes, you could probably run a bitcoin miner in there), your function may be killed at any time along with all its in-memory and disk state. In fact, in the current implementation will indeed happen after a brief amount of time of inactivity.
 
 Here is an example function that uses various Matterless APIs:
 * The `Mattermost` API, which is essentially just the JavaScript [MatterMost client](https://github.com/mattermost/mattermost-redux/blob/master/src/client/client4.ts) with some niceties added (like caching versions of some calls).
-* The `Store` API, which is a [super simple key-value store](https://github.com/zefhemel/matterless/blob/master/runners/docker/node_modules/matterless/index.mjs) you can use to keep some state (currently implemented using LevelDB) stored on the Matterless side.
+* The `Store` API, which is a [super simple key-value store](https://github.com/zefhemel/matterless/blob/master/runners/docker/node_modules/matterless/index.mjs) you can use to keep some state (currently implemented using LevelDB). State is stored on the Matterless server-side, and therefore persistent (but not shared between applications).
 
-In addition, a few other npm modules are included, you can [see the list and versions here](https://github.com/zefhemel/matterless/blob/master/runners/docker/package.json).
+In addition, a few other npm modules are included in the runtime environment, you can [see the list and versions here](https://github.com/zefhemel/matterless/blob/master/runners/docker/package.json).
+
+Here is a function that demonstrates some of the APIs:
 ```javascript
 import {Store, Mattermost} from "matterless";
 
@@ -86,7 +88,7 @@ async function handle(event) {
 
     // Lookup channel
     let channel = await client.getChannelCached(post.channel_id);
-    // Ignore bot posts
+    // Ignore posts sent by myself
     let botUser = await client.getMeCached();
     if(post.user_id === botUser.id) return;
 
@@ -104,7 +106,7 @@ async function handle(event) {
 As mentioned, right now functions run are run in docker containers locally, in the future there may be other sandboxes implemented, such one based on AWS lambda, or Kubernetes.
 
 ## Library
-It is likely to happen that you'll want to share some code between multiple functions, this is the purpose of the Library. In essence, any code you define in a Library will be appended to all other function codes (note that in the previous example the below `reusableFunction` is invoked). 
+It is likely to happen that you'll want to share some code between multiple functions. To do this, you can use the Library. In essence, any code you define in a Library will be appended to all other function code (note that in the previous example the below `reusableFunction` is invoked). 
 
 ```javascript
 function reusableFunction() {
@@ -113,7 +115,7 @@ function reusableFunction() {
 ```
 
 ### MattermostClient: MyMattermostClient
-The MattermostClient event source connects to any Mattermost instance using a token. It then starts to listen to specific or all events. Use `all` as a catch-all (mostly useful for debugging and exploration). You can connect multiple fucntions to a single event, therefore you specify them as a list in YAML.
+The MattermostClient event source can connect to any Mattermost instance you can authenticate with using a token. It then starts to listen to specific or all (websocket) events. Use `all` as a catch-all (mostly useful for debugging and exploration). You can connect multiple functions to a single event, therefore you specify them as a list in YAML.
 
 When defining a MattermostClient, two new environment variables will be defined (accessible in node.js via `process.env`): `MYMATTERMOSTCLIENT_URL` (in this case, always all-caps) and `MYMATTERMOSTCLIENT_TOKEN` containing the URL and token, respecitively, which can be used to authenticate as this user and e.g. reply to a post in case of a `posted` event.
 
