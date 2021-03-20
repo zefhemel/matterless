@@ -162,7 +162,7 @@ function handle(event) {
 }
 ```
 
-### Cron
+## Cron
 Crons can be used to schedule regularly recurring tasks. The `schedule` is written in a regular crontab format. Check [this reference for all options available](https://pkg.go.dev/github.com/robfig/cron?utm_source=godoc#hdr-CRON_Expression_Format).
 ```yaml
 - schedule: "0 * * * * *"
@@ -178,6 +178,8 @@ For certain use cases it will be required to expose an HTTP endpoint that either
     - GET
     - POST
 ```
+
+Whenever you submit your application to serverless (either via the bot or command line) it will tell you at what URLs your endpoints are exposed.
 
 ### Function: HelloWorldHTTP
 The `event` data you will receive for an HTTP event is [as follows](https://github.com/zefhemel/matterless/blob/master/pkg/definition/http.go):

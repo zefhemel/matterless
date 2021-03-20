@@ -107,7 +107,9 @@ func (app *Application) Eval(code string) error {
 			return err
 		}
 		app.eventSources[name] = mmSource
-		mmSource.Start()
+		if err := mmSource.Start(); err != nil {
+			return err
+		}
 		mmSource.ExtendDefinitions(defs)
 		log.Debug("Starting Mattermost client: ", name)
 	}

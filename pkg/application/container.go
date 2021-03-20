@@ -24,6 +24,9 @@ func (c *Container) Start() error {
 }
 
 func (c *Container) Stop() {
+	for _, app := range c.apps {
+		app.Stop()
+	}
 	c.apiGateway.Stop()
 }
 

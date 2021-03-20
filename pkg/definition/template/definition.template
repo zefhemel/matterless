@@ -36,9 +36,3 @@ These are the variables exposed to all functions:
 ## APIs
 {{ range .APIs }}
 - [`{{.Path}}`]({{$root.Environment.API_URL}}{{.Path}}) {{if .Function}}triggering function `{{.Function}}`{{else}}triggering internal logic{{end}}{{end}}{{end}}
-
-{{if .Crons}}
-## Crons
-{{ range $name, $def := .Crons }}
-- `{{$def.Schedule}}` (invoking `{{$def.Function}}`){{ end }}
-{{end}}

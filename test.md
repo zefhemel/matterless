@@ -1,8 +1,6 @@
 # Cron
 ```yaml
-- schedule: "*/2 * * * *" 
-  function: Often
-- schedule: "*/3 * * * *"
+- schedule: "0 * * * *" 
   function: Often
 ```
 
@@ -13,3 +11,4 @@ function handle(evt) {
     console.log("YO", evt)
 }
 ```
+

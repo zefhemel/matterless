@@ -25,6 +25,7 @@ type DockerSandbox struct {
 	keepAlive        time.Duration
 	ticker           *time.Ticker
 	stop             chan struct{}
+	bootLock         sync.Mutex
 }
 
 type instance struct {
@@ -52,19 +53,24 @@ func (inst *instance) kill() error {
 }
 
 func (s *DockerSandbox) boot(code string, env map[string]string) (*instance, error) {
+	s.bootLock.Lock()
 	inst, ok := s.runningInstances[code]
 	if !ok {
 		var err error
 		inst, err = newInstance(code, env)
 		if err != nil {
 			log.Error("Failed to instantiate", err)
+			s.bootLock.Unlock()
 			return nil, err
 		}
+		s.runningInstances[code] = inst
+		s.bootLock.Unlock()
 		if _, _, err := inst.invoke(pingEvent); err != nil {
 			log.Error("Failed sending ping event", err)
 			return nil, err
 		}
-		s.runningInstances[code] = inst
+	} else {
+		s.bootLock.Unlock()
 	}
 	return inst, nil
 }
