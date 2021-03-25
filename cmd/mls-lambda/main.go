@@ -134,6 +134,15 @@ func main() {
 			return
 		}
 
+		// Write modules
+		for moduleName, code := range initMessage.Modules {
+			if err := createModule(moduleName, code); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, "Error writing module %s: %s", moduleName, err)
+				scheduleShutdown()
+			}
+		}
+
 		errorChan := make(chan error, 1)
 		go func() {
 			if err := run(runnerConfig, initMessage.Env, os.Stdout, os.Stderr); err != nil {

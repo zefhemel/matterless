@@ -16,8 +16,9 @@ function handle(event) {
 # Function: TestFunction2
 
 ```JavaScript
+import {myCall} from "my-module";
 function handle(event) {
-  console.log("Hello world 2!"); 
+  return myCall();
 }
 ```
 ----
@@ -38,5 +39,12 @@ function handle(event) {
         status: 200,
         body: "Hello world!"
     };
+}
+```
+
+# Module: my-module
+```javascript
+export function myCall() {
+    return "Sup";
 }
 ```

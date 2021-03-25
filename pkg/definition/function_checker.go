@@ -21,8 +21,7 @@ func TestDeclarations(defs *Definitions, sandbox sandbox.Sandbox) TestResults {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	for name, def := range defs.Functions {
-		// TODO: Implement modules
-		_, err := sandbox.Function(ctx, string(name), defs.Environment, map[string]string{}, def.Code)
+		_, err := sandbox.Function(ctx, string(name), defs.Environment, defs.ModulesForLanguage(def.Language), def.Code)
 		testResults.Functions[name] = err
 	}
 	return testResults
@@ -33,7 +32,6 @@ func (tr *TestResults) String() string {
 	for functionName, functionResult := range tr.Functions {
 		if functionResult != nil {
 			errorMessageParts = append(errorMessageParts, fmt.Sprintf("[Function: %s Error] %s", functionName, functionResult.Error()))
-			// errorMessageParts = append(errorMessageParts, fmt.Sprintf("[Function: %s Logs] %s", functionName, functionResult.Logs))
 		}
 	}
 	return strings.Join(errorMessageParts, "\n")

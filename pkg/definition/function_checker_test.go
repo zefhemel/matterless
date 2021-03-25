@@ -1,9 +1,10 @@
 package definition_test
 
 import (
+	"context"
 	_ "embed"
+	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/definition"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,8 +24,8 @@ func TestNodeInterpreter(t *testing.T) {
 	sb := sandbox.NewDockerSandbox(0, 0)
 	// Flush logs
 	go func() {
-		for range sb.Logs() {
-
+		for le := range sb.Logs() {
+			log.Info(le.Message)
 		}
 	}()
 	defer sb.Close()
@@ -32,6 +33,12 @@ func TestNodeInterpreter(t *testing.T) {
 	assert.NoError(t, results.Functions["TestFunction1"])
 	assert.NoError(t, results.Functions["TestFunction2"])
 	assert.Error(t, results.Functions["FailFunction"])
-	assert.True(t, strings.Contains(results.Functions["FailFunction"].Error(), "Unexpected"))
+	assert.Contains(t, results.Functions["FailFunction"].Error(), "Unexpected")
 	assert.NotEqual(t, "", results.String())
+
+	ri, err := sb.Function(context.Background(), "TestFunction2", map[string]string{}, defs.ModulesForLanguage("javascript"), defs.Functions["TestFunction2"].Code)
+	assert.NoError(t, err)
+	result, err := ri.Invoke(context.Background(), struct{}{})
+	assert.NoError(t, err)
+	assert.Equal(t, "Sup", result)
 }

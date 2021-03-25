@@ -80,7 +80,7 @@ func Parse(code string) (*Definitions, error) {
 				Language: currentLanguage,
 				Code:     currentBody,
 			}
-		case "Library":
+		case "Module":
 			decls.Modules[currentDeclarationName] = &FunctionDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,

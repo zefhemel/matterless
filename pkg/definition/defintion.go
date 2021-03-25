@@ -17,7 +17,7 @@ var markdownTemplate string
 type Definitions struct {
 	Environment map[string]string
 	Functions   map[FunctionID]*FunctionDef
-	Modules     map[string]*FunctionDef // For now we just support the empty library name
+	Modules     map[string]*FunctionDef
 
 	// Sources
 	MattermostClients map[string]*MattermostClientDef
@@ -105,9 +105,10 @@ func (decls *Definitions) Markdown() string {
 func (defs *Definitions) ModulesForLanguage(lang string) map[string]string {
 	codeMap := make(map[string]string)
 	for name, def := range defs.Modules {
-		if def.Language == lang {
-			codeMap[name] = def.Code
-		}
+		// TODO: Implemenet filtering
+		//if def.Language == lang {
+		codeMap[name] = def.Code
+		//}
 	}
 	return codeMap
 }
