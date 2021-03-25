@@ -5,7 +5,6 @@ import (
 )
 
 type EventSource interface {
-	Start() error
-	Stop()
+	Close()
 	ExtendDefinitions(defs *definition.Definitions)
 }

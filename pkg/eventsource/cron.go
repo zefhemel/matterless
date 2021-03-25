@@ -10,21 +10,7 @@ type CronSource struct {
 	defs []*definition.CronDef
 }
 
-func (cs *CronSource) Start() error {
-	cs.cron.Start()
-	return nil
-}
-
-func (cs *CronSource) Stop() {
-	cs.cron.Stop()
-}
-
-func (c CronSource) ExtendDefinitions(defs *definition.Definitions) {
-}
-
-type cronEvent struct {
-	Schedule string `json:"schedule"`
-}
+var _ EventSource = &CronSource{}
 
 func NewCronSource(defs []*definition.CronDef, functionInvokeFunc definition.FunctionInvokeFunc) *CronSource {
 	c := cron.New()
@@ -35,10 +21,20 @@ func NewCronSource(defs []*definition.CronDef, functionInvokeFunc definition.Fun
 			functionInvokeFunc(myDef.Function, &cronEvent{myDef.Schedule})
 		})
 	}
+	c.Start()
 	return &CronSource{
 		cron: c,
 		defs: defs,
 	}
 }
 
-var _ EventSource = &CronSource{}
+func (cs *CronSource) Close() {
+	cs.cron.Stop()
+}
+
+func (c CronSource) ExtendDefinitions(defs *definition.Definitions) {
+}
+
+type cronEvent struct {
+	Schedule string `json:"schedule"`
+}

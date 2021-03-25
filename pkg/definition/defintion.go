@@ -17,7 +17,7 @@ var markdownTemplate string
 type Definitions struct {
 	Environment map[string]string
 	Functions   map[FunctionID]*FunctionDef
-	Libraries   map[string]*FunctionDef // For now we just support the empty library name
+	Modules     map[string]*FunctionDef // For now we just support the empty library name
 
 	// Sources
 	MattermostClients map[string]*MattermostClientDef
@@ -77,7 +77,7 @@ type CronDef struct {
 // CompileFunctionCode appends all library code to a function to be eval'ed
 func (decls *Definitions) CompileFunctionCode(code string) string {
 	codeParts := []string{code}
-	for _, libDef := range decls.Libraries {
+	for _, libDef := range decls.Modules {
 		codeParts = append(codeParts, libDef.Code)
 	}
 	return strings.Join(codeParts, "\n\n")
@@ -100,4 +100,14 @@ func (decls *Definitions) Markdown() string {
 		return ""
 	}
 	return strings.TrimSpace(out.String())
+}
+
+func (defs *Definitions) ModulesForLanguage(lang string) map[string]string {
+	codeMap := make(map[string]string)
+	for name, def := range defs.Modules {
+		if def.Language == lang {
+			codeMap[name] = def.Code
+		}
+	}
+	return codeMap
 }

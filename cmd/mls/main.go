@@ -50,9 +50,16 @@ func main() {
 
 		appName := filepath.Base(path)
 
-		app := application.NewApplication(cfg, adminClient, appName, func(kind, message string) {
-			log.Infof("%s: %s", kind, message)
-		})
+		app := application.NewApplication(cfg, adminClient, appName)
+
+		go func() {
+			for le := range app.Logs() {
+				if le.Instance == nil {
+					continue
+				}
+				log.Infof("[Function %s] %s", le.Instance.Name(), le.Message)
+			}
+		}()
 
 		err = app.Eval(string(data))
 		if err != nil {
@@ -73,7 +80,7 @@ func main() {
 	signal.Notify(killing, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-killing
-		appContainer.Stop()
+		appContainer.Close()
 		os.Exit(0)
 	}()
 

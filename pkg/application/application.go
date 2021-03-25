@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"fmt"
 	"github.com/mattermost/mattermost-server/model"
 	"github.com/pkg/errors"
@@ -17,17 +18,13 @@ import (
 type Application struct {
 	// Definitions
 	appName     string
-	code        string
 	definitions *definition.Definitions
+	code        string
 
 	// Runtime
-	eventSources map[string]eventsource.EventSource
-	sandbox      *sandbox.DockerSandbox
-	adminClient  *model.Client4
-
-	// Callbacks
-	// TODO: Consider switching to channels instead?
-	logCallback func(kind string, message string)
+	connectedEventSources []eventsource.EventSource
+	sandbox               *sandbox.DockerSandbox
+	adminClient           *model.Client4
 
 	// API
 	apiToken  string
@@ -35,22 +32,27 @@ type Application struct {
 	cfg       config.Config
 }
 
-func NewApplication(cfg config.Config, adminClient *model.Client4, appName string, logCallback func(kind, message string)) *Application {
+func NewApplication(cfg config.Config, adminClient *model.Client4, appName string) *Application {
 	dataStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/%s", cfg.LevelDBDatabasesPath, util.SafeFilename(appName)))
 	if err != nil {
 		log.Fatal("Could not create data store for ", appName)
 	}
-	return &Application{
-		cfg:          cfg,
-		appName:      appName,
-		adminClient:  adminClient,
-		eventSources: map[string]eventsource.EventSource{},
-		logCallback:  logCallback,
+	app := &Application{
+		cfg:         cfg,
+		appName:     appName,
+		adminClient: adminClient,
+		dataStore:   dataStore,
+		apiToken:    util.TokenGenerator(),
 		// TODO: Make this configurable
-		sandbox:   sandbox.NewDockerSandbox(30*time.Second, 1*time.Minute),
-		dataStore: dataStore,
-		apiToken:  util.TokenGenerator(),
+		sandbox: sandbox.NewDockerSandbox(1*time.Minute, 5*time.Minute),
 	}
+
+	return app
+}
+
+// Logs returns a channel of all log messages coming from all running functions
+func (app *Application) Logs() chan sandbox.LogEntry {
+	return app.sandbox.Logs()
 }
 
 // Only for testing
@@ -64,12 +66,23 @@ func NewMockApplication(appName string, defs *definition.Definitions) *Applicati
 func (app *Application) InvokeFunction(name definition.FunctionID, event interface{}) interface{} {
 	functionDef := app.definitions.Functions[name]
 	log.Debug("Now triggering event to ", name)
-	result, log, err := app.sandbox.Invoke(event, app.definitions.CompileFunctionCode(functionDef.Code), app.definitions.Environment)
+	// TODO: Remove hardcoded values
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+	functionInstance, err := app.sandbox.Function(ctx, string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(functionDef.Language), functionDef.Code)
 	if err != nil {
-		app.logCallback(string(name), err.Error())
+		app.Logs() <- sandbox.LogEntry{
+			Instance: functionInstance,
+			Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
+		}
+		return nil
 	}
-	if log != "" {
-		app.logCallback(string(name), log)
+	result, err := functionInstance.Invoke(ctx, event)
+	if err != nil {
+		app.Logs() <- sandbox.LogEntry{
+			Instance: functionInstance,
+			Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
+		}
 	}
 	return result
 }
@@ -89,67 +102,58 @@ func (app *Application) Eval(code string) error {
 
 	app.definitions = defs
 
-	results := definition.Check(defs)
-	if results.String() != "" {
-		// Error while checking
-		return errors.Wrap(errors.New(results.String()), "declaration check")
-	}
-
 	app.extendEnviron()
 
 	log.Debug("Starting listeners...")
-	app.Stop()
+	app.reset()
 
 	// Rebuild the whole thing
 	for name, def := range defs.MattermostClients {
-		mmSource, err := eventsource.NewMatterMostSource(name, def, app.InvokeFunction)
+		src, err := eventsource.NewMatterMostSource(name, def, app.InvokeFunction)
 		if err != nil {
 			return err
 		}
-		app.eventSources[name] = mmSource
-		if err := mmSource.Start(); err != nil {
-			return err
-		}
-		mmSource.ExtendDefinitions(defs)
+		app.connectedEventSources = append(app.connectedEventSources, src)
+		src.ExtendDefinitions(defs)
 		log.Debug("Starting Mattermost client: ", name)
 	}
 
 	for name, def := range defs.Bots {
-		botSource, err := eventsource.NewBotSource(app.adminClient, name, def, app.InvokeFunction)
+		src, err := eventsource.NewBotSource(app.adminClient, name, def, app.InvokeFunction)
 		if err != nil {
 			return err
 		}
-		app.eventSources[name] = botSource
-		botSource.Start()
-		botSource.ExtendDefinitions(defs)
+		app.connectedEventSources = append(app.connectedEventSources, src)
+		src.ExtendDefinitions(defs)
 		log.Debug("Starting Bot: ", name)
 	}
 
 	for name, def := range defs.SlashCommands {
-		scmd := eventsource.NewSlashCommandSource(app.cfg, app.adminClient, app.appName, name, def)
+		src, err := eventsource.NewSlashCommandSource(app.cfg, app.adminClient, app.appName, name, def)
 		if err != nil {
 			return err
 		}
-		app.eventSources[name] = scmd
+		app.connectedEventSources = append(app.connectedEventSources, src)
 		log.Debug("Starting Slashcommand: ", name)
-		scmd.Start()
-		scmd.ExtendDefinitions(defs)
+		src.ExtendDefinitions(defs)
 	}
 
 	c := eventsource.NewCronSource(defs.Crons, app.InvokeFunction)
 	if err != nil {
 		return err
 	}
-	app.eventSources["_cron"] = c
+	app.connectedEventSources = append(app.connectedEventSources, c)
 	log.Debug("Starting cron")
-	c.Start()
 	c.ExtendDefinitions(defs)
 
 	log.Debug("Testing functions...")
 	testResults := definition.TestDeclarations(defs, app.sandbox)
 	for name, functionResult := range testResults.Functions {
-		if functionResult.Logs != "" {
-			app.logCallback(string(name), functionResult.Logs)
+		if functionResult != nil {
+			app.Logs() <- sandbox.LogEntry{
+				Instance: nil,
+				Message:  fmt.Sprintf("[%s Check error] %s", name, functionResult.Error()),
+			}
 		}
 	}
 	if testResults.String() != "" {
@@ -159,19 +163,19 @@ func (app *Application) Eval(code string) error {
 	return nil
 }
 
-func (app *Application) Stop() {
+// reset but ready to start again
+func (app *Application) reset() {
 	// First, stop all event sources
-	for sourceName, eventSource := range app.eventSources {
-		log.Debug("Stopping ", sourceName)
-		eventSource.Stop()
+	for _, eventSource := range app.connectedEventSources {
+		eventSource.Close()
 	}
-	// Then stop all functions in sandbox
-	log.Debug("Stopping sandbox")
-	app.sandbox.FlushAll()
+	app.connectedEventSources = []eventsource.EventSource{}
+	app.sandbox.Flush()
 }
 
 func (app *Application) Close() error {
-	app.Stop()
+	app.reset()
+	app.sandbox.Close()
 	return app.dataStore.Close()
 }
 

@@ -26,7 +26,6 @@ func TestMatterMostSource(t *testing.T) {
 		assert.IsType(t, reflect.TypeOf(model.WebSocketEvent{}), reflect.TypeOf(event))
 		return struct{}{}
 	})
+	defer mmSource.Close()
 	assert.NoError(t, err)
-	assert.NoError(t, mmSource.Start())
-	mmSource.Stop()
 }

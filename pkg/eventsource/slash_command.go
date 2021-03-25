@@ -19,7 +19,24 @@ type SlashCommandSource struct {
 	token       string
 }
 
-func (s *SlashCommandSource) Start() error {
+func NewSlashCommandSource(cfg config.Config, adminClient *model.Client4, appName, sourceName string, def *definition.SlashCommandDef) (*SlashCommandSource, error) {
+	scs := &SlashCommandSource{
+		adminClient: adminClient,
+		def:         def,
+		sourceName:  sourceName,
+	}
+
+	// TODO: Let's not pull this from the environment variables here directly
+	scs.externalURL = fmt.Sprintf("%s/%s/%s/callback", cfg.APIExternalURL, appName, sourceName)
+
+	if err := scs.start(); err != nil {
+		return nil, err
+	}
+
+	return scs, nil
+}
+
+func (s *SlashCommandSource) start() error {
 	team, resp := s.adminClient.GetTeamByName(s.def.TeamName, "")
 	if resp.Error != nil {
 		return resp.Error
@@ -70,7 +87,7 @@ func (s *SlashCommandSource) Start() error {
 	return nil
 }
 
-func (s *SlashCommandSource) Stop() {
+func (s *SlashCommandSource) Close() {
 	if s.commandID != "" {
 		_, resp := s.adminClient.DeleteCommand(s.commandID)
 		if resp.Error != nil {
@@ -96,19 +113,6 @@ func (s *SlashCommandSource) ExtendDefinitions(defs *definition.Definitions) {
 	defs.Environment[fmt.Sprintf("%s_URL", strings.ToUpper(s.sourceName))] = s.adminClient.Url
 	defs.Environment[fmt.Sprintf("%s_TOKEN", strings.ToUpper(s.sourceName))] = s.token
 
-}
-
-func NewSlashCommandSource(cfg config.Config, adminClient *model.Client4, appName, sourceName string, def *definition.SlashCommandDef) *SlashCommandSource {
-	scs := &SlashCommandSource{
-		adminClient: adminClient,
-		def:         def,
-		sourceName:  sourceName,
-	}
-
-	// TODO: Let's not pull this from the environment variables here directly
-	scs.externalURL = fmt.Sprintf("%s/%s/%s/callback", cfg.APIExternalURL, appName, sourceName)
-
-	return scs
 }
 
 var _ EventSource = &SlashCommandSource{}

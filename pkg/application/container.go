@@ -23,9 +23,9 @@ func (c *Container) Start() error {
 	return c.apiGateway.Start()
 }
 
-func (c *Container) Stop() {
+func (c *Container) Close() {
 	for _, app := range c.apps {
-		app.Stop()
+		app.Close()
 	}
 	c.apiGateway.Stop()
 }
@@ -40,7 +40,7 @@ func (c *Container) Get(name string) *Application {
 
 func (c *Container) UnRegister(name string) {
 	if app, ok := c.apps[name]; ok {
-		app.Stop()
+		app.Close()
 		delete(c.apps, name)
 	}
 }

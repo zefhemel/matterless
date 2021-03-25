@@ -39,10 +39,15 @@ func NewMatterMostSource(clientName string, def *definition.MattermostClientDef,
 		return nil, err
 	}
 
+	// start listening
+	if err := mms.start(); err != nil {
+		return nil, err
+	}
+
 	return mms, nil
 }
 
-func (mms *MatterMostSource) Start() error {
+func (mms *MatterMostSource) start() error {
 	err := mms.wsClient.Connect()
 
 	if err != nil {
@@ -73,7 +78,7 @@ func (mms *MatterMostSource) Start() error {
 						log.Info("Disconnected.")
 						time.Sleep(2 * time.Second)
 						log.Info("Reconnecting...")
-						err := mms.Start()
+						err := mms.start()
 						if err != nil {
 							log.Error(err)
 						} else {
@@ -99,7 +104,7 @@ func (mms *MatterMostSource) ExtendDefinitions(defs *definition.Definitions) {
 	}
 }
 
-func (mms *MatterMostSource) Stop() {
+func (mms *MatterMostSource) Close() {
 	mms.stopping <- struct{}{}
 	// Wait for the connection to actually close
 	<-mms.stopped

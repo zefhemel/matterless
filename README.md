@@ -121,7 +121,7 @@ When defining a MattermostClient, two new environment variables will be defined 
 
 ```yaml
 url: http://localhost:8065
-token: 1234
+token: abc1234
 events:
   all:
   - HelloFunction
@@ -136,6 +136,8 @@ In a sense a Bot is the same as `MattermostClient`, but it manages the tokens fo
 
 ```yaml
 username: my-bot
+team_names:
+  - Test
 events:
   posted:
     - MyFunction

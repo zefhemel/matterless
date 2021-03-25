@@ -2,27 +2,36 @@ package main
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
-	"github.com/pkg/errors"
+	"encoding/json"
+	"errors"
+	"fmt"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/sandbox"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"text/template"
+	"time"
 )
+
+// https://docs.openfaas.com/reference/workloads/
 
 //go:embed templates/template.mjs
 var jsTemplate string
 
 type runnerConfig struct {
-	bin            string
+	cmd            []string
 	template       string
 	scriptFilename string
 }
 
 var runnerTypes = map[string]runnerConfig{
 	"node": {
-		bin:            "node",
+		cmd:            []string{"node", "main.mjs"},
 		scriptFilename: "function.mjs",
 		template:       jsTemplate,
 	},
@@ -47,55 +56,137 @@ func wrapScript(runnerConfig runnerConfig, code string) string {
 	return out.String()
 }
 
-func run(runnerConfig runnerConfig, code string, env []string, processStdin io.ReadCloser, processStdout io.WriteCloser, processStderr io.WriteCloser) error {
-	if err := os.WriteFile(runnerConfig.scriptFilename, []byte(wrapScript(runnerConfig, code)), 0600); err != nil {
-		return err
-	}
-	cmd := exec.Command(runnerConfig.bin, runnerConfig.scriptFilename)
+var cmd *exec.Cmd
 
-	cmd.Env = env
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return errors.Wrap(err, "stdin pipe")
+func run(runnerConfig runnerConfig, env sandbox.EnvMap, processStdout io.WriteCloser, processStderr io.WriteCloser) error {
+	cmd = exec.Command(runnerConfig.cmd[0], runnerConfig.cmd[1:]...)
+
+	envSlice := make([]string, 0, len(env))
+	for k, v := range env {
+		envSlice = append(envSlice, fmt.Sprintf("%s=%s", k, v))
 	}
+	cmd.Env = envSlice
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return errors.Wrap(err, "stdout pipe")
+		return err
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return errors.Wrap(err, "stderr pipe")
+		return err
 	}
 
 	if err := cmd.Start(); err != nil {
-		return errors.Wrap(err, "start")
+		return err
 	}
 
+	var allOutputBuffer bytes.Buffer
+
+	multiplexedProcessStdout := io.MultiWriter(processStdout, &allOutputBuffer)
+	multiplexedProcessStderr := io.MultiWriter(processStderr, &allOutputBuffer)
+
 	go func() {
-		if _, err := io.Copy(processStdout, stdout); err != nil {
-			log.Error("Piping stdout", err)
+		if _, err := io.Copy(multiplexedProcessStdout, stdout); err != nil {
+			log.Fatalf("stdout pipe: %s", err)
 		}
 	}()
 	go func() {
-		if _, err := io.Copy(processStderr, stderr); err != nil {
-			log.Error("Piping stderr", err)
+		if _, err := io.Copy(multiplexedProcessStderr, stderr); err != nil {
+			log.Fatalf("stderr pipe: %s", err)
 		}
 	}()
-	go func() {
-		_, err = io.Copy(stdin, processStdin)
-		stdin.Close()
-	}()
+
 	if err := cmd.Wait(); err != nil {
-		os.Exit(cmd.ProcessState.ExitCode())
+		return errors.New(allOutputBuffer.String())
 	}
+
 	return nil
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		log.Fatal("Expected two arguments: [runnerType] [script]")
+	log.SetLevel(log.DebugLevel)
+	if len(os.Args) != 2 {
+		log.Fatal("Expected argument: [runnerType]")
 	}
-	if err := run(runnerTypes[os.Args[1]], os.Args[2], os.Environ(), os.Stdin, os.Stdout, os.Stderr); err != nil {
-		log.Fatal(err)
-	}
+
+	runnerConfig := runnerTypes[os.Args[1]]
+
+	http.HandleFunc("/init", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		if cmd != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "Already inited")
+			return
+		}
+		var initMessage sandbox.InitMessage
+		defer r.Body.Close()
+		reader := json.NewDecoder(r.Body)
+		if err := reader.Decode(&initMessage); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "JSON parse error: %s", err)
+			scheduleShutdown()
+			return
+		}
+		// Write script file
+		if err := os.WriteFile(runnerConfig.scriptFilename, []byte(wrapScript(runnerConfig, initMessage.Script)), 0600); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "Error writing script: %s", err)
+			scheduleShutdown()
+			return
+		}
+
+		errorChan := make(chan error, 1)
+		go func() {
+			if err := run(runnerConfig, initMessage.Env, os.Stdout, os.Stderr); err != nil {
+				errorChan <- err
+			}
+		}()
+
+		// Wait for server to go up
+		// Bootup shouldn't take longer than 15s
+		// TODO: Remove magic value
+	waitLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				if ctx.Err() == context.DeadlineExceeded {
+					w.WriteHeader(http.StatusInternalServerError)
+					fmt.Fprint(w, "Deadline exceeded")
+					scheduleShutdown()
+					return
+				}
+				break waitLoop
+			case err := <-errorChan:
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(w, err.Error())
+				scheduleShutdown()
+				return
+			default:
+			}
+			_, err := net.Dial("tcp", "localhost:8080")
+			if err == nil {
+				break waitLoop
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "OK")
+	})
+	http.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
+		if cmd != nil && cmd.Process != nil {
+			cmd.Process.Kill()
+		}
+		log.Info("Function runtime shut down.")
+		os.Exit(0)
+	})
+
+	log.Info("Function runtime booted.")
+	log.Fatal(http.ListenAndServe(":8081", nil))
+
+}
+
+func scheduleShutdown() {
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		os.Exit(1)
+	}()
 }

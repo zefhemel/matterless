@@ -53,6 +53,7 @@ function myFunction() {
 # SlashCommand: MyCommand
 ```yaml
 trigger: test
+team_name: bla
 function: TestFunction1
 ```
 
@@ -60,6 +61,8 @@ function: TestFunction1
 # Bot: MyBot
 ```yaml
 username: my-bot
+team_names:
+  - Bla
 events:
   posted:
   - TestFunction1
@@ -78,4 +81,10 @@ events:
 function handle() {
     console.log("Triggered");
 }
+```
+
+# MattermostClient: MyClient
+```
+url: http://localhost
+token: abc
 ```

@@ -2,6 +2,7 @@ package bot
 
 import (
 	"fmt"
+	"github.com/zefhemel/matterless/pkg/application"
 	"regexp"
 	"strings"
 
@@ -12,6 +13,16 @@ var safeChannelRegexp *regexp.Regexp = regexp.MustCompile(`[^A-Za-z0-9\-]`)
 
 func safeChannelName(name string) string {
 	return strings.ToLower(safeChannelRegexp.ReplaceAllString(name, "-"))
+}
+
+func (mb *MatterlessBot) listenForLogs(userID string, app *application.Application) {
+	for le := range app.Logs() {
+		if le.Instance == nil {
+			// Init error, parse errors, don't ship to logger
+			continue
+		}
+		mb.postFunctionLog(userID, le.Instance.Name(), le.Message)
+	}
 }
 
 func (mb *MatterlessBot) postFunctionLog(userID string, functionName string, logMessage string) error {
@@ -26,9 +37,10 @@ func (mb *MatterlessBot) postFunctionLog(userID string, functionName string, log
 	apiDelay()
 	_, resp := client.AddChannelMember(ch.Id, userID)
 	logAPIResponse(resp, "add member")
+
 	_, resp = client.CreatePost(&model.Post{
 		ChannelId: ch.Id,
-		Message:   fmt.Sprintf("Log:\n```%s```", logMessage),
+		Message:   fmt.Sprintf("```\n%s```", logMessage),
 	})
 	logAPIResponse(resp, "create log post")
 	return nil

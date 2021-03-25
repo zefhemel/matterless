@@ -82,10 +82,6 @@ func NewBot(cfg config.Config) (*MatterlessBot, error) {
 
 // Start listens and handles incoming messages until the socket disconnects
 func (mb *MatterlessBot) Start() error {
-	if err := mb.botSource.Start(); err != nil {
-		return err
-	}
-
 	if err := mb.appContainer.Start(); err != nil {
 		return err
 	}
@@ -193,9 +189,8 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 	if post.Message[0] == '#' {
 		postApp := mb.appContainer.Get(post.Id)
 		if postApp == nil {
-			postApp = application.NewApplication(mb.cfg, mb.adminClient, post.Id, func(kind, message string) {
-				mb.postFunctionLog(post.UserId, kind, message)
-			})
+			postApp = application.NewApplication(mb.cfg, mb.adminClient, post.Id)
+			go mb.listenForLogs(post.UserId, postApp)
 		}
 		mb.appContainer.Register(post.Id, postApp)
 		if postApp.CurrentCode() == post.Message {

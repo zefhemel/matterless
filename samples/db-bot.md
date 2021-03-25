@@ -67,7 +67,6 @@ function jsonToMDTable(jsonArray) {
 
 
 async function handle(event) {
-    if(isWarmupEvent(event)) return;
     let store = new Store();
     let post = JSON.parse(event.data.post);
     let me = await client.getMeCached();
@@ -133,7 +132,7 @@ async function handle(event) {
             await client.addReaction(me.id, post.id, "white_check_mark");
             break;
         case "keys":
-            result = await store.queryPrefix(words[1] || "");
+            result = (await store.queryPrefix(words[1] || "")) || [];
             await client.createPost({
                 channel_id: post.channel_id,
                 root_id: post.id,
@@ -142,7 +141,7 @@ async function handle(event) {
             });
             break;
         case "all":
-            result = await store.queryPrefix("");
+            result = (await store.queryPrefix("")) || [];
             await client.createPost({
                 channel_id: post.channel_id,
                 root_id: post.id,

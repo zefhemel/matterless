@@ -15,6 +15,8 @@ type BotSource struct {
 	BotUserClient      *model.Client4
 }
 
+var _ EventSource = &BotSource{}
+
 func NewBotSource(adminClient *model.Client4, botName string, def *definition.BotDef, functionInvokeFunc definition.FunctionInvokeFunc) (*BotSource, error) {
 	bs := &BotSource{
 		botName:            botName,
@@ -93,12 +95,6 @@ func (bs *BotSource) ExtendDefinitions(defs *definition.Definitions) {
 	bs.mms.ExtendDefinitions(defs)
 }
 
-func (bs *BotSource) Start() error {
-	return bs.mms.Start()
-}
-
-func (bs *BotSource) Stop() {
+func (bs *BotSource) Close() {
 
 }
-
-var _ EventSource = &BotSource{}
