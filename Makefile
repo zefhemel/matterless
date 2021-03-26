@@ -7,8 +7,9 @@ build:
 	go build ${PACKAGE}/cmd/mls-lambda
 
 install:
-	go install ${PACKAGE}/cmd/mls-bot
 	go install ${PACKAGE}/cmd/mls
+	go install ${PACKAGE}/cmd/matterlessd
+	go install ${PACKAGE}/cmd/mls-watch
 
 run-bot: build
 	./mls-bot

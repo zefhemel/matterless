@@ -18,11 +18,13 @@ The application registers a new `@db-bot` bot you can talk to, these are the com
 
 That's all!
 
+
+
 ## Bot: DatabaseBot
 Defines the bot, here it is hardcoded to join the "Dev" team, please update that value to your particularly team you want to enable it for.
 ```yaml
 team_names:
-  - Dev
+  - Office
 username: db-bot
 display_name: Database bot
 description: My database bot

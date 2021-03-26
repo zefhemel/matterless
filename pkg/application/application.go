@@ -32,11 +32,14 @@ type Application struct {
 	cfg       config.Config
 }
 
-func NewApplication(cfg config.Config, adminClient *model.Client4, appName string) *Application {
+func NewApplication(cfg config.Config, appName string) *Application {
 	dataStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/%s", cfg.LevelDBDatabasesPath, util.SafeFilename(appName)))
 	if err != nil {
 		log.Fatal("Could not create data store for ", appName)
 	}
+	adminClient := model.NewAPIv4Client(cfg.MattermostURL)
+	adminClient.SetOAuthToken(cfg.AdminToken)
+
 	app := &Application{
 		cfg:         cfg,
 		appName:     appName,
@@ -60,6 +63,8 @@ func NewMockApplication(appName string, defs *definition.Definitions) *Applicati
 	return &Application{
 		appName:     appName,
 		definitions: defs,
+		sandbox:     sandbox.NewDockerSandbox(1*time.Minute, 5*time.Minute),
+		dataStore:   &store.MockStore{},
 	}
 }
 
@@ -104,8 +109,9 @@ func (app *Application) Eval(code string) error {
 
 	app.extendEnviron()
 
-	log.Debug("Starting listeners...")
 	app.reset()
+
+	log.Debug("Starting listeners...")
 
 	// Rebuild the whole thing
 	for name, def := range defs.MattermostClients {

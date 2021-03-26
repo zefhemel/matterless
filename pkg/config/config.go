@@ -14,6 +14,7 @@ type Config struct {
 	APIBindPort          int
 	APIExternalURL       string
 	LevelDBDatabasesPath string
+	RootToken            string
 }
 
 func FromEnv() Config {
@@ -29,5 +30,6 @@ func FromEnv() Config {
 		APIBindPort:          bindPort,
 		APIExternalURL:       os.Getenv("api_url"),
 		LevelDBDatabasesPath: os.Getenv("leveldb_databases_path"),
+		RootToken:            os.Getenv("root_token"),
 	}
 }

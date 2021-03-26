@@ -38,9 +38,11 @@ func NewBot(cfg config.Config) (*MatterlessBot, error) {
 		userCache:        map[string]*model.User{},
 		channelCache:     map[string]*model.Channel{},
 		channelNameCache: map[string]*model.Channel{},
-		appContainer:     application.NewContainer(cfg.APIBindPort),
+		appContainer:     application.NewContainer(cfg),
 		adminClient:      model.NewAPIv4Client(cfg.MattermostURL),
 	}
+
+	go mb.listenForLogs()
 
 	mb.adminClient.SetOAuthToken(cfg.AdminToken)
 
@@ -187,12 +189,12 @@ func (mb *MatterlessBot) setOnlyReaction(post *model.Post, emoji string) {
 func (mb *MatterlessBot) handleDirect(post *model.Post) {
 	client := mb.botSource.BotUserClient
 	if post.Message[0] == '#' {
-		postApp := mb.appContainer.Get(post.Id)
+		appName := fmt.Sprintf("%s:%s", post.UserId, post.Id)
+		postApp := mb.appContainer.Get(appName)
 		if postApp == nil {
-			postApp = application.NewApplication(mb.cfg, mb.adminClient, post.Id)
-			go mb.listenForLogs(post.UserId, postApp)
+			postApp = application.NewApplication(mb.cfg, appName)
 		}
-		mb.appContainer.Register(post.Id, postApp)
+		mb.appContainer.Register(appName, postApp)
 		if postApp.CurrentCode() == post.Message {
 			log.Debug("Code hasn't modified, skipping")
 			return

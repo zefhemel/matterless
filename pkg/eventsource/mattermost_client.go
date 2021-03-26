@@ -64,11 +64,11 @@ func (mms *MatterMostSource) start() error {
 				if ok {
 					if eventListeners, ok := mms.def.Events[evt.Event]; ok {
 						for _, eventListener := range eventListeners {
-							mms.functionInvokeFunc(eventListener, evt)
+							go mms.functionInvokeFunc(eventListener, evt)
 						}
 					} else if eventListeners, ok := mms.def.Events["all"]; ok {
 						for _, eventListener := range eventListeners {
-							mms.functionInvokeFunc(eventListener, evt)
+							go mms.functionInvokeFunc(eventListener, evt)
 						}
 					}
 				} else {

@@ -30,10 +30,19 @@ func main() {
 	adminClient := model.NewAPIv4Client(cfg.MattermostURL)
 	adminClient.SetOAuthToken(cfg.AdminToken)
 
-	appContainer := application.NewContainer(cfg.APIBindPort)
+	appContainer := application.NewContainer(cfg)
 	if err := appContainer.Start(); err != nil {
 		log.Fatal("Could not start app container", err)
 	}
+	go func() {
+		for le := range appContainer.Logs() {
+			if le.LogEntry.Instance == nil {
+				continue
+			}
+			log.Infof("[App: %s Function: %s] %s", le.AppName, le.LogEntry.Instance.Name(), le.LogEntry.Message)
+		}
+	}()
+
 	// File watch the definition file and reload on changes
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -50,17 +59,7 @@ func main() {
 
 		appName := filepath.Base(path)
 
-		app := application.NewApplication(cfg, adminClient, appName)
-
-		go func() {
-			for le := range app.Logs() {
-				if le.Instance == nil {
-					continue
-				}
-				log.Infof("[Function %s] %s", le.Instance.Name(), le.Message)
-			}
-		}()
-
+		app := application.NewApplication(cfg, appName)
 		err = app.Eval(string(data))
 		if err != nil {
 			log.Fatal(err)

@@ -2,7 +2,7 @@ package bot
 
 import (
 	"fmt"
-	"github.com/zefhemel/matterless/pkg/application"
+	log "github.com/sirupsen/logrus"
 	"regexp"
 	"strings"
 
@@ -15,13 +15,19 @@ func safeChannelName(name string) string {
 	return strings.ToLower(safeChannelRegexp.ReplaceAllString(name, "-"))
 }
 
-func (mb *MatterlessBot) listenForLogs(userID string, app *application.Application) {
-	for le := range app.Logs() {
-		if le.Instance == nil {
-			// Init error, parse errors, don't ship to logger
+func (mb *MatterlessBot) listenForLogs() {
+	for le := range mb.appContainer.Logs() {
+		if le.LogEntry.Instance == nil {
 			continue
 		}
-		mb.postFunctionLog(userID, le.Instance.Name(), le.Message)
+		log.Infof("[App: %s Function: %s] %s", le.AppName, le.LogEntry.Instance.Name(), le.LogEntry.Message)
+
+		parts := strings.Split(le.AppName, ":")
+		if len(parts) != 2 {
+			// This is not coming from a messenger bot
+			continue
+		}
+		mb.postFunctionLog(parts[0], le.LogEntry.Instance.Name(), le.LogEntry.Message)
 	}
 }
 

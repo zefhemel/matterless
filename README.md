@@ -18,7 +18,7 @@ A Matterless application consists of a number of _definitions_ written in Markdo
 
 Logic:
 * `Function`: for defining functions (snippets of code that are run when certain events occur, similar to AWS lambda functions)
-* `Library`: a convenient way to write reusable code once that is automatically available (conceptually: appended) in all functions in this application
+* `Module`: a convenient way to write reusable code once that is importable in all functions in this application
 * `Environment`:  defines environment variables available to all functions in the application.
   
 Event sources:
@@ -43,11 +43,15 @@ Here is "Hello world" in Matterless:
 
 For the remainder of this README these definitions will be inlined as Markdown, so they're easier to read. A horizontal rule will be used to make clear where the application code starts and ends.
 
-This application defines a single Matterless function called `HelloWorld` written in JavaScript. Functions are the core building blocks used to build matterless applications. When loaded by Matterless, this function will be invoked with an empty object (`{}`) as a warm-up call once, to ensure the code doesn't instantly crash. You can check if the event is a warm-up event and ignore it as follows (but you could also abuse it do perform initialization logic):
+This application defines a single Matterless function called `HelloWorld` written in JavaScript. Functions are the core building blocks used to build matterless applications. The function needs to be called `handle` and take one argument (the event). The function can be synchronous or asynchronous (`async function` or return a promise), and may return a value. Optionally, you can also define an `init` function, which will be invoked in case of a cold start once (e.g. to establish DB connections, cache data etc).
 
 -----
 ## Function: HelloFunction
 ```javascript
+function init() {
+    console.log("Initing...");
+}
+
 function handle(event) {
     if(isWarmupEvent(event)) return;
     console.log("Hello world!");
@@ -105,11 +109,11 @@ async function handle(event) {
 
 As mentioned, right now functions run are run in docker containers locally, in the future there may be other sandboxes implemented, such one based on AWS lambda, or Kubernetes.
 
-## Library
-It is likely to happen that you'll want to share some code between multiple functions. To do this, you can use the Library. In essence, any code you define in a Library will be appended to all other function code (note that in the previous example the below `reusableFunction` is invoked). 
+## Module: my-module
+It is likely to happen that you'll want to share some code between multiple functions. To do this, you can use the Module. In effect this will create a mini node module you can import (in this case via `import "my-module"` in your functions). 
 
 ```javascript
-function reusableFunction() {
+export function reusableFunction() {
     return "yo";
 }
 ```

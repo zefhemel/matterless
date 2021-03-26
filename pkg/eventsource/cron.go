@@ -32,7 +32,7 @@ func (cs *CronSource) Close() {
 	cs.cron.Stop()
 }
 
-func (c CronSource) ExtendDefinitions(defs *definition.Definitions) {
+func (cs CronSource) ExtendDefinitions(defs *definition.Definitions) {
 }
 
 type cronEvent struct {

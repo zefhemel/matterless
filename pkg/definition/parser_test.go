@@ -36,7 +36,7 @@ func TestParser(t *testing.T) {
 	assert.Equal(t, "1234", decls.MattermostClients["Me"].Token)
 	assert.Equal(t, "http://localhost:8065", decls.Environment["MattermostURL"])
 	assert.Equal(t, "1234", decls.Environment["MattermostToken"])
-	assert.Equal(t, "javascript", decls.Modules[""].Language)
+	assert.Equal(t, "javascript", decls.Modules["my-module"].Language)
 	assert.Equal(t, "/test", decls.APIs[0].Path)
 	assert.Equal(t, definition.FunctionID("TestFunction2"), decls.APIs[0].Function)
 	assert.Equal(t, definition.FunctionID("TestFunction1"), decls.Bots["MyBot"].Events["posted"][0])

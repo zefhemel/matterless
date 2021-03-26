@@ -31,8 +31,8 @@ func (ag *APIGateway) exposeAPIRoute() {
 			return
 		}
 		token := authHeaderParts[1]
-		app, ok := ag.appMap[appName]
-		if !ok {
+		app := ag.container.Get(appName)
+		if app == nil {
 			http.NotFound(w, r)
 			return
 		}

@@ -32,7 +32,7 @@ MattermostToken: 1234
 ```
 
 ---
-# Library
+# Module: my-module
 
 ```javascript
 function myFunction() {

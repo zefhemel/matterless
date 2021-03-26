@@ -3,14 +3,16 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"expvar"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
 	"net/http"
-	"strings"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -24,15 +26,21 @@ type APIGateway struct {
 	wg         *sync.WaitGroup
 
 	functionInvokeFunc FunctionInvokeFunc
-	appMap             map[string]*Application
+	container          *Container
 }
 
-func NewAPIGateway(bindPort int, appMap map[string]*Application, functionInvokeFunc FunctionInvokeFunc) *APIGateway {
+func init() {
+	expvar.Publish("goRoutines", expvar.Func(func() interface{} {
+		return runtime.NumGoroutine()
+	}))
+}
+
+func NewAPIGateway(config config.Config, container *Container, functionInvokeFunc FunctionInvokeFunc) *APIGateway {
 	r := mux.NewRouter()
 
 	srv := &http.Server{
 		Handler:      r,
-		Addr:         fmt.Sprintf("0.0.0.0:%d", bindPort),
+		Addr:         fmt.Sprintf("0.0.0.0:%d", config.APIBindPort),
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
@@ -40,15 +48,15 @@ func NewAPIGateway(bindPort int, appMap map[string]*Application, functionInvokeF
 	log.Debugf("Configured API APIGateway to listen on %s", srv.Addr)
 
 	ag := &APIGateway{
-		bindPort:           bindPort,
-		appMap:             appMap,
+		bindPort:           config.APIBindPort,
+		container:          container,
 		server:             srv,
 		rootRouter:         r,
 		wg:                 &sync.WaitGroup{},
 		functionInvokeFunc: functionInvokeFunc,
 	}
 
-	ag.buildRouter()
+	ag.buildRouter(config)
 
 	return ag
 }
@@ -123,29 +131,20 @@ func (ag *APIGateway) handleEndpoint(appName string, endPoint *definition.Endpoi
 	}
 }
 
-func (ag *APIGateway) buildRouter() {
-	ag.rootRouter.HandleFunc("/info", func(writer http.ResponseWriter, request *http.Request) {
-		defer request.Body.Close()
-		writer.Header().Set("content-type", "text/plain")
-		writer.WriteHeader(http.StatusOK)
-		fmt.Fprint(writer, "Endpoints exposed:\n\n")
-
-		for appName, app := range ag.appMap {
-			for _, endpointDef := range app.Definitions().APIs {
-				fmt.Fprintf(writer, "/%s/%s (methods: %s)\n", appName, endpointDef.Path, strings.Join(endpointDef.Methods, ", "))
-			}
-		}
-	})
+func (ag *APIGateway) buildRouter(config config.Config) {
+	ag.rootRouter.Handle("/info", expvar.Handler())
+	ag.exposeRootAPI(config)
 	ag.exposeAPIRoute()
 	ag.rootRouter.HandleFunc("/{app}/{endpointPath:.*}", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
 		appName := vars["app"]
 		endpointPath := fmt.Sprintf("/%s", vars["endpointPath"])
-		if app, ok := ag.appMap[appName]; ok {
+		if app := ag.container.Get(appName); app != nil {
 			handled := false
 			for _, endpointDef := range app.Definitions().APIs {
 				if endpointPath == endpointDef.Path {
+					// TODO: Check method as well
 					ag.handleEndpoint(appName, endpointDef, w, r)
 					handled = true
 				}
