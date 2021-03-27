@@ -6,6 +6,7 @@ import (
 	"expvar"
 	"fmt"
 	"github.com/gorilla/mux"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
@@ -90,65 +91,42 @@ func (ag *APIGateway) Stop() {
 	ag.wg.Wait()
 }
 
-//
-//func (ag *APIGateway) handleEndpoint(appName string, endPoint *definition.EndpointDef, writer http.ResponseWriter, request *http.Request) {
-//	evt, err := ag.buildEvent(request)
-//	if err != nil {
-//		writer.WriteHeader(http.StatusInternalServerError)
-//		fmt.Fprintf(writer, "Error: %s", err)
-//		return
-//	}
-//	var result interface{}
-//	if endPoint.Decorate != nil {
-//		result = endPoint.Decorate(evt, func(name definition.FunctionID, event interface{}) interface{} {
-//			return ag.functionInvokeFunc(appName, name, event)
-//		})
-//	} else {
-//		result = ag.functionInvokeFunc(appName, endPoint.Function, evt)
-//	}
-//
-//	var apiGatewayResp definition.APIGatewayResponse
-//	if err := json.Unmarshal([]byte(util.MustJsonString(result)), &apiGatewayResp); err != nil {
-//		writer.WriteHeader(http.StatusInternalServerError)
-//		fmt.Fprintf(writer, "Error: %s", err)
-//		return
-//	}
-//	if apiGatewayResp.Headers != nil {
-//		for name, value := range apiGatewayResp.Headers {
-//			writer.Header().Set(name, value)
-//		}
-//	}
-//	if apiGatewayResp.Status == 0 {
-//		apiGatewayResp.Status = http.StatusOK
-//	}
-//	switch body := apiGatewayResp.Body.(type) {
-//	case string:
-//		writer.WriteHeader(apiGatewayResp.Status)
-//		writer.Write([]byte(body))
-//	default:
-//		writer.Header().Set("content-type", "application/json")
-//		writer.WriteHeader(apiGatewayResp.Status)
-//		writer.Write([]byte(util.MustJsonString(body)))
-//	}
-//}
-
 func (ag *APIGateway) buildRouter(config config.Config) {
 	ag.rootRouter.Handle("/info", expvar.Handler())
 	ag.exposeRootAPI(config)
-	ag.exposeAPIRoute()
+	ag.exposeStoreAPI()
 	ag.exposeEventAPI()
-	ag.rootRouter.HandleFunc("/{path:.*}", func(writer http.ResponseWriter, request *http.Request) {
-		evt, err := ag.buildEvent(request)
+	ag.rootRouter.HandleFunc("/{appName}/{path:.*}", func(writer http.ResponseWriter, request *http.Request) {
+		vars := mux.Vars(request)
+		appName := vars["appName"]
+		path := vars["path"]
+		evt, err := ag.buildEvent(path, request)
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(writer, "Error: %s", err)
 			return
 		}
-		response, err := ag.container.EventBus().Call(fmt.Sprintf("http:%s", request.RequestURI), evt)
+		app := ag.container.Get(appName)
+		if app == nil {
+			http.NotFound(writer, request)
+			return
+		}
+		response, err := app.EventBus().Call(fmt.Sprintf("http:%s:/%s", request.Method, path), evt)
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(writer, "Error: %s", err)
 			return
+		}
+
+		if _, ok := response.(map[string]interface{}); ok {
+			// Custom handler response with plain map[string]interface{}, map back to APIGatewayResponse
+			var apiGResp definition.APIGatewayResponse
+			if err := mapstructure.Decode(response, &apiGResp); err != nil {
+				writer.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(writer, err.Error())
+				return
+			}
+			response = &apiGResp
 		}
 
 		if apiResponse, ok := response.(*definition.APIGatewayResponse); ok {
@@ -175,37 +153,11 @@ func (ag *APIGateway) buildRouter(config config.Config) {
 			return
 		}
 	})
-	//ag.rootRouter.HandleFunc("/{app}/{endpointPath:.*}", func(w http.ResponseWriter, r *http.Request) {
-	//	defer r.Body.Close()
-	//	vars := mux.Vars(r)
-	//	appName := vars["app"]
-	//	endpointPath := fmt.Sprintf("/%s", vars["endpointPath"])
-	//	if app := ag.container.Get(appName); app != nil {
-	//		handled := false
-	//		for _, endpointDef := range app.Definitions().APIs {
-	//			if endpointPath == endpointDef.Path {
-	//				// TODO: Check method as well
-	//				ag.handleEndpoint(appName, endpointDef, w, r)
-	//				handled = true
-	//			}
-	//		}
-	//		if !handled {
-	//			w.WriteHeader(http.StatusNotFound)
-	//			log.Infof("No handler for %s%s", appName, endpointPath)
-	//			fmt.Fprintf(w, "No such path: %s%s", appName, endpointPath)
-	//		}
-	//	} else {
-	//		w.WriteHeader(http.StatusNotFound)
-	//		log.Infof("No such app %s", appName)
-	//		fmt.Fprintf(w, "No such app: %s", appName)
-	//	}
-	//})
 }
 
-func (ag *APIGateway) buildEvent(request *http.Request) (*definition.APIGatewayRequestEvent, error) {
-	vars := mux.Vars(request)
+func (ag *APIGateway) buildEvent(path string, request *http.Request) (*definition.APIGatewayRequestEvent, error) {
 	evt := &definition.APIGatewayRequestEvent{
-		Path:          fmt.Sprintf("/%s", vars["endpointPath"]),
+		Path:          fmt.Sprintf("/%s", path),
 		Method:        request.Method,
 		Headers:       util.FlatStringMap(request.Header),
 		RequestParams: util.FlatStringMap(request.URL.Query()),

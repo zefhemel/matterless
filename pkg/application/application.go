@@ -52,12 +52,13 @@ func NewApplication(cfg config.Config, appName string) *Application {
 }
 
 // Only for testing
-func NewMockApplication(appName string, defs *definition.Definitions) *Application {
+func NewMockApplication(appName string) *Application {
 	return &Application{
 		appName:     appName,
-		definitions: defs,
+		definitions: &definition.Definitions{},
 		sandbox:     sandbox.NewDockerSandbox(eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute),
 		dataStore:   &store.MockStore{},
+		eventBus:    eventbus.NewLocalEventBus(),
 	}
 }
 
@@ -69,23 +70,17 @@ func (app *Application) InvokeFunction(name definition.FunctionID, event interfa
 	defer cancel()
 	functionInstance, err := app.sandbox.Function(ctx, string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(functionDef.Language), functionDef.Config, functionDef.Code)
 	if err != nil {
-		app.eventBus.Publish(fmt.Sprintf("logs:%s:%s", app.appName, name), LogEntry{
-			AppName: app.appName,
-			LogEntry: sandbox.LogEntry{
-				Instance: functionInstance,
-				Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
-			},
+		app.EventBus().Publish(fmt.Sprintf("logs:%s", name), sandbox.LogEntry{
+			Instance: functionInstance,
+			Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
 		})
 		return nil
 	}
 	result, err := functionInstance.Invoke(ctx, event)
 	if err != nil {
-		app.eventBus.Publish(fmt.Sprintf("logs:%s:%s", app.appName, name), LogEntry{
-			AppName: app.appName,
-			LogEntry: sandbox.LogEntry{
-				Instance: functionInstance,
-				Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
-			},
+		app.EventBus().Publish(fmt.Sprintf("logs:%s", name), sandbox.LogEntry{
+			Instance: functionInstance,
+			Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
 		})
 	}
 	return result

@@ -20,7 +20,7 @@ import websocketClient from 'mattermost-redux/client/websocket_client.js';
 let wsClient = websocketClient['default'];
 
 async function init(config) {
-    console.log("Starting mattermost client with config", config)
+    console.log("Starting mattermost client with config", config);
     try {
         wsClient.setEventCallback(function(msg) {
             if(config.events.indexOf(msg.event) != -1) {
@@ -46,7 +46,10 @@ mattermost:hello:
   - MyCustomEventFunc
 mattermost:posted:
   - MyCustomEventFunc
+"http:GET:/test":
+  - MyHTTPFunc
 ```
+
 
 # Function: MyCustomEventFunc
 ```javascript
@@ -54,3 +57,16 @@ function handle(evt) {
     console.log("Custom event trigggered", evt);
 }
 ```
+
+# Function: MyHTTPFunc
+```javascript
+function handle(event) {
+    console.log(event); 
+    return {
+        status: 200,
+        body: "Yo yo yo"
+    };
+}
+```
+
+

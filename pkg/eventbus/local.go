@@ -2,6 +2,7 @@ package eventbus
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -64,7 +65,7 @@ func (l *LocalEventBus) UnsubscribeAllMatchingPattern(pattern string) {
 }
 
 func patternToRegexp(pattern string) *regexp.Regexp {
-	return regexp.MustCompile(strings.ReplaceAll(regexp.QuoteMeta(pattern), "\\*", "(.*)"))
+	return regexp.MustCompile(fmt.Sprintf("^%s$", strings.ReplaceAll(regexp.QuoteMeta(pattern), "\\*", "(.*)")))
 }
 
 func (l *LocalEventBus) Publish(eventName string, eventData interface{}) {

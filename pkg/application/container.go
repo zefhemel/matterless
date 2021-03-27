@@ -20,7 +20,7 @@ type Container struct {
 	apiGateway *APIGateway
 }
 
-func NewContainer(config config.Config) *Container {
+func NewContainer(config config.Config) (*Container, error) {
 	appMap := map[string]*Application{}
 	c := &Container{
 		apps:     appMap,
@@ -30,15 +30,15 @@ func NewContainer(config config.Config) *Container {
 		return appMap[appName].InvokeFunction(name, event)
 	})
 
-	return c
+	if err := c.apiGateway.Start(); err != nil {
+		return nil, err
+	}
+
+	return c, nil
 }
 
 func (c *Container) EventBus() eventbus.EventBus {
 	return c.eventBus
-}
-
-func (c *Container) Start() error {
-	return c.apiGateway.Start()
 }
 
 func (c *Container) Close() {
@@ -54,7 +54,7 @@ func (c *Container) Register(name string, app *Application) {
 	// Listen to sandbox log events, republish on parent eventbus
 	app.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
 		if le, ok := eventData.(sandbox.LogEntry); ok {
-			c.eventBus.Publish(fmt.Sprintf("logs:%s:%s", name, le.Instance.Name()), LogEntry{
+			c.EventBus().Publish(fmt.Sprintf("logs:%s:%s", name, le.Instance.Name()), LogEntry{
 				AppName:  name,
 				LogEntry: le,
 			})

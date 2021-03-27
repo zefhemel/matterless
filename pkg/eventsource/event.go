@@ -22,10 +22,14 @@ func NewEventEventSource(eventBus eventbus.EventBus, defs map[string][]definitio
 		sub := subscription{
 			eventPattern: eventName,
 			subscriptionFunc: func(eventName string, eventData interface{}) (interface{}, error) {
+				var result interface{} = nil
 				for _, funcToInvoke := range funcsToInvoke {
-					functionInvokeFunc(funcToInvoke, eventData)
+					invokeResult := functionInvokeFunc(funcToInvoke, eventData)
+					if invokeResult != nil {
+						result = invokeResult
+					}
 				}
-				return nil, nil
+				return result, nil
 			},
 		}
 		eventBus.Subscribe(eventName, sub.subscriptionFunc)

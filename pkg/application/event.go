@@ -1,55 +1,51 @@
 package application
 
 import (
-	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/definition"
+	"encoding/json"
+	"fmt"
+	"github.com/gorilla/mux"
 	"net/http"
 	"strings"
 )
 
 func (ag *APIGateway) exposeEventAPI() {
-	ag.container.eventBus.Subscribe("http:/*/_event/*", func(eventName string, eventData interface{}) (interface{}, error) {
-		pieces := strings.Split(eventName, "/")
-		appName := pieces[1]
-		evName := pieces[3]
-		httpReq, ok := eventData.(*definition.APIGatewayRequestEvent)
-		if !ok {
-			log.Fatal("Not an API gateway request", eventData)
-		}
-		authHeader := httpReq.Headers["Authorization"]
+	ag.rootRouter.HandleFunc("/{app}/_event/{eventName}", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		vars := mux.Vars(r)
+		appName := vars["app"]
+		eventName := vars["eventName"]
+		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			return &definition.APIGatewayResponse{
-				Status: http.StatusUnauthorized,
-				Body:   "No authorization provided",
-			}, nil
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, "No authorization provided")
+			return
 		}
 		authHeaderParts := strings.Split(authHeader, " ")
 		if len(authHeaderParts) != 2 || len(authHeaderParts) == 2 && authHeaderParts[0] != "bearer" {
-			return &definition.APIGatewayResponse{
-				Status: http.StatusUnauthorized,
-				Body:   "No authorization provided",
-			}, nil
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, "No authorization provided")
+			return
 		}
 		token := authHeaderParts[1]
 		app := ag.container.Get(appName)
 		if app == nil {
-			return &definition.APIGatewayResponse{
-				Status: http.StatusNotFound,
-				Body:   "App not found",
-			}, nil
+			http.NotFound(w, r)
+			return
 		}
 		if token != app.apiToken {
-			return &definition.APIGatewayResponse{
-				Status: http.StatusUnauthorized,
-				Body:   "Invalid token",
-			}, nil
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, "Wrong token")
+			return
 		}
-		app.EventBus().Publish(evName, httpReq.JSONBody)
-		return &definition.APIGatewayResponse{
-			Status: 200,
-			Body: map[string]string{
-				"status": "ok",
-			},
-		}, nil
-	})
+		var bodyJSON interface{}
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&bodyJSON); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
+			return
+		}
+		app.EventBus().Publish(eventName, bodyJSON)
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"status":"ok"}`)
+	}).Methods(http.MethodPost)
 }

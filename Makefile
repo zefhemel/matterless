@@ -2,8 +2,7 @@ PACKAGE=github.com/zefhemel/matterless
 DOCKER_RUNNER_IMAGE=zefhemel/matterless-runner-docker
 
 install:
-	go install ${PACKAGE}/cmd/matterlessd
-	go install ${PACKAGE}/cmd/mls-watch
+	go install ${PACKAGE}/cmd/mls
 
 test:
 	go test ${PACKAGE}/pkg/...
