@@ -1,6 +1,8 @@
 package application
 
 import (
+	"fmt"
+	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventbus"
@@ -48,6 +50,19 @@ func (c *Container) Close() {
 
 func (c *Container) Register(name string, app *Application) {
 	c.apps[name] = app
+
+	// Listen to sandbox log events, republish on parent eventbus
+	app.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
+		if le, ok := eventData.(sandbox.LogEntry); ok {
+			c.eventBus.Publish(fmt.Sprintf("logs:%s:%s", name, le.Instance.Name()), LogEntry{
+				AppName:  name,
+				LogEntry: le,
+			})
+		} else {
+			log.Fatal("Did not get sandbox.LogEntry", eventData)
+		}
+		return nil, nil
+	})
 }
 
 func (c *Container) Get(name string) *Application {

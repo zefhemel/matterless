@@ -34,14 +34,14 @@ type Application struct {
 	cfg       config.Config
 }
 
-func NewApplication(cfg config.Config, eventBus eventbus.EventBus, appName string) *Application {
+func NewApplication(cfg config.Config, appName string) *Application {
 	dataStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/%s", cfg.LevelDBDatabasesPath, util.SafeFilename(appName)))
 	if err != nil {
 		log.Fatal("Could not create data store for ", appName)
 	}
 	adminClient := model.NewAPIv4Client(cfg.MattermostURL)
 	adminClient.SetOAuthToken(cfg.AdminToken)
-
+	eventBus := eventbus.NewLocalEventBus()
 	app := &Application{
 		cfg:         cfg,
 		appName:     appName,
@@ -50,21 +50,8 @@ func NewApplication(cfg config.Config, eventBus eventbus.EventBus, appName strin
 		dataStore:   dataStore,
 		apiToken:    util.TokenGenerator(),
 		// TODO: Make this configurable
-		sandbox: sandbox.NewDockerSandbox(1*time.Minute, 5*time.Minute),
+		sandbox: sandbox.NewDockerSandbox(eventBus, 1*time.Minute, 5*time.Minute),
 	}
-
-	// Listen to sandbox log events, republish on parent eventbus
-	app.sandbox.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
-		if le, ok := eventData.(sandbox.LogEntry); ok {
-			eventBus.Publish(fmt.Sprintf("logs:%s:%s", appName, le.Instance.Name()), LogEntry{
-				AppName:  appName,
-				LogEntry: le,
-			})
-		} else {
-			log.Fatal("Did not get sandbox.LogEntry", eventData)
-		}
-		return nil, nil
-	})
 
 	return app
 }
@@ -74,7 +61,7 @@ func NewMockApplication(appName string, defs *definition.Definitions) *Applicati
 	return &Application{
 		appName:     appName,
 		definitions: defs,
-		sandbox:     sandbox.NewDockerSandbox(1*time.Minute, 5*time.Minute),
+		sandbox:     sandbox.NewDockerSandbox(eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute),
 		dataStore:   &store.MockStore{},
 	}
 }
@@ -85,7 +72,7 @@ func (app *Application) InvokeFunction(name definition.FunctionID, event interfa
 	// TODO: Remove hardcoded values
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
-	functionInstance, err := app.sandbox.Function(ctx, string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(functionDef.Language), functionDef.Code)
+	functionInstance, err := app.sandbox.Function(ctx, string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(functionDef.Language), functionDef.Config, functionDef.Code)
 	if err != nil {
 		app.eventBus.Publish(fmt.Sprintf("logs:%s:%s", app.appName, name), LogEntry{
 			AppName: app.appName,
@@ -128,56 +115,17 @@ func (app *Application) Eval(code string) error {
 
 	app.reset()
 
-	log.Debug("Starting listeners...")
-
-	// Rebuild the whole thing
-	for name, def := range defs.MattermostClients {
-		src, err := eventsource.NewMatterMostSource(name, def, app.InvokeFunction)
-		if err != nil {
-			return err
-		}
-		app.connectedEventSources = append(app.connectedEventSources, src)
-		src.ExtendDefinitions(defs)
-		log.Debug("Starting Mattermost client: ", name)
-	}
-
-	for name, def := range defs.Bots {
-		src, err := eventsource.NewBotSource(app.adminClient, name, def, app.InvokeFunction)
-		if err != nil {
-			return err
-		}
-		app.connectedEventSources = append(app.connectedEventSources, src)
-		src.ExtendDefinitions(defs)
-		log.Debug("Starting Bot: ", name)
-	}
-
-	for name, def := range defs.SlashCommands {
-		src, err := eventsource.NewSlashCommandSource(app.cfg, app.adminClient, app.appName, name, def)
-		if err != nil {
-			return err
-		}
-		app.connectedEventSources = append(app.connectedEventSources, src)
-		log.Debug("Starting Slashcommand: ", name)
-		src.ExtendDefinitions(defs)
-	}
-
-	c := eventsource.NewCronSource(defs.Crons, app.InvokeFunction)
-	if err != nil {
-		return err
-	}
-	app.connectedEventSources = append(app.connectedEventSources, c)
-	c.ExtendDefinitions(defs)
-
 	es := eventsource.NewEventEventSource(app.eventBus, defs.Events, app.InvokeFunction)
 	app.connectedEventSources = append(app.connectedEventSources, es)
 	es.ExtendDefinitions(defs)
 
+	log.Info("Starting jobs...")
 	for name, def := range defs.Jobs {
-		ji, err := app.sandbox.Job(context.Background(), string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(def.Language), def.Code)
+		ji, err := app.sandbox.Job(context.Background(), string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(def.Language), def.Config, def.Code)
 		if err != nil {
 			return errors.Wrap(err, "init job")
 		}
-		envMap, err := ji.Start(context.Background(), map[string]interface{}{})
+		envMap, err := ji.Start(context.Background())
 		if err != nil {
 			return errors.Wrap(err, "init job")
 		}
@@ -186,22 +134,14 @@ func (app *Application) Eval(code string) error {
 		}
 	}
 
-	log.Debug("Testing functions...")
-	testResults := definition.TestDeclarations(defs, app.sandbox)
-	for name, functionResult := range testResults.Functions {
-		if functionResult != nil {
-			app.eventBus.Publish(fmt.Sprintf("logs:%s:%s", app.appName, name), LogEntry{
-				AppName: app.appName,
-				LogEntry: sandbox.LogEntry{
-					Instance: nil,
-					Message:  fmt.Sprintf("[%s Check error] %s", name, functionResult.Error()),
-				},
-			})
+	log.Info("Initializing functions...")
+	for name, def := range defs.Functions {
+		_, err := app.sandbox.Function(context.Background(), string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(def.Language), def.Config, def.Code)
+		if err != nil {
+			return errors.Wrap(err, "init function")
 		}
 	}
-	if testResults.String() != "" {
-		return errors.Wrap(errors.New(testResults.String()), "test run")
-	}
+
 	log.Debug("All ready to go!")
 	return nil
 }
@@ -224,4 +164,8 @@ func (app *Application) Close() error {
 
 func (app *Application) Definitions() *definition.Definitions {
 	return app.definitions
+}
+
+func (app *Application) EventBus() eventbus.EventBus {
+	return app.eventBus
 }

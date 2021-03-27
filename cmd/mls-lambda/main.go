@@ -9,6 +9,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/sandbox"
+	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net"
 	"net/http"
@@ -42,11 +43,16 @@ var runnerTypes = map[string]runnerConfig{
 	},
 }
 
-func wrapScript(runnerConfig runnerConfig, code string) string {
+func wrapScript(runnerConfig runnerConfig, configMap map[string]interface{}, code string) string {
+	if configMap == nil {
+		configMap = map[string]interface{}{}
+	}
 	data := struct {
-		Code string
+		Code       string
+		ConfigJSON string
 	}{
-		Code: code,
+		Code:       code,
+		ConfigJSON: util.MustJsonString(configMap),
 	}
 	tmpl, err := template.New("sourceTemplate").Parse(runnerConfig.template)
 	if err != nil {
@@ -132,7 +138,7 @@ func main() {
 			return
 		}
 		// Write script file
-		if err := os.WriteFile(runnerConfig.scriptFilename, []byte(wrapScript(runnerConfig, initMessage.Script)), 0600); err != nil {
+		if err := os.WriteFile(runnerConfig.scriptFilename, []byte(wrapScript(runnerConfig, initMessage.Config, initMessage.Script)), 0600); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "Error writing script: %s", err)
 			scheduleShutdown()

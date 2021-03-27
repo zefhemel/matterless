@@ -1,6 +1,7 @@
 package definition_test
 
 import (
+	log "github.com/sirupsen/logrus"
 	"strings"
 	"testing"
 
@@ -14,16 +15,11 @@ import (
 var test1Md string
 
 func TestValidation(t *testing.T) {
-	err := definition.Validate("schema/mattermost_client.schema.json", `
+	err := definition.Validate("schema/environment.schema.json", `
 url: http://localhost
 token: abc
 `)
 	assert.NoError(t, err)
-	err = definition.Validate("schema/mattermost_client.schema.json", `
-url: http://localhost
-`)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "token is required")
 }
 
 func TestParser(t *testing.T) {
@@ -33,31 +29,103 @@ func TestParser(t *testing.T) {
 	assert.Equal(t, "TestFunction1", decls.Functions["TestFunction1"].Name)
 	assert.Equal(t, "TestFunction2", decls.Functions["TestFunction2"].Name)
 	assert.Equal(t, "javascript", decls.Functions["TestFunction2"].Language)
-	assert.Equal(t, "1234", decls.MattermostClients["Me"].Token)
 	assert.Equal(t, "http://localhost:8065", decls.Environment["MattermostURL"])
 	assert.Equal(t, "1234", decls.Environment["MattermostToken"])
 	assert.Equal(t, "javascript", decls.Modules["my-module"].Language)
-	assert.Equal(t, "/test", decls.APIs[0].Path)
-	assert.Equal(t, definition.FunctionID("TestFunction2"), decls.APIs[0].Function)
-	assert.Equal(t, definition.FunctionID("TestFunction1"), decls.Bots["MyBot"].Events["posted"][0])
-
-	assert.Equal(t, "0 * * * * *", decls.Crons[0].Schedule)
-	assert.Equal(t, definition.FunctionID("MyRepeatedTask"), decls.Crons[0].Function)
 }
 
-func TestParseFailures(t *testing.T) {
-	_, err := definition.Parse(strings.ReplaceAll(`# MattermostClient: MyClient
+func TestFunctionParserParameterBlock(t *testing.T) {
+	defs, err := definition.Parse(strings.ReplaceAll(`# Function: MyFunc
 |||
-url: http://bla.com
+config:
+  arg1: Zef
+  list:
+  - a
+  - b
+  number: 10
+docker_image: bla/bla
+|||
+
+|||javascript
+function handle() {
+
+}
+|||
+`, "|||", "```"))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(defs.Functions))
+	assert.Equal(t, "Zef", defs.Functions["MyFunc"].Config.Config["arg1"])
+	assert.Equal(t, "bla/bla", defs.Functions["MyFunc"].Config.DockerImage)
+	assert.Contains(t, defs.Functions["MyFunc"].Code, "handle")
+}
+
+func TestFunctionParserParameterBlockFail(t *testing.T) {
+	_, err := definition.Parse(strings.ReplaceAll(`# Function: MyFunc
+|||
+randomStuff
+|||
+
+|||javascript
+function handle() {
+
+}
 |||
 `, "|||", "```"))
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "token")
-	_, err = definition.Parse(strings.ReplaceAll(`# API
-|||
-- path: /bla
+	assert.Contains(t, err.Error(), "unmarshal")
+}
+
+func TestFunctionParser(t *testing.T) {
+	defs, err := definition.Parse(strings.ReplaceAll(`# Function: MyFunc
+|||javascript
+function handle() {
+
+}
 |||
 `, "|||", "```"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "function is required")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(defs.Functions))
+	log.Infof("%+v", defs.Functions["MyFunc"])
+	assert.Equal(t, 0, len(defs.Functions["MyFunc"].Config.Config))
+	assert.Contains(t, defs.Functions["MyFunc"].Code, "handle")
+}
+
+func TestJobParserParameterBlock(t *testing.T) {
+	defs, err := definition.Parse(strings.ReplaceAll(`# Job: MyJob
+|||
+config:
+  arg1: Zef
+  list:
+  - a
+  - b
+  number: 10
+docker_image: bla/bla
+|||
+
+|||javascript
+function handle() {
+
+}
+|||
+`, "|||", "```"))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(defs.Jobs))
+	assert.Equal(t, "Zef", defs.Jobs["MyJob"].Config.Config["arg1"])
+	assert.Equal(t, "bla/bla", defs.Jobs["MyJob"].Config.DockerImage)
+	assert.Contains(t, defs.Jobs["MyJob"].Code, "handle")
+}
+
+func TestJobParser(t *testing.T) {
+	defs, err := definition.Parse(strings.ReplaceAll(`# Job: MyJob
+|||javascript
+function run() {
+
+}
+|||
+`, "|||", "```"))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(defs.Jobs))
+	log.Infof("%+v", defs.Jobs["MyJob"])
+	assert.Equal(t, 0, len(defs.Jobs["MyJob"].Config.Config))
+	assert.Contains(t, defs.Jobs["MyJob"].Code, "run()")
 }

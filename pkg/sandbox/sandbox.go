@@ -2,7 +2,7 @@ package sandbox
 
 import (
 	"context"
-	"github.com/zefhemel/matterless/pkg/eventbus"
+	"github.com/zefhemel/matterless/pkg/definition"
 )
 
 type LogEntry struct {
@@ -14,9 +14,8 @@ type ModuleMap map[string]string
 type EnvMap map[string]string
 
 type Sandbox interface {
-	Function(ctx context.Context, name string, env EnvMap, modulesMap ModuleMap, code string) (FunctionInstance, error)
-	Job(ctx context.Context, name string, env EnvMap, modulesMap ModuleMap, code string) (JobInstance, error)
-	EventBus() eventbus.EventBus
+	Function(ctx context.Context, name string, env EnvMap, modulesMap ModuleMap, functionConfig definition.FunctionConfig, code string) (FunctionInstance, error)
+	Job(ctx context.Context, name string, env EnvMap, modulesMap ModuleMap, functionConfig definition.FunctionConfig, code string) (JobInstance, error)
 	Close()
 }
 
@@ -27,6 +26,6 @@ type FunctionInstance interface {
 
 type JobInstance interface {
 	Name() string
-	Start(ctx context.Context, params map[string]interface{}) (EnvMap, error)
+	Start(ctx context.Context) (EnvMap, error)
 	Stop()
 }

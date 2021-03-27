@@ -26,7 +26,7 @@ func (ag *APIGateway) exposeRootAPI(cfg config.Config) {
 
 		app := ag.container.Get(appName)
 		if app == nil {
-			app = NewApplication(cfg, ag.container.EventBus(), appName)
+			app = NewApplication(cfg, appName)
 			ag.container.Register(appName, app)
 		}
 

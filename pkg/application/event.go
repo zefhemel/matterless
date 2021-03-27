@@ -1,7 +1,6 @@
 package application
 
 import (
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"net/http"
@@ -45,7 +44,7 @@ func (ag *APIGateway) exposeEventAPI() {
 				Body:   "Invalid token",
 			}, nil
 		}
-		ag.container.eventBus.Publish(fmt.Sprintf("%s:%s", appName, evName), httpReq.JSONBody)
+		app.EventBus().Publish(evName, httpReq.JSONBody)
 		return &definition.APIGatewayResponse{
 			Status: 200,
 			Body: map[string]string{

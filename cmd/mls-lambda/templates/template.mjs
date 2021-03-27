@@ -1,42 +1,46 @@
 {{.Code}}
 
 var _init, _start, _run, _stop, _handle;
-// Initialization
-try {
-    _init = init;
-} catch (e) {
-    _init = () => {
-    };
-}
+(function() {
+    var config = {{.ConfigJSON}};
+    // Initialization
+    try {
+        _init = init.bind(null, config);
+    } catch (e) {
+        _init = () => {
+        };
+    }
 
 // Functions
-try {
-    _handle = handle;
-} catch (e) {
-    _handle = () => {
-    };
-}
+    try {
+        _handle = handle;
+    } catch (e) {
+        _handle = () => {
+        };
+    }
 
 // Jobs
-try {
-    _start = start;
-} catch (e) {
-    _start = () => {
-    };
-}
-try {
-    _run = run;
-} catch (e) {
-    _run = () => {
-    };
-}
+    try {
+        _start = start;
+    } catch (e) {
+        _start = () => {
+        };
+    }
+    try {
+        _run = run;
+    } catch (e) {
+        _run = () => {
+        };
+    }
 
-try {
-    _stop = stop;
-} catch (e) {
-    _stop = () => {
-    };
-}
+    try {
+        _stop = stop;
+    } catch (e) {
+        _stop = () => {
+        };
+    }
+})();
+
 
 export {
     _init as init,

@@ -3,6 +3,8 @@ package sandbox_test
 import (
 	"context"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/definition"
+	"github.com/zefhemel/matterless/pkg/eventbus"
 	"testing"
 	"time"
 
@@ -17,8 +19,9 @@ func TestDockerSandboxFunction(t *testing.T) {
 	sillyEvent := map[string]string{
 		"name": "Zef",
 	}
-	s := sandbox.NewDockerSandbox(10*time.Second, 15*time.Second)
-	s.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
+	eventBus := eventbus.NewLocalEventBus()
+	s := sandbox.NewDockerSandbox(eventBus, 10*time.Second, 15*time.Second)
+	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
 		logEntry := eventData.(sandbox.LogEntry)
 		log.Infof("Got log: %s", logEntry.Message)
 		return nil, nil
@@ -44,7 +47,7 @@ func TestDockerSandboxFunction(t *testing.T) {
 	modules := sandbox.ModuleMap(map[string]string{})
 
 	// Init
-	funcInstance, err := s.Function(context.Background(), "test", env, modules, code)
+	funcInstance, err := s.Function(context.Background(), "test", env, modules, definition.FunctionConfig{}, code)
 	assert.NoError(t, err)
 
 	// Invoke
@@ -59,9 +62,10 @@ func TestDockerSandboxJob(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
-	s := sandbox.NewDockerSandbox(10*time.Second, 15*time.Second)
+	eventBus := eventbus.NewLocalEventBus()
+	s := sandbox.NewDockerSandbox(eventBus, 10*time.Second, 15*time.Second)
 	logCounter := 0
-	s.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
+	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
 		logEntry := eventData.(sandbox.LogEntry)
 		log.Infof("Got log: %s", logEntry.Message)
 		logCounter++
@@ -69,8 +73,11 @@ func TestDockerSandboxJob(t *testing.T) {
 	})
 	defer s.Close()
 	code := `
-	function start(params) {
-		console.log("Params", params);
+	function init(config) {
+        console.log("Got config", config);
+    }
+
+	function start() {
         return {
            MY_TOKEN: "1234"
         };
@@ -93,12 +100,14 @@ func TestDockerSandboxJob(t *testing.T) {
 	modules := sandbox.ModuleMap(map[string]string{})
 
 	// Init
-	jobInstance, err := s.Job(context.Background(), "test", env, modules, code)
+	jobInstance, err := s.Job(context.Background(), "test", env, modules, definition.FunctionConfig{
+		Config: map[string]interface{}{
+			"something": "To do",
+		},
+	}, code)
 	assert.NoError(t, err)
 
-	envM, err := jobInstance.Start(context.Background(), map[string]interface{}{
-		"something": "To do",
-	})
+	envM, err := jobInstance.Start(context.Background())
 	assert.NoError(t, err)
 	time.Sleep(2 * time.Second)
 	log.Info("Env", envM, logCounter)

@@ -1,11 +1,8 @@
-# Environment
-```yaml
-TOKEN: cu7f3goontys8ctra5nd8hy59y
-URL: "100.111.247.128:8065"
-```
-
 # Job: AClient
-
+```yaml
+token: cu7f3goontys8ctra5nd8hy59y
+url: "100.111.247.128:8065"
+```
 ```javascript
 import {publishEvent} from "matterless";
 
@@ -47,4 +44,3 @@ function handle(evt) {
     console.log("Custom event trigggered", evt);
 }
 ```
-

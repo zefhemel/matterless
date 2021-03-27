@@ -55,15 +55,10 @@ func Parse(code string) (*Definitions, error) {
 	mdParser := goldmark.DefaultParser()
 
 	decls := &Definitions{
-		Functions:         map[FunctionID]*FunctionDef{},
-		Jobs:              map[FunctionID]*JobDef{},
-		MattermostClients: map[string]*MattermostClientDef{},
-		APIs:              []*EndpointDef{},
-		SlashCommands:     map[string]*SlashCommandDef{},
-		Bots:              map[string]*BotDef{},
-		Crons:             []*CronDef{},
-		Environment:       map[string]string{},
-		Modules:           map[string]*FunctionDef{},
+		Functions:   map[FunctionID]*FunctionDef{},
+		Jobs:        map[FunctionID]*JobDef{},
+		Environment: map[string]string{},
+		Modules:     map[string]*FunctionDef{},
 	}
 	codeBytes := []byte(code)
 	node := mdParser.Parse(text.NewReader(codeBytes))
@@ -71,22 +66,47 @@ func Parse(code string) (*Definitions, error) {
 		currentDeclarationType string
 		currentDeclarationName string
 		currentBody            string
+		currentBody2           string
 		currentLanguage        string
 	)
 	processDefinition := func() error {
 		switch currentDeclarationType {
 		case "Function":
-			decls.Functions[FunctionID(currentDeclarationName)] = &FunctionDef{
+			funcDef := &FunctionDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
-				Code:     currentBody,
+				Config:   FunctionConfig{},
 			}
+			if currentBody2 != "" {
+				// We got a parameter clause on our hands, parse the currentBody as YAML
+				if err := yaml.Unmarshal([]byte(currentBody), &funcDef.Config); err != nil {
+					return fmt.Errorf("Function %s: %s", currentDeclarationName, err)
+				}
+				// And the second block will be the code
+				funcDef.Code = currentBody2
+			} else {
+				// No parameter clause
+				funcDef.Code = currentBody
+			}
+			decls.Functions[FunctionID(currentDeclarationName)] = funcDef
 		case "Job":
-			decls.Jobs[FunctionID(currentDeclarationName)] = &JobDef{
+			jobDef := &JobDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
-				Code:     currentBody,
+				Config:   FunctionConfig{},
 			}
+			if currentBody2 != "" {
+				// We got a parameter clause on our hands, parse the currentBody as YAML
+				if err := yaml.Unmarshal([]byte(currentBody), &jobDef.Config); err != nil {
+					return fmt.Errorf("Job %s: %s", currentDeclarationName, err)
+				}
+				// And the second block will be the code
+				jobDef.Code = currentBody2
+			} else {
+				// No parameter clause
+				jobDef.Code = currentBody
+			}
+			decls.Jobs[FunctionID(currentDeclarationName)] = jobDef
 		case "Module":
 			decls.Modules[currentDeclarationName] = &FunctionDef{
 				Name:     currentDeclarationName,
@@ -103,56 +123,6 @@ func Parse(code string) (*Definitions, error) {
 				return err
 			}
 			decls.Events = def
-		case "MattermostClient":
-			var def MattermostClientDef
-			if err := Validate("schema/mattermost_client.schema.json", currentBody); err != nil {
-				return fmt.Errorf("MattermostClient (%s): %s", currentDeclarationName, err)
-			}
-			err := yaml.Unmarshal([]byte(currentBody), &def)
-			if err != nil {
-				return err
-			}
-			decls.MattermostClients[currentDeclarationName] = &def
-		case "API":
-			var def []*EndpointDef
-			if err := Validate("schema/api.schema.json", currentBody); err != nil {
-				return fmt.Errorf("API: %s", err)
-			}
-			err := yaml.Unmarshal([]byte(currentBody), &def)
-			if err != nil {
-				return err
-			}
-			decls.APIs = def
-		case "SlashCommand":
-			var def SlashCommandDef
-			if err := Validate("schema/slashcommand.schema.json", currentBody); err != nil {
-				return fmt.Errorf("SlashCommand (%s): %s", currentDeclarationName, err)
-			}
-			err := yaml.Unmarshal([]byte(currentBody), &def)
-			if err != nil {
-				return err
-			}
-			decls.SlashCommands[currentDeclarationName] = &def
-		case "Bot":
-			var def BotDef
-			if err := Validate("schema/bot.schema.json", currentBody); err != nil {
-				return fmt.Errorf("Bot (%s): %s", currentDeclarationName, err)
-			}
-			err := yaml.Unmarshal([]byte(currentBody), &def)
-			if err != nil {
-				return err
-			}
-			decls.Bots[currentDeclarationName] = &def
-		case "Cron":
-			var def []*CronDef
-			if err := Validate("schema/cron.schema.json", currentBody); err != nil {
-				return fmt.Errorf("Cron: %s", err)
-			}
-			err := yaml.Unmarshal([]byte(currentBody), &def)
-			if err != nil {
-				return err
-			}
-			decls.Crons = def
 		case "Environment":
 			err := yaml.Unmarshal([]byte(currentBody), &decls.Environment)
 			if err := Validate("schema/environment.schema.json", currentBody); err != nil {
@@ -172,6 +142,7 @@ func Parse(code string) (*Definitions, error) {
 			}
 			// reset all
 			currentBody = ""
+			currentBody2 = ""
 			currentLanguage = ""
 			// Process next
 			parts := headerRegex.FindStringSubmatch(string(v.Text(codeBytes)))
@@ -184,7 +155,11 @@ func Parse(code string) (*Definitions, error) {
 				seg := v.Lines().At(i)
 				allCode = append(allCode, string(seg.Value(codeBytes)))
 			}
-			currentBody = strings.Join(allCode, "")
+			if currentBody != "" {
+				currentBody2 = strings.Join(allCode, "")
+			} else {
+				currentBody = strings.Join(allCode, "")
+			}
 		}
 	}
 	if err := processDefinition(); err != nil {
