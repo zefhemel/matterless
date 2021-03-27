@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net/http"
@@ -20,24 +21,26 @@ import (
 type functionHash string
 
 type DockerSandbox struct {
-	runningInstances map[functionHash]*instance // key: functionHash
+	runningFunctions map[functionHash]*functionInstance
+	runningJobs      map[string]*jobInstance // key: job name
 	cleanupInterval  time.Duration
 	keepAlive        time.Duration
 	ticker           *time.Ticker
 	stop             chan struct{}
 	bootLock         sync.Mutex
-	logChannel       chan LogEntry
+	eventBus         eventbus.EventBus
 }
 
-// NewDockerSandbox creates a new instance of the sandbox
+// NewDockerSandbox creates a new functionInstance of the sandbox
 // Note: It is essential to listen to the .Logs() event channel (probably in a for loop in go routine) as soon as possible
 // after instantiation.
 func NewDockerSandbox(cleanupInterval time.Duration, keepAlive time.Duration) *DockerSandbox {
 	sb := &DockerSandbox{
 		cleanupInterval:  cleanupInterval,
 		keepAlive:        keepAlive,
-		runningInstances: map[functionHash]*instance{},
-		logChannel:       make(chan LogEntry),
+		runningFunctions: map[functionHash]*functionInstance{},
+		runningJobs:      map[string]*jobInstance{},
+		eventBus:         eventbus.NewLocalEventBus(),
 		stop:             make(chan struct{}),
 	}
 	if cleanupInterval != 0 {
@@ -47,12 +50,11 @@ func NewDockerSandbox(cleanupInterval time.Duration, keepAlive time.Duration) *D
 	return sb
 }
 
-// Logs receives logs from all functions managed by this sandbox
-func (s *DockerSandbox) Logs() chan LogEntry {
-	return s.logChannel
+func (s *DockerSandbox) EventBus() eventbus.EventBus {
+	return s.eventBus
 }
 
-// Function looks up a running function instance, or boots up a docker container if it doesn't have one yet
+// Function looks up a running function functionInstance, or boots up a docker container if it doesn't have one yet
 // It also performs initialization (cals the init()) function, errors out when no running server runs in time
 func (s *DockerSandbox) Function(ctx context.Context, name string, env EnvMap, modules ModuleMap, code string) (FunctionInstance, error) {
 	// Only one function can be booted at once for now
@@ -61,20 +63,39 @@ func (s *DockerSandbox) Function(ctx context.Context, name string, env EnvMap, m
 	defer s.bootLock.Unlock()
 
 	functionHash := newFunctionHash(modules, env, code)
-	inst, ok := s.runningInstances[functionHash]
+	inst, ok := s.runningFunctions[functionHash]
 	if !ok {
-		// Create new instance
+		// Create new functionInstance
 		var err error
-		inst, err = newInstance(ctx, name, s.logChannel, env, modules, code)
+		inst, err = newFunctionInstance(ctx, "node-function", name, s.eventBus, env, modules, code)
 		if err != nil {
 			return nil, err
 		}
-		s.runningInstances[functionHash] = inst
+		s.runningFunctions[functionHash] = inst
 	}
 	return inst, nil
 }
 
-type instance struct {
+func (s *DockerSandbox) Job(ctx context.Context, name string, env EnvMap, modules ModuleMap, code string) (JobInstance, error) {
+	// Only one function can be booted at once for now
+	// TODO: Remove this restriction
+	s.bootLock.Lock()
+	defer s.bootLock.Unlock()
+
+	inst, ok := s.runningJobs[name]
+	if !ok {
+		// Create new functionInstance
+		var err error
+		inst, err = newJobInstance(ctx, name, s.eventBus, env, modules, code)
+		if err != nil {
+			return nil, err
+		}
+		s.runningJobs[name] = inst
+	}
+	return inst, nil
+}
+
+type functionInstance struct {
 	containerName string
 	controlURL    string
 	serverURL     string
@@ -83,14 +104,14 @@ type instance struct {
 	name          string
 }
 
-var _ FunctionInstance = &instance{}
+var _ FunctionInstance = &functionInstance{}
 
-func (inst *instance) Name() string {
+func (inst *functionInstance) Name() string {
 	return inst.name
 }
 
-func newInstance(ctx context.Context, name string, logChannel chan LogEntry, env EnvMap, modules ModuleMap, code string) (*instance, error) {
-	inst := &instance{
+func newFunctionInstance(ctx context.Context, runnerType string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, code string) (*functionInstance, error) {
+	inst := &functionInstance{
 		name:          name,
 		containerName: fmt.Sprintf("matterless-%s", newFunctionHash(modules, env, code)),
 	}
@@ -98,7 +119,7 @@ func newInstance(ctx context.Context, name string, logChannel chan LogEntry, env
 	// Run "docker run -i" as child process
 	cmd := exec.Command("docker", "run", "--rm", "-P", "-i",
 		fmt.Sprintf("--name=%s", inst.containerName),
-		"zefhemel/matterless-runner-docker", "node")
+		"zefhemel/matterless-runner-docker", runnerType)
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -122,8 +143,8 @@ func newInstance(ctx context.Context, name string, logChannel chan LogEntry, env
 	}
 
 	// Send stdout and stderr to the log channel
-	go inst.pipeStream(bufferedStdout, logChannel)
-	go inst.pipeStream(bufferedStderr, logChannel)
+	go inst.pipeStream(bufferedStdout, eventBus)
+	go inst.pipeStream(bufferedStderr, eventBus)
 
 	// Run "docker inspect" to fetch exposed ports
 	inspectData, err := exec.Command("docker", "inspect", inst.containerName).CombinedOutput()
@@ -152,17 +173,7 @@ func newInstance(ctx context.Context, name string, logChannel chan LogEntry, env
 	return inst, nil
 }
 
-func newFunctionHash(modules map[string]string, env map[string]string, code string) functionHash {
-	// This can probably be optimized, the goal is to generate a unique string representing a mix of the code, modules and environment
-	h := sha1.New()
-	h.Write([]byte(util.MustJsonString(modules)))
-	h.Write([]byte(util.MustJsonString(env)))
-	h.Write([]byte(code))
-	bs := h.Sum(nil)
-	return functionHash(fmt.Sprintf("%x", bs))
-}
-
-func (inst *instance) kill() error {
+func (inst *functionInstance) kill() error {
 	// Don't kill until current run is over, if any
 	inst.runLock.Lock()
 	inst.runLock.Unlock()
@@ -173,11 +184,11 @@ func (inst *instance) kill() error {
 	// Now hard kill the docker container, if it's still running
 	exec.Command("docker", "kill", inst.containerName).Run()
 
-	log.Info("Killed instance.")
+	log.Info("Killed functionInstance.")
 	return nil
 }
 
-func (inst *instance) pipeStream(bufferedReader *bufio.Reader, logChannel chan LogEntry) {
+func (inst *functionInstance) pipeStream(bufferedReader *bufio.Reader, eventBus eventbus.EventBus) {
 readLoop:
 	for {
 		line, err := bufferedReader.ReadString('\n')
@@ -188,27 +199,27 @@ readLoop:
 			log.Error("log read error", err)
 			break readLoop
 		}
-		logChannel <- LogEntry{
+		eventBus.Publish(fmt.Sprintf("logs:%s", inst.name), LogEntry{
 			Instance: inst,
 			Message:  line,
-		}
+		})
 	}
 }
 
 func (s *DockerSandbox) cleanup() {
 	now := time.Now()
-	if len(s.runningInstances) == 0 {
+	if len(s.runningFunctions) == 0 {
 		return
 	}
-	log.Debugf("Cleaning up %d running functions...", len(s.runningInstances))
-	for id, inst := range s.runningInstances {
+	log.Debugf("Cleaning up %d running functions...", len(s.runningFunctions))
+	for id, inst := range s.runningFunctions {
 		if inst.lastInvoked.Add(s.keepAlive).Before(now) {
-			log.Debugf("Killing instance '%s'.", inst.name)
+			log.Debugf("Killing functionInstance '%s'.", inst.name)
 			if err := inst.kill(); err != nil {
-				log.Error("Error killing instance", err)
+				log.Error("Error killing functionInstance", err)
 			}
 			// Is it ok to delete entries from a map while iterating over it?
-			delete(s.runningInstances, id)
+			delete(s.runningFunctions, id)
 		}
 	}
 }
@@ -218,7 +229,7 @@ type jsError struct {
 	Stack   string `json:"stack"`
 }
 
-func (inst *instance) Invoke(ctx context.Context, event interface{}) (interface{}, error) {
+func (inst *functionInstance) Invoke(ctx context.Context, event interface{}) (interface{}, error) {
 	inst.runLock.Lock()
 	defer inst.runLock.Unlock()
 
@@ -259,7 +270,7 @@ func (inst *instance) Invoke(ctx context.Context, event interface{}) (interface{
 	return result, nil
 }
 
-func (inst *instance) init(env EnvMap, modules ModuleMap, code string) error {
+func (inst *functionInstance) init(env EnvMap, modules ModuleMap, code string) error {
 	httpClient := http.DefaultClient
 	// TODO: Remove magic 15s value
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -286,6 +297,68 @@ func (inst *instance) init(env EnvMap, modules ModuleMap, code string) error {
 	return nil
 }
 
+// Jobs
+
+type jobInstance struct {
+	functionInstance
+	timeStarted time.Time
+	name        string
+}
+
+var _ JobInstance = &jobInstance{}
+
+func (inst *jobInstance) Name() string {
+	return inst.name
+}
+
+func newJobInstance(ctx context.Context, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, code string) (*jobInstance, error) {
+	inst := &jobInstance{
+		name: name,
+	}
+
+	functionInstance, err := newFunctionInstance(ctx, "node-job", name, eventBus, env, modules, code)
+	if err != nil {
+		return nil, err
+	}
+
+	inst.functionInstance = *functionInstance
+
+	return inst, nil
+}
+
+func (inst *jobInstance) Start(ctx context.Context, params map[string]interface{}) (EnvMap, error) {
+	inst.timeStarted = time.Now()
+
+	httpClient := http.DefaultClient
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/start", inst.serverURL), strings.NewReader(util.MustJsonString(params)))
+	if err != nil {
+		return nil, errors.Wrap(err, "invoke call")
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("HTTP Error: %s", body)
+	}
+
+	var result EnvMap
+	jsonDecoder := json.NewDecoder(resp.Body)
+	if err := jsonDecoder.Decode(&result); err != nil {
+		return nil, errors.Wrap(err, "unmarshall response")
+	}
+
+	return result, nil
+}
+
+func (inst *jobInstance) Stop() {
+	http.Get(fmt.Sprintf("%s/stop", inst.serverURL))
+}
+
+// End
+
 func (s *DockerSandbox) Close() {
 	// Close the cleanup ticker
 	if s.ticker != nil {
@@ -293,9 +366,6 @@ func (s *DockerSandbox) Close() {
 		s.stop <- struct{}{}
 	}
 	s.Flush()
-
-	// Close the log channel
-	close(s.logChannel)
 }
 
 func (s *DockerSandbox) cleanupJob() {
@@ -311,13 +381,31 @@ func (s *DockerSandbox) cleanupJob() {
 
 func (s *DockerSandbox) Flush() {
 	// Close all running instances
-	log.Infof("Stopping %d running functions...", len(s.runningInstances))
-	for _, inst := range s.runningInstances {
+	log.Infof("Stopping %d running functions...", len(s.runningFunctions))
+	for _, inst := range s.runningFunctions {
 		if err := inst.kill(); err != nil {
-			log.Error("Error killing instance", err)
+			log.Error("Error killing functionInstance", err)
 		}
 	}
-	s.runningInstances = map[functionHash]*instance{}
+	s.runningFunctions = map[functionHash]*functionInstance{}
+	// Close all running jobs
+	log.Infof("Stopping %d running jobs...", len(s.runningJobs))
+	for _, inst := range s.runningJobs {
+		if err := inst.kill(); err != nil {
+			log.Error("Error killing jobInstance", err)
+		}
+	}
+	s.runningJobs = map[string]*jobInstance{}
+}
+
+func newFunctionHash(modules map[string]string, env map[string]string, code string) functionHash {
+	// This can probably be optimized, the goal is to generate a unique string representing a mix of the code, modules and environment
+	h := sha1.New()
+	h.Write([]byte(util.MustJsonString(modules)))
+	h.Write([]byte(util.MustJsonString(env)))
+	h.Write([]byte(code))
+	bs := h.Sum(nil)
+	return functionHash(fmt.Sprintf("%x", bs))
 }
 
 var _ Sandbox = &DockerSandbox{}

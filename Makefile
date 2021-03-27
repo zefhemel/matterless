@@ -3,11 +3,9 @@ DOCKER_RUNNER_IMAGE=zefhemel/matterless-runner-docker
 
 build:
 	go build ${PACKAGE}/cmd/mls-bot
-	go build ${PACKAGE}/cmd/mls
 	go build ${PACKAGE}/cmd/mls-lambda
 
 install:
-	go install ${PACKAGE}/cmd/mls
 	go install ${PACKAGE}/cmd/matterlessd
 	go install ${PACKAGE}/cmd/mls-watch
 

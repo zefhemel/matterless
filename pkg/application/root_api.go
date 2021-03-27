@@ -26,7 +26,7 @@ func (ag *APIGateway) exposeRootAPI(cfg config.Config) {
 
 		app := ag.container.Get(appName)
 		if app == nil {
-			app = NewApplication(cfg, appName)
+			app = NewApplication(cfg, ag.container.EventBus(), appName)
 			ag.container.Register(appName, app)
 		}
 
@@ -45,24 +45,7 @@ func (ag *APIGateway) exposeRootAPI(cfg config.Config) {
 		if !ag.rootApiAuth(w, r, cfg) {
 			return
 		}
-		defBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, "Could not read body")
-			return
-		}
-
-		app := ag.container.Get(appName)
-		if app == nil {
-			app = NewApplication(cfg, appName)
-			ag.container.Register(appName, app)
-		}
-
-		if err := app.Eval(string(defBytes)); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, err.Error())
-			return
-		}
+		ag.container.UnRegister(appName)
 		fmt.Fprint(w, "OK")
 	}).Methods("DELETE")
 }

@@ -18,8 +18,10 @@ type Definitions struct {
 	Environment map[string]string
 	Functions   map[FunctionID]*FunctionDef
 	Modules     map[string]*FunctionDef
+	Jobs        map[FunctionID]*JobDef
 
 	// Sources
+	Events            map[string][]FunctionID
 	MattermostClients map[string]*MattermostClientDef
 	APIs              []*EndpointDef
 	SlashCommands     map[string]*SlashCommandDef
@@ -28,6 +30,12 @@ type Definitions struct {
 }
 
 type FunctionDef struct {
+	Name     string
+	Language string
+	Code     string
+}
+
+type JobDef struct {
 	Name     string
 	Language string
 	Code     string

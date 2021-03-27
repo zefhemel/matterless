@@ -7,6 +7,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/application"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
+	"github.com/zefhemel/matterless/pkg/eventbus"
 	"time"
 
 	"github.com/mattermost/mattermost-server/model"
@@ -29,12 +30,14 @@ type MatterlessBot struct {
 	appContainer *application.Container
 	adminClient  *model.Client4
 	cfg          config.Config
+	eventBus     eventbus.EventBus
 }
 
 // NewBot creates a new instance of the bot event listener
-func NewBot(cfg config.Config) (*MatterlessBot, error) {
+func NewBot(cfg config.Config, eventBus eventbus.EventBus) (*MatterlessBot, error) {
 	mb := &MatterlessBot{
 		cfg:              cfg,
+		eventBus:         eventBus,
 		userCache:        map[string]*model.User{},
 		channelCache:     map[string]*model.Channel{},
 		channelNameCache: map[string]*model.Channel{},
@@ -42,7 +45,7 @@ func NewBot(cfg config.Config) (*MatterlessBot, error) {
 		adminClient:      model.NewAPIv4Client(cfg.MattermostURL),
 	}
 
-	go mb.listenForLogs()
+	mb.listenForLogs()
 
 	mb.adminClient.SetOAuthToken(cfg.AdminToken)
 
@@ -192,7 +195,7 @@ func (mb *MatterlessBot) handleDirect(post *model.Post) {
 		appName := fmt.Sprintf("%s:%s", post.UserId, post.Id)
 		postApp := mb.appContainer.Get(appName)
 		if postApp == nil {
-			postApp = application.NewApplication(mb.cfg, appName)
+			postApp = application.NewApplication(mb.cfg, mb.eventBus, appName)
 		}
 		mb.appContainer.Register(appName, postApp)
 		if postApp.CurrentCode() == post.Message {

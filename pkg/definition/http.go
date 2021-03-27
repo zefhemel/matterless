@@ -7,6 +7,7 @@ type APIGatewayRequestEvent struct {
 	FormValues    map[string]string `json:"form_values"`
 	RequestParams map[string]string `json:"request_params"`
 	JSONBody      interface{}       `json:"json_body"`
+	Body          []byte            `json:"body"`
 }
 
 type APIGatewayResponse struct {

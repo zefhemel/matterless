@@ -1,6 +1,7 @@
 {{.Code}}
 
-var _init;
+var _init, _start, _run, _stop, _handle;
+// Initialization
 try {
     _init = init;
 } catch (e) {
@@ -8,7 +9,39 @@ try {
     };
 }
 
+// Functions
+try {
+    _handle = handle;
+} catch (e) {
+    _handle = () => {
+    };
+}
+
+// Jobs
+try {
+    _start = start;
+} catch (e) {
+    _start = () => {
+    };
+}
+try {
+    _run = run;
+} catch (e) {
+    _run = () => {
+    };
+}
+
+try {
+    _stop = stop;
+} catch (e) {
+    _stop = () => {
+    };
+}
+
 export {
     _init as init,
-    handle
+    _start as start,
+    _stop as stop,
+    _run as run,
+    _handle as handle
 };

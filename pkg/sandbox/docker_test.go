@@ -10,7 +10,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
-func TestDockerSandbox(t *testing.T) {
+func TestDockerSandboxFunction(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
@@ -18,11 +18,11 @@ func TestDockerSandbox(t *testing.T) {
 		"name": "Zef",
 	}
 	s := sandbox.NewDockerSandbox(10*time.Second, 15*time.Second)
-	go func() {
-		for logEntry := range s.Logs() {
-			log.Infof("Got log: %s", logEntry.Message)
-		}
-	}()
+	s.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
+		logEntry := eventData.(sandbox.LogEntry)
+		log.Infof("Got log: %s", logEntry.Message)
+		return nil, nil
+	})
 	defer s.Close()
 	code := `
 	function handle(evt) {
@@ -53,4 +53,55 @@ func TestDockerSandbox(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "ok:VALUE", result.(map[string]interface{})["status"])
 	}
+}
+
+func TestDockerSandboxJob(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	s := sandbox.NewDockerSandbox(10*time.Second, 15*time.Second)
+	logCounter := 0
+	s.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
+		logEntry := eventData.(sandbox.LogEntry)
+		log.Infof("Got log: %s", logEntry.Message)
+		logCounter++
+		return nil, nil
+	})
+	defer s.Close()
+	code := `
+	function start(params) {
+		console.log("Params", params);
+        return {
+           MY_TOKEN: "1234"
+        };
+	}
+
+    function run() {
+        console.log("Running");
+		setInterval(() => {
+            console.log("Iteration");
+        }, 500);
+    }
+
+    function stop() {
+        console.log("Stopping");
+    }
+	`
+	env := sandbox.EnvMap(map[string]string{
+		"ENVVAR": "VALUE",
+	})
+	modules := sandbox.ModuleMap(map[string]string{})
+
+	// Init
+	jobInstance, err := s.Job(context.Background(), "test", env, modules, code)
+	assert.NoError(t, err)
+
+	envM, err := jobInstance.Start(context.Background(), map[string]interface{}{
+		"something": "To do",
+	})
+	assert.NoError(t, err)
+	time.Sleep(2 * time.Second)
+	log.Info("Env", envM, logCounter)
+	// Some iteration logs should have been written
+	assert.True(t, logCounter > 5)
 }

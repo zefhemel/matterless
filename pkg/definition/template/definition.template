@@ -4,6 +4,11 @@ These are the variables exposed to all functions:
 {{ range $key, $env := .Environment }}
 - `{{ $key }}`{{ end }}
 
+{{if .Events}}
+## Events
+{{ range $key, $fns := .Events }}
+- `{{ $key }}` listened to by{{ range $fns }} `{{.}}`{{end}}{{ end }}
+{{ end }}
 ## Functions
 {{ range $key, $env := .Functions }}
 - `{{ $key }}`{{ end }}

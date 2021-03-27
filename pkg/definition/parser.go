@@ -56,6 +56,7 @@ func Parse(code string) (*Definitions, error) {
 
 	decls := &Definitions{
 		Functions:         map[FunctionID]*FunctionDef{},
+		Jobs:              map[FunctionID]*JobDef{},
 		MattermostClients: map[string]*MattermostClientDef{},
 		APIs:              []*EndpointDef{},
 		SlashCommands:     map[string]*SlashCommandDef{},
@@ -80,12 +81,28 @@ func Parse(code string) (*Definitions, error) {
 				Language: currentLanguage,
 				Code:     currentBody,
 			}
+		case "Job":
+			decls.Jobs[FunctionID(currentDeclarationName)] = &JobDef{
+				Name:     currentDeclarationName,
+				Language: currentLanguage,
+				Code:     currentBody,
+			}
 		case "Module":
 			decls.Modules[currentDeclarationName] = &FunctionDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
 				Code:     currentBody,
 			}
+		case "Events":
+			var def map[string][]FunctionID
+			if err := Validate("schema/events.schema.json", currentBody); err != nil {
+				return fmt.Errorf("Events: %s", err)
+			}
+			err := yaml.Unmarshal([]byte(currentBody), &def)
+			if err != nil {
+				return err
+			}
+			decls.Events = def
 		case "MattermostClient":
 			var def MattermostClientDef
 			if err := Validate("schema/mattermost_client.schema.json", currentBody); err != nil {

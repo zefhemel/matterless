@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
+	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/eventsource"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/store"
@@ -24,6 +25,7 @@ type Application struct {
 	// Runtime
 	connectedEventSources []eventsource.EventSource
 	sandbox               *sandbox.DockerSandbox
+	eventBus              eventbus.EventBus
 	adminClient           *model.Client4
 
 	// API
@@ -32,7 +34,7 @@ type Application struct {
 	cfg       config.Config
 }
 
-func NewApplication(cfg config.Config, appName string) *Application {
+func NewApplication(cfg config.Config, eventBus eventbus.EventBus, appName string) *Application {
 	dataStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/%s", cfg.LevelDBDatabasesPath, util.SafeFilename(appName)))
 	if err != nil {
 		log.Fatal("Could not create data store for ", appName)
@@ -43,6 +45,7 @@ func NewApplication(cfg config.Config, appName string) *Application {
 	app := &Application{
 		cfg:         cfg,
 		appName:     appName,
+		eventBus:    eventBus,
 		adminClient: adminClient,
 		dataStore:   dataStore,
 		apiToken:    util.TokenGenerator(),
@@ -50,12 +53,20 @@ func NewApplication(cfg config.Config, appName string) *Application {
 		sandbox: sandbox.NewDockerSandbox(1*time.Minute, 5*time.Minute),
 	}
 
-	return app
-}
+	// Listen to sandbox log events, republish on parent eventbus
+	app.sandbox.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
+		if le, ok := eventData.(sandbox.LogEntry); ok {
+			eventBus.Publish(fmt.Sprintf("logs:%s:%s", appName, le.Instance.Name()), LogEntry{
+				AppName:  appName,
+				LogEntry: le,
+			})
+		} else {
+			log.Fatal("Did not get sandbox.LogEntry", eventData)
+		}
+		return nil, nil
+	})
 
-// Logs returns a channel of all log messages coming from all running functions
-func (app *Application) Logs() chan sandbox.LogEntry {
-	return app.sandbox.Logs()
+	return app
 }
 
 // Only for testing
@@ -76,18 +87,24 @@ func (app *Application) InvokeFunction(name definition.FunctionID, event interfa
 	defer cancel()
 	functionInstance, err := app.sandbox.Function(ctx, string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(functionDef.Language), functionDef.Code)
 	if err != nil {
-		app.Logs() <- sandbox.LogEntry{
-			Instance: functionInstance,
-			Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
-		}
+		app.eventBus.Publish(fmt.Sprintf("logs:%s:%s", app.appName, name), LogEntry{
+			AppName: app.appName,
+			LogEntry: sandbox.LogEntry{
+				Instance: functionInstance,
+				Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
+			},
+		})
 		return nil
 	}
 	result, err := functionInstance.Invoke(ctx, event)
 	if err != nil {
-		app.Logs() <- sandbox.LogEntry{
-			Instance: functionInstance,
-			Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
-		}
+		app.eventBus.Publish(fmt.Sprintf("logs:%s:%s", app.appName, name), LogEntry{
+			AppName: app.appName,
+			LogEntry: sandbox.LogEntry{
+				Instance: functionInstance,
+				Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
+			},
+		})
 	}
 	return result
 }
@@ -149,17 +166,37 @@ func (app *Application) Eval(code string) error {
 		return err
 	}
 	app.connectedEventSources = append(app.connectedEventSources, c)
-	log.Debug("Starting cron")
 	c.ExtendDefinitions(defs)
+
+	es := eventsource.NewEventEventSource(app.eventBus, defs.Events, app.InvokeFunction)
+	app.connectedEventSources = append(app.connectedEventSources, es)
+	es.ExtendDefinitions(defs)
+
+	for name, def := range defs.Jobs {
+		ji, err := app.sandbox.Job(context.Background(), string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(def.Language), def.Code)
+		if err != nil {
+			return errors.Wrap(err, "init job")
+		}
+		envMap, err := ji.Start(context.Background(), map[string]interface{}{})
+		if err != nil {
+			return errors.Wrap(err, "init job")
+		}
+		for k, v := range envMap {
+			app.definitions.Environment[k] = v
+		}
+	}
 
 	log.Debug("Testing functions...")
 	testResults := definition.TestDeclarations(defs, app.sandbox)
 	for name, functionResult := range testResults.Functions {
 		if functionResult != nil {
-			app.Logs() <- sandbox.LogEntry{
-				Instance: nil,
-				Message:  fmt.Sprintf("[%s Check error] %s", name, functionResult.Error()),
-			}
+			app.eventBus.Publish(fmt.Sprintf("logs:%s:%s", app.appName, name), LogEntry{
+				AppName: app.appName,
+				LogEntry: sandbox.LogEntry{
+					Instance: nil,
+					Message:  fmt.Sprintf("[%s Check error] %s", name, functionResult.Error()),
+				},
+			})
 		}
 	}
 	if testResults.String() != "" {

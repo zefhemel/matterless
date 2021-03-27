@@ -3,7 +3,6 @@ package definition_test
 import (
 	"context"
 	_ "embed"
-	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"testing"
 
@@ -22,12 +21,6 @@ func TestNodeInterpreter(t *testing.T) {
 	defs, err := definition.Parse(runtimeCheckMd)
 	assert.NoError(t, err)
 	sb := sandbox.NewDockerSandbox(0, 0)
-	// Flush logs
-	go func() {
-		for le := range sb.Logs() {
-			log.Info(le.Message)
-		}
-	}()
 	defer sb.Close()
 	results := definition.TestDeclarations(defs, sb)
 	assert.NoError(t, results.Functions["TestFunction1"])

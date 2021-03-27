@@ -30,8 +30,13 @@ type runnerConfig struct {
 }
 
 var runnerTypes = map[string]runnerConfig{
-	"node": {
-		cmd:            []string{"node", "main.mjs"},
+	"node-function": {
+		cmd:            []string{"node", "function_server.mjs"},
+		scriptFilename: "function.mjs",
+		template:       jsTemplate,
+	},
+	"node-job": {
+		cmd:            []string{"node", "job_server.mjs"},
 		scriptFilename: "function.mjs",
 		template:       jsTemplate,
 	},
@@ -181,6 +186,7 @@ func main() {
 		fmt.Fprint(w, "OK")
 	})
 	http.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
+		http.Get("http://localhost:8080/stop")
 		if cmd != nil && cmd.Process != nil {
 			cmd.Process.Kill()
 		}

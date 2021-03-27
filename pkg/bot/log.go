@@ -3,6 +3,7 @@ package bot
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/application"
 	"regexp"
 	"strings"
 
@@ -16,19 +17,23 @@ func safeChannelName(name string) string {
 }
 
 func (mb *MatterlessBot) listenForLogs() {
-	for le := range mb.appContainer.Logs() {
-		if le.LogEntry.Instance == nil {
-			continue
+	mb.eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
+		if le, ok := eventData.(application.LogEntry); ok {
+			if le.LogEntry.Instance == nil {
+				return nil, nil
+			}
+			log.Infof("[App: %s | Function: %s] %s", le.AppName, le.LogEntry.Instance.Name(), le.LogEntry.Message)
+			parts := strings.Split(le.AppName, ":")
+			if len(parts) != 2 {
+				// This is not coming from a messenger bot
+				return nil, nil
+			}
+			mb.postFunctionLog(parts[0], le.LogEntry.Instance.Name(), le.LogEntry.Message)
+		} else {
+			log.Error("Received log event that's not an application.LogEntry ", eventData)
 		}
-		log.Infof("[App: %s Function: %s] %s", le.AppName, le.LogEntry.Instance.Name(), le.LogEntry.Message)
-
-		parts := strings.Split(le.AppName, ":")
-		if len(parts) != 2 {
-			// This is not coming from a messenger bot
-			continue
-		}
-		mb.postFunctionLog(parts[0], le.LogEntry.Instance.Name(), le.LogEntry.Message)
-	}
+		return nil, nil
+	})
 }
 
 func (mb *MatterlessBot) postFunctionLog(userID string, functionName string, logMessage string) error {
