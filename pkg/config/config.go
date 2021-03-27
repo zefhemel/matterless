@@ -8,9 +8,6 @@ import (
 )
 
 type Config struct {
-	MattermostURL        string
-	AdminToken           string
-	TeamName             string
 	APIBindPort          int
 	APIExternalURL       string
 	LevelDBDatabasesPath string
@@ -24,9 +21,6 @@ func FromEnv() Config {
 		log.Fatal(err)
 	}
 	return Config{
-		MattermostURL:        os.Getenv("mattermost_url"),
-		AdminToken:           os.Getenv("admin_token"),
-		TeamName:             os.Getenv("team_name"),
 		APIBindPort:          bindPort,
 		APIExternalURL:       os.Getenv("api_url"),
 		LevelDBDatabasesPath: os.Getenv("leveldb_databases_path"),

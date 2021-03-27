@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"fmt"
-	"github.com/mattermost/mattermost-server/model"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
@@ -26,7 +25,6 @@ type Application struct {
 	connectedEventSources []eventsource.EventSource
 	sandbox               *sandbox.DockerSandbox
 	eventBus              eventbus.EventBus
-	adminClient           *model.Client4
 
 	// API
 	apiToken  string
@@ -39,16 +37,13 @@ func NewApplication(cfg config.Config, appName string) *Application {
 	if err != nil {
 		log.Fatal("Could not create data store for ", appName)
 	}
-	adminClient := model.NewAPIv4Client(cfg.MattermostURL)
-	adminClient.SetOAuthToken(cfg.AdminToken)
 	eventBus := eventbus.NewLocalEventBus()
 	app := &Application{
-		cfg:         cfg,
-		appName:     appName,
-		eventBus:    eventBus,
-		adminClient: adminClient,
-		dataStore:   dataStore,
-		apiToken:    util.TokenGenerator(),
+		cfg:       cfg,
+		appName:   appName,
+		eventBus:  eventBus,
+		dataStore: dataStore,
+		apiToken:  util.TokenGenerator(),
 		// TODO: Make this configurable
 		sandbox: sandbox.NewDockerSandbox(eventBus, 1*time.Minute, 5*time.Minute),
 	}
