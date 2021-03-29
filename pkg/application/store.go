@@ -9,8 +9,7 @@ import (
 )
 
 func (app *Application) extendEnviron() {
-	// TODO: Remove Getenv
-	app.definitions.Environment["API_URL"] = fmt.Sprintf("%s/%s", app.cfg.APIExternalURL, app.appName)
+	app.definitions.Environment["API_URL"] = fmt.Sprintf("%s/%s", app.cfg.APIURL, app.appName)
 	app.definitions.Environment["API_TOKEN"] = app.apiToken
 }
 

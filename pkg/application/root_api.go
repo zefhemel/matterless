@@ -54,13 +54,13 @@ func (ag *APIGateway) rootApiAuth(w http.ResponseWriter, r *http.Request, cfg co
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, "No authorization provided")
+		fmt.Fprint(w, "ROOT: No authorization provided")
 		return false
 	}
 	authHeaderParts := strings.Split(authHeader, " ")
 	if len(authHeaderParts) != 2 || len(authHeaderParts) == 2 && authHeaderParts[0] != "bearer" {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, "No authorization provided")
+		fmt.Fprintf(w, "ROOT2: No authorization provided: %+v", authHeaderParts)
 		return false
 	}
 	token := authHeaderParts[1]

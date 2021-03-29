@@ -124,13 +124,13 @@ func (app *Application) Eval(code string) error {
 		}
 	}
 
-	log.Info("Initializing functions...")
-	for name, def := range defs.Functions {
-		_, err := app.sandbox.Function(context.Background(), string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(def.Language), def.Config, def.Code)
-		if err != nil {
-			return errors.Wrap(err, "init function")
-		}
-	}
+	//log.Info("Initializing functions...")
+	//for name, def := range defs.Functions {
+	//	_, err := app.sandbox.Function(context.Background(), string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(def.Language), def.Config, def.Code)
+	//	if err != nil {
+	//		return errors.Wrap(err, "init function")
+	//	}
+	//}
 
 	log.Debug("All ready to go!")
 	return nil

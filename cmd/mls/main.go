@@ -2,195 +2,100 @@ package main
 
 import (
 	"fmt"
-	"github.com/fsnotify/fsnotify"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/zefhemel/matterless/pkg/application"
+	"github.com/zefhemel/matterless/pkg/client"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/util"
-	"io"
-	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
+	"runtime"
 	"syscall"
 	"time"
 )
 
 func main() {
 	log.SetLevel(log.DebugLevel)
-	cfg := config.FromEnv()
 
-	var (
-		watch    bool
-		bindPort int
-		url      string
-	)
+	// Linux docker parent host
+	apiHost := "172.17.0.1"
+	if runtime.GOOS != "linux" {
+		apiHost = "host.docker.internal"
+	}
+
+	runWatch := false
+	var runConfig config.Config
 	var cmdRun = &cobra.Command{
 		Use:   "run [file1.md] ...",
 		Short: "Run Matterless and run listed apps",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg.APIBindPort = bindPort
-			cfg.RootToken = util.TokenGenerator()
-			cfg.APIExternalURL = url
-			go runServer(cfg)
-			client := NewMatterlessClient(cfg.APIExternalURL, cfg.RootToken)
-			client.Deploy(args, watch)
-			for {
-				time.Sleep(1 * time.Minute)
+			runConfig.APIURL = fmt.Sprintf("http://%s:%d", apiHost, runConfig.APIBindPort)
+			if runConfig.RootToken == "" {
+				runConfig.RootToken = util.TokenGenerator()
 			}
+			runServer(runConfig)
+			mlsClient := client.NewMatterlessClient(runConfig.APIURL, runConfig.RootToken)
+			mlsClient.Deploy(args, runWatch)
+			busyLoop()
 		},
 	}
-	cmdRun.Flags().BoolVarP(&watch, "watch", "w", false, "watch apps for changes and reload")
-	cmdRun.Flags().IntVarP(&bindPort, "port", "p", 8222, "port to bind to")
-	cmdRun.Flags().StringVarP(&url, "url", "u", "http://localhost:8222", "URL to externally available matterless server")
+	cmdRun.Flags().BoolVarP(&runWatch, "watch", "w", false, "watch apps for changes and reload")
+	cmdRun.Flags().IntVarP(&runConfig.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
+	cmdRun.Flags().StringVarP(&runConfig.RootToken, "token", "t", "", "Root API token")
+	cmdRun.Flags().StringVar(&runConfig.LevelDBDatabasesPath, "data", "./mls-data", "location to keep Matterless state")
 
 	var (
-		token string
+		deployWatch bool
+		deployURL   string
+		deployToken string
 	)
-
 	var cmdDeploy = &cobra.Command{
 		Use:   "deploy [file1.md] ..",
 		Short: "Deploy applications to a server",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("Deploy: " + strings.Join(args, " "))
+			if deployURL == "" {
+				fmt.Println("Did not provide Matterless URL to connect to via --url")
+				os.Exit(1)
+			}
+			if deployToken == "" {
+				fmt.Println("Did not provide Matterless admin token via --token")
+				os.Exit(1)
+			}
+			mlsClient := client.NewMatterlessClient(deployURL, deployToken)
+			mlsClient.Deploy(args, deployWatch)
 		},
 	}
 
-	cmdDeploy.Flags().BoolVarP(&watch, "watch", "w", false, "watch apps for changes and redeploy")
-	cmdDeploy.Flags().IntVarP(&bindPort, "port", "p", 8222, "port to bind to")
-	cmdDeploy.Flags().StringVarP(&url, "url", "u", "http://localhost:8222", "Matterless server URL to deploy to")
-	cmdDeploy.Flags().StringVarP(&token, "token", "t", "", "Token to use for authentication")
+	cmdDeploy.Flags().BoolVarP(&deployWatch, "watch", "w", false, "watch apps for changes and redeploy")
+	cmdDeploy.Flags().StringVar(&deployURL, "url", "", "URL or Matterless server to deploy to")
+	cmdDeploy.Flags().StringVarP(&deployToken, "token", "t", "", "Root token for Matterless server")
+
+	var serverConfig config.Config
 
 	var rootCmd = &cobra.Command{
 		Use:   "mls",
 		Short: "Matterless is friction-free serverless",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("Matterless server mode")
-			runServer(cfg)
-
-			// Idle loop, everything runs in go-routines
-			for {
-				time.Sleep(30 * time.Second)
+			serverConfig.APIURL = fmt.Sprintf("http://%s:%d", apiHost, serverConfig.APIBindPort)
+			if serverConfig.RootToken == "" {
+				serverConfig.RootToken = util.TokenGenerator()
+				fmt.Printf("Auto generated root token: %s\n", serverConfig.RootToken)
 			}
 
+			runServer(serverConfig)
+			busyLoop()
 		},
 	}
+	rootCmd.Flags().IntVarP(&serverConfig.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
+	rootCmd.Flags().StringVarP(&serverConfig.RootToken, "token", "t", "", "Root API token")
+	rootCmd.Flags().StringVar(&serverConfig.LevelDBDatabasesPath, "data", "./mls-data", "location to keep Matterless state")
+
 	rootCmd.AddCommand(cmdRun, cmdDeploy)
 	rootCmd.Execute()
 
-}
-
-type MatterlessClient struct {
-	URL   string
-	Token string
-}
-
-func NewMatterlessClient(url string, token string) *MatterlessClient {
-	return &MatterlessClient{
-		URL:   url,
-		Token: token,
-	}
-}
-
-func (client *MatterlessClient) Deploy(files []string, watch bool) {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		panic(err)
-	}
-
-	for _, path := range files {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			fmt.Printf("Could not open file %s: %s", path, err)
-			continue
-		}
-		appName := filepath.Base(path)
-		fmt.Printf("Deploying %s\n", appName)
-		client.updateApp(appName, string(data))
-		err = watcher.Add(path)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	if watch {
-		// File watch the definition file and reload on changes
-		client.watcher(watcher)
-	}
-}
-
-func (client *MatterlessClient) Delete(files []string) {
-	for _, path := range files {
-		appName := filepath.Base(path)
-		fmt.Printf("Undeploying %s\n", appName)
-		client.deleteApp(appName)
-	}
-}
-
-func (client *MatterlessClient) updateApp(appName, code string) {
-	fmt.Printf("Updating app %s...\n", appName)
-
-	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", client.URL, appName), strings.NewReader(code))
-	if err != nil {
-		fmt.Println("Updating app fail: ", err)
-		return
-	}
-	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", client.Token))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		fmt.Println("Updating app fail: ", err)
-		return
-	}
-
-	bodyData, _ := io.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-	resp.Body.Close()
-	fmt.Printf("All good!\n\n%s\n", bodyData)
-}
-
-func (client *MatterlessClient) deleteApp(appName string) {
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", client.URL, appName), nil)
-	if err != nil {
-		fmt.Println("Deleting app fail: ", err)
-		return
-	}
-	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", client.Token))
-	if _, err := http.DefaultClient.Do(req); err != nil {
-		fmt.Println("Deleting app fail: ", err)
-	}
-}
-
-func (client *MatterlessClient) watcher(watcher *fsnotify.Watcher) {
-eventLoop:
-	for {
-		select {
-		case event, ok := <-watcher.Events:
-			if !ok {
-				return
-			}
-			if event.Op&fsnotify.Write == fsnotify.Write {
-				path := event.Name
-				log.Infof("Definition %s modified, reloading...", path)
-				data, err := os.ReadFile(path)
-				if err != nil {
-					log.Fatalf("Could not open file %s: %s", path, err)
-					continue eventLoop
-				}
-				client.updateApp(filepath.Base(path), string(data))
-			}
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				return
-			}
-			log.Println("error:", err)
-		}
-	}
 }
 
 func runServer(cfg config.Config) {
@@ -219,4 +124,10 @@ func runServer(cfg config.Config) {
 		appContainer.Close()
 		os.Exit(0)
 	}()
+}
+
+func busyLoop() {
+	for {
+		time.Sleep(1 * time.Minute)
+	}
 }

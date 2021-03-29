@@ -110,7 +110,7 @@ func (inst *functionInstance) Name() string {
 func newFunctionInstance(ctx context.Context, runnerType string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*functionInstance, error) {
 	inst := &functionInstance{
 		name:          name,
-		containerName: fmt.Sprintf("matterless-%s", newFunctionHash(modules, env, functionConfig, code)),
+		containerName: fmt.Sprintf("mls-%s-%s", runnerType, newFunctionHash(modules, env, functionConfig, code)),
 	}
 
 	// Run "docker run -i" as child process

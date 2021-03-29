@@ -54,7 +54,7 @@ mattermost:posted:
 # Function: MyCustomEventFunc
 ```javascript
 function handle(evt) {
-    console.log("Custom event trigggered", evt);
+    console.log("Custom event:", evt);
 }
 ```
 

@@ -46,8 +46,6 @@ func NewAPIGateway(config config.Config, container *Container, functionInvokeFun
 		ReadTimeout:  15 * time.Second,
 	}
 
-	log.Debugf("Configured API APIGateway to listen on %s", srv.Addr)
-
 	ag := &APIGateway{
 		bindPort:           config.APIBindPort,
 		container:          container,
