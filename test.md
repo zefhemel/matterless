@@ -60,12 +60,15 @@ function handle(evt) {
 
 # Function: MyHTTPFunc
 ```javascript
+
+import {respondToEvent} from "matterless";
+
 function handle(event) {
     console.log(event); 
-    return {
+    respondToEvent(event, {
         status: 200,
         body: "Yo yo yo"
-    };
+    });
 }
 ```
 

@@ -4,38 +4,38 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/zefhemel/matterless/pkg/application"
 	"github.com/zefhemel/matterless/pkg/config"
-	"github.com/zefhemel/matterless/pkg/definition"
 	"io"
 	"net/http"
+	"os"
 	"testing"
 )
 
 func TestNewHTTPServer(t *testing.T) {
 	cfg := config.Config{
 		APIBindPort: 8123,
+		DataDir:     os.TempDir(),
 	}
 	c, err := application.NewContainer(cfg)
 	assert.NoError(t, err)
 	defer c.Close()
 	app := application.NewMockApplication("test")
 	c.Register("test", app)
-	app.EventBus().Subscribe("http:GET:/ping", func(eventName string, eventData interface{}) (interface{}, error) {
-		return &definition.APIGatewayResponse{
-			Status: 200,
-			Headers: map[string]string{
+	app.EventBus().Subscribe("http:GET:/ping", func(eventName string, eventData interface{}) {
+		app.EventBus().Respond(eventData, map[string]interface{}{
+			"status": float64(200),
+			"headers": map[string]interface{}{
 				"TestHeader": "Test",
 			},
-			Body: "pong",
-		}, nil
-
+			"body": "pong",
+		})
 	})
-	app.EventBus().Subscribe("http:GET:/json", func(eventName string, eventData interface{}) (interface{}, error) {
-		return &definition.APIGatewayResponse{
-			Status: 200,
-			Body: map[string]string{
+	app.EventBus().Subscribe("http:GET:/json", func(eventName string, eventData interface{}) {
+		app.EventBus().Respond(eventData, map[string]interface{}{
+			"status": float64(200),
+			"body": map[string]string{
 				"name": "My name",
 			},
-		}, nil
+		})
 	})
 
 	resp, err := http.Get("http://127.0.0.1:8123/test/ping")

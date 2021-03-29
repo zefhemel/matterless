@@ -7,7 +7,6 @@ import (
 	"github.com/zefhemel/matterless/pkg/application"
 	"github.com/zefhemel/matterless/pkg/client"
 	"github.com/zefhemel/matterless/pkg/config"
-	"github.com/zefhemel/matterless/pkg/util"
 	"os"
 	"os/signal"
 	"runtime"
@@ -32,10 +31,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			runConfig.APIURL = fmt.Sprintf("http://%s:%d", apiHost, runConfig.APIBindPort)
-			if runConfig.RootToken == "" {
-				runConfig.RootToken = util.TokenGenerator()
-			}
-			runServer(runConfig)
+			runServer(runConfig, false)
 			mlsClient := client.NewMatterlessClient(runConfig.APIURL, runConfig.RootToken)
 			mlsClient.Deploy(args, runWatch)
 			busyLoop()
@@ -44,7 +40,7 @@ func main() {
 	cmdRun.Flags().BoolVarP(&runWatch, "watch", "w", false, "watch apps for changes and reload")
 	cmdRun.Flags().IntVarP(&runConfig.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
 	cmdRun.Flags().StringVarP(&runConfig.RootToken, "token", "t", "", "Root API token")
-	cmdRun.Flags().StringVar(&runConfig.LevelDBDatabasesPath, "data", "./mls-data", "location to keep Matterless state")
+	cmdRun.Flags().StringVar(&runConfig.DataDir, "data", "", "Path to keep Matterless state")
 
 	var (
 		deployWatch bool
@@ -80,41 +76,41 @@ func main() {
 		Short: "Matterless is friction-free serverless",
 		Run: func(cmd *cobra.Command, args []string) {
 			serverConfig.APIURL = fmt.Sprintf("http://%s:%d", apiHost, serverConfig.APIBindPort)
-			if serverConfig.RootToken == "" {
-				serverConfig.RootToken = util.TokenGenerator()
-				fmt.Printf("Auto generated root token: %s\n", serverConfig.RootToken)
-			}
-
-			runServer(serverConfig)
+			runServer(serverConfig, true)
 			busyLoop()
 		},
 	}
 	rootCmd.Flags().IntVarP(&serverConfig.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
 	rootCmd.Flags().StringVarP(&serverConfig.RootToken, "token", "t", "", "Root API token")
-	rootCmd.Flags().StringVar(&serverConfig.LevelDBDatabasesPath, "data", "./mls-data", "location to keep Matterless state")
+	rootCmd.Flags().StringVar(&serverConfig.DataDir, "data", "./mls-data", "location to keep Matterless state")
 
 	rootCmd.AddCommand(cmdRun, cmdDeploy)
 	rootCmd.Execute()
 
 }
 
-func runServer(cfg config.Config) {
+func runServer(cfg config.Config, loadApps bool) {
 	appContainer, err := application.NewContainer(cfg)
 	if err != nil {
 		log.Fatal("Could not start app container", err)
 	}
-	appContainer.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
+	appContainer.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		if le, ok := eventData.(application.LogEntry); ok {
 			if le.LogEntry.Instance == nil {
-				return nil, nil
+				return
 			}
 
 			log.Infof("[App: %s | Function: %s] %s", le.AppName, le.LogEntry.Instance.Name(), le.LogEntry.Message)
 		} else {
 			log.Error("Received log event that's not an application.LogEntry ", eventData)
 		}
-		return nil, nil
 	})
+
+	if loadApps {
+		if err := appContainer.LoadAppsFromDisk(); err != nil {
+			log.Errorf("Could not load apps from disk: %s", err)
+		}
+	}
 
 	// Handle Ctrl-c gracefully
 	killing := make(chan os.Signal)

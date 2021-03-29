@@ -26,6 +26,6 @@ type FunctionInstance interface {
 
 type JobInstance interface {
 	Name() string
-	Start(ctx context.Context) (EnvMap, error)
+	Start(ctx context.Context) error
 	Stop()
 }

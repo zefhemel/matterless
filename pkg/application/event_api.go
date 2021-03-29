@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 )
@@ -18,18 +19,21 @@ func (ag *APIGateway) exposeEventAPI() {
 		if authHeader == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			fmt.Fprint(w, "No authorization provided")
+			log.Infof("Error authenticating with event API")
 			return
 		}
 		authHeaderParts := strings.Split(authHeader, " ")
 		if len(authHeaderParts) != 2 || len(authHeaderParts) == 2 && authHeaderParts[0] != "bearer" {
 			w.WriteHeader(http.StatusUnauthorized)
 			fmt.Fprint(w, "No authorization provided")
+			log.Infof("Error authenticating with event API")
 			return
 		}
 		token := authHeaderParts[1]
 		app := ag.container.Get(appName)
 		if app == nil {
 			http.NotFound(w, r)
+			log.Infof("Not found app")
 			return
 		}
 		if token != app.apiToken {

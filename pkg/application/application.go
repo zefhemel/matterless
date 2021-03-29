@@ -8,10 +8,10 @@ import (
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventbus"
-	"github.com/zefhemel/matterless/pkg/eventsource"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/store"
 	"github.com/zefhemel/matterless/pkg/util"
+	"os"
 	"time"
 )
 
@@ -22,43 +22,70 @@ type Application struct {
 	code        string
 
 	// Runtime
-	connectedEventSources []eventsource.EventSource
-	sandbox               *sandbox.DockerSandbox
-	eventBus              eventbus.EventBus
+	sandbox            *sandbox.DockerSandbox
+	eventBus           eventbus.EventBus
+	eventSubscriptions []eventSubscription
 
 	// API
-	apiToken  string
-	dataStore store.Store
-	cfg       config.Config
+	apiToken    string
+	dataStore   store.Store
+	cfg         config.Config
+	appDataPath string
 }
 
-func NewApplication(cfg config.Config, appName string) *Application {
-	dataStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/%s", cfg.LevelDBDatabasesPath, util.SafeFilename(appName)))
+type eventSubscription struct {
+	eventPattern     string
+	subscriptionFunc eventbus.SubscriptionFunc
+}
+
+func NewApplication(cfg config.Config, appName string) (*Application, error) {
+	appDataPath := fmt.Sprintf("%s/%s", cfg.DataDir, util.SafeFilename(appName))
+	if err := os.MkdirAll(appDataPath, 0700); err != nil {
+		return nil, errors.Wrap(err, "create data dir")
+	}
+	dataStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/store", appDataPath))
 	if err != nil {
-		log.Fatal("Could not create data store for ", appName)
+		return nil, errors.Wrap(err, "create data store dir")
 	}
 	eventBus := eventbus.NewLocalEventBus()
 	app := &Application{
-		cfg:       cfg,
-		appName:   appName,
-		eventBus:  eventBus,
-		dataStore: dataStore,
-		apiToken:  util.TokenGenerator(),
+		cfg:         cfg,
+		appDataPath: appDataPath,
+		appName:     appName,
+		eventBus:    eventBus,
+		dataStore:   dataStore,
+		apiToken:    util.TokenGenerator(),
 		// TODO: Make this configurable
 		sandbox: sandbox.NewDockerSandbox(eventBus, 1*time.Minute, 5*time.Minute),
 	}
 
-	return app
+	return app, nil
+}
+
+func (app *Application) LoadFromDisk() error {
+	applicationFile := fmt.Sprintf("%s/application.md", app.appDataPath)
+	if _, err := os.Stat(applicationFile); err == nil {
+		buf, err := os.ReadFile(applicationFile)
+		if err != nil {
+			return errors.Wrap(err, "reading application file")
+		}
+		return app.Eval(string(buf))
+	} else {
+		return err
+	}
+
+	return nil
 }
 
 // Only for testing
 func NewMockApplication(appName string) *Application {
 	return &Application{
-		appName:     appName,
-		definitions: &definition.Definitions{},
-		sandbox:     sandbox.NewDockerSandbox(eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute),
-		dataStore:   &store.MockStore{},
-		eventBus:    eventbus.NewLocalEventBus(),
+		appName:            appName,
+		definitions:        &definition.Definitions{},
+		sandbox:            sandbox.NewDockerSandbox(eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute),
+		dataStore:          &store.MockStore{},
+		eventBus:           eventbus.NewLocalEventBus(),
+		eventSubscriptions: []eventSubscription{},
 	}
 }
 
@@ -102,12 +129,22 @@ func (app *Application) Eval(code string) error {
 	app.definitions = defs
 
 	app.extendEnviron()
-
 	app.reset()
 
-	es := eventsource.NewEventEventSource(app.eventBus, defs.Events, app.InvokeFunction)
-	app.connectedEventSources = append(app.connectedEventSources, es)
-	es.ExtendDefinitions(defs)
+	for eventName, funcs := range defs.Events {
+		// Copy variable into loop scope (closure)
+		funcsToInvoke := funcs
+		sub := eventSubscription{
+			eventPattern: eventName,
+			subscriptionFunc: func(eventName string, eventData interface{}) {
+				for _, funcToInvoke := range funcsToInvoke {
+					app.InvokeFunction(funcToInvoke, eventData)
+				}
+			},
+		}
+		app.eventBus.Subscribe(eventName, sub.subscriptionFunc)
+		app.eventSubscriptions = append(app.eventSubscriptions, sub)
+	}
 
 	log.Info("Starting jobs...")
 	for name, def := range defs.Jobs {
@@ -115,34 +152,27 @@ func (app *Application) Eval(code string) error {
 		if err != nil {
 			return errors.Wrap(err, "init job")
 		}
-		envMap, err := ji.Start(context.Background())
-		if err != nil {
+		if err := ji.Start(context.Background()); err != nil {
 			return errors.Wrap(err, "init job")
 		}
-		for k, v := range envMap {
-			app.definitions.Environment[k] = v
-		}
+	}
+	if err := os.WriteFile(fmt.Sprintf("%s/application.md", app.appDataPath), []byte(code), 0600); err != nil {
+		log.Errorf("Could not write application.md file to disk: %s", err)
 	}
 
-	//log.Info("Initializing functions...")
-	//for name, def := range defs.Functions {
-	//	_, err := app.sandbox.Function(context.Background(), string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(def.Language), def.Config, def.Code)
-	//	if err != nil {
-	//		return errors.Wrap(err, "init function")
-	//	}
-	//}
-
-	log.Debug("All ready to go!")
+	log.Info("Ready to go.")
 	return nil
 }
 
 // reset but ready to start again
 func (app *Application) reset() {
-	// First, stop all event sources
-	for _, eventSource := range app.connectedEventSources {
-		eventSource.Close()
+	// Unsubscribe all event listeners
+	for _, subscription := range app.eventSubscriptions {
+		app.eventBus.Unsubscribe(subscription.eventPattern, subscription.subscriptionFunc)
 	}
-	app.connectedEventSources = []eventsource.EventSource{}
+	app.eventSubscriptions = make([]eventSubscription, 0, 10)
+
+	// Flush the sandbox
 	app.sandbox.Flush()
 }
 

@@ -21,10 +21,9 @@ func TestDockerSandboxFunction(t *testing.T) {
 	}
 	eventBus := eventbus.NewLocalEventBus()
 	s := sandbox.NewDockerSandbox(eventBus, 10*time.Second, 15*time.Second)
-	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
+	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		logEntry := eventData.(sandbox.LogEntry)
 		log.Infof("Got log: %s", logEntry.Message)
-		return nil, nil
 	})
 	defer s.Close()
 	code := `
@@ -65,11 +64,10 @@ func TestDockerSandboxJob(t *testing.T) {
 	eventBus := eventbus.NewLocalEventBus()
 	s := sandbox.NewDockerSandbox(eventBus, 10*time.Second, 15*time.Second)
 	logCounter := 0
-	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) (interface{}, error) {
+	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		logEntry := eventData.(sandbox.LogEntry)
 		log.Infof("Got log: %s", logEntry.Message)
 		logCounter++
-		return nil, nil
 	})
 	defer s.Close()
 	code := `
@@ -107,10 +105,9 @@ func TestDockerSandboxJob(t *testing.T) {
 	}, code)
 	assert.NoError(t, err)
 
-	envM, err := jobInstance.Start(context.Background())
+	err = jobInstance.Start(context.Background())
 	assert.NoError(t, err)
 	time.Sleep(2 * time.Second)
-	log.Info("Env", envM, logCounter)
 	// Some iteration logs should have been written
 	assert.True(t, logCounter > 5)
 }

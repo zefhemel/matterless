@@ -159,6 +159,14 @@ func newFunctionInstance(ctx context.Context, runnerType string, name string, ev
 		return nil, errors.Wrap(err, "parse docker inspect")
 	}
 
+	if len(dockerInspectOutputs) == 0 {
+		return nil, errors.New("invalid docker inspect output")
+	}
+
+	if len(dockerInspectOutputs[0].NetworkSettings.Ports["8081/tcp"]) == 0 {
+		return nil, errors.New("invalid docker inspect output")
+	}
+
 	inst.controlURL = fmt.Sprintf("http://localhost:%s", dockerInspectOutputs[0].NetworkSettings.Ports["8081/tcp"][0].HostPort)
 	inst.serverURL = fmt.Sprintf("http://localhost:%s", dockerInspectOutputs[0].NetworkSettings.Ports["8080/tcp"][0].HostPort)
 
@@ -285,7 +293,7 @@ func (inst *functionInstance) init(env EnvMap, modules ModuleMap, functionConfig
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return errors.Wrap(err, "init http call")
+		return errors.Wrapf(err, "init http call: %s %s", err, resp)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -324,31 +332,25 @@ func newJobInstance(ctx context.Context, name string, eventBus eventbus.EventBus
 	return inst, nil
 }
 
-func (inst *jobInstance) Start(ctx context.Context) (EnvMap, error) {
+func (inst *jobInstance) Start(ctx context.Context) error {
 	inst.timeStarted = time.Now()
 
 	httpClient := http.DefaultClient
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/start", inst.serverURL), nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "invoke call")
+		return errors.Wrap(err, "invoke call")
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
+		return errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("HTTP Error: %s", body)
+		return fmt.Errorf("HTTP Error: %s", body)
 	}
 
-	var result EnvMap
-	jsonDecoder := json.NewDecoder(resp.Body)
-	if err := jsonDecoder.Decode(&result); err != nil {
-		return nil, errors.Wrap(err, "unmarshall response")
-	}
-
-	return result, nil
+	return nil
 }
 
 func (inst *jobInstance) Stop() {

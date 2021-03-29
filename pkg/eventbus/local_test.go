@@ -5,21 +5,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/zefhemel/matterless/pkg/eventbus"
 	"testing"
+	"time"
 )
 
 func TestLocalEventBus(t *testing.T) {
 	a := assert.New(t)
 	eb := eventbus.NewLocalEventBus()
 	eb.Publish("testEventNoListeners", struct{}{})
-	catchAllCallback := func(eventName string, eventData interface{}) (interface{}, error) {
+	catchAllCallback := func(eventName string, eventData interface{}) {
 		log.Infof("Got catch-all event: '%s' with data: %+v", eventName, eventData)
-		return nil, nil
 	}
 	eb.Subscribe("*", catchAllCallback)
 	receivedRandom := false
-	randomCallback := func(eventName string, eventData interface{}) (interface{}, error) {
+	randomCallback := func(eventName string, eventData interface{}) {
 		receivedRandom = true
-		return nil, nil
 	}
 	eb.Subscribe("random", randomCallback)
 	eb.Publish("random", struct{}{})
@@ -31,13 +30,11 @@ func TestLocalEventBus(t *testing.T) {
 
 	called := false
 	called2 := false
-	eb.Subscribe("myApp:something", func(eventName string, eventData interface{}) (interface{}, error) {
+	eb.Subscribe("myApp:something", func(eventName string, eventData interface{}) {
 		called = true
-		return nil, nil
 	})
-	eb.Subscribe("myApp:something", func(eventName string, eventData interface{}) (interface{}, error) {
+	eb.Subscribe("myApp:something", func(eventName string, eventData interface{}) {
 		called2 = true
-		return nil, nil
 	})
 	eb.Publish("myApp:something", struct{}{})
 	a.True(called)
@@ -49,18 +46,16 @@ func TestLocalEventBus(t *testing.T) {
 	a.False(called)
 	a.False(called2)
 
-	eb.Subscribe("http:/hello", func(eventName string, eventData interface{}) (interface{}, error) {
+	eb.Subscribe("http:/hello", func(eventName string, eventData interface{}) {
 		log.Info("HERE")
-		return eventData, nil
+		eb.Respond(eventData, eventData)
 	})
-	eb.Unsubscribe("*", catchAllCallback)
+	//eb.Unsubscribe("*", catchAllCallback)
 
-	myEvent := struct {
-		name string
-	}{
-		name: "pete",
+	myEvent := map[string]interface{}{
+		"name": "pete",
 	}
-	r, err := eb.Call("http:/hello", myEvent)
+	r, err := eb.Request("http:/hello", myEvent, time.Second)
 	a.NoError(err)
 	a.Equal(myEvent, r)
 }

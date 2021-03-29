@@ -26,7 +26,12 @@ func (ag *APIGateway) exposeRootAPI(cfg config.Config) {
 
 		app := ag.container.Get(appName)
 		if app == nil {
-			app = NewApplication(cfg, appName)
+			app, err = NewApplication(cfg, appName)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, "Could not create app: %s", err)
+				return
+			}
 			ag.container.Register(appName, app)
 		}
 

@@ -6,7 +6,6 @@ import (
 	"expvar"
 	"fmt"
 	"github.com/gorilla/mux"
-	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
@@ -64,7 +63,7 @@ func (ag *APIGateway) Start() error {
 	ag.wg.Add(1)
 	go func() {
 		defer ag.wg.Done()
-		log.Infof("Starting API APIGateway on %s", ag.server.Addr)
+		log.Infof("Starting Matterless API Gateway on %s", ag.server.Addr)
 		if err := ag.server.ListenAndServe(); err != http.ErrServerClosed {
 			log.Fatalf("ListenAndServe(): %v", err)
 		}
@@ -91,17 +90,25 @@ func (ag *APIGateway) Stop() {
 
 func (ag *APIGateway) buildRouter(config config.Config) {
 	ag.rootRouter.Handle("/info", expvar.Handler())
+
+	// Expose internal API routes
 	ag.exposeRootAPI(config)
 	ag.exposeStoreAPI()
 	ag.exposeEventAPI()
+
+	// Handle custom API endpoints
 	ag.rootRouter.HandleFunc("/{appName}/{path:.*}", func(writer http.ResponseWriter, request *http.Request) {
+		reportHTTPError := func(err error) {
+			writer.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(writer, "Error: %s", err)
+		}
+
 		vars := mux.Vars(request)
 		appName := vars["appName"]
 		path := vars["path"]
 		evt, err := ag.buildEvent(path, request)
 		if err != nil {
-			writer.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(writer, "Error: %s", err)
+			reportHTTPError(err)
 			return
 		}
 		app := ag.container.Get(appName)
@@ -109,69 +116,79 @@ func (ag *APIGateway) buildRouter(config config.Config) {
 			http.NotFound(writer, request)
 			return
 		}
-		response, err := app.EventBus().Call(fmt.Sprintf("http:%s:/%s", request.Method, path), evt)
+		// TODO: Remove hardcoded timeout
+		response, err := app.EventBus().Request(fmt.Sprintf("http:%s:/%s", request.Method, path), evt, 10*time.Second)
 		if err != nil {
-			writer.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(writer, "Error: %s", err)
+			reportHTTPError(err)
 			return
 		}
 
-		if _, ok := response.(map[string]interface{}); ok {
-			// Custom handler response with plain map[string]interface{}, map back to APIGatewayResponse
-			var apiGResp definition.APIGatewayResponse
-			if err := mapstructure.Decode(response, &apiGResp); err != nil {
-				writer.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(writer, err.Error())
-				return
-			}
-			response = &apiGResp
-		}
-
-		if apiResponse, ok := response.(*definition.APIGatewayResponse); ok {
-			if apiResponse.Headers != nil {
-				for name, value := range apiResponse.Headers {
-					writer.Header().Set(name, value)
+		if apiResponse, ok := response.(map[string]interface{}); ok {
+			if headers, ok := apiResponse["headers"]; ok {
+				if headerMap, ok := headers.(map[string]interface{}); ok {
+					for name, value := range headerMap {
+						if strVal, ok := value.(string); ok {
+							writer.Header().Set(name, strVal)
+						} else {
+							reportHTTPError(fmt.Errorf("Header '%s' is not a string", name))
+							return
+						}
+					}
+				} else {
+					reportHTTPError(errors.New("'headers' is not an object"))
+					return
 				}
 			}
-			if apiResponse.Status == 0 {
-				apiResponse.Status = http.StatusOK
+			responseStatus := http.StatusOK
+			if val, ok := apiResponse["status"]; ok {
+				if numberVal, ok := val.(float64); ok {
+					responseStatus = int(numberVal)
+				} else {
+					reportHTTPError(errors.New("'status' is not a number"))
+					return
+				}
 			}
-			switch body := apiResponse.Body.(type) {
-			case string:
-				writer.WriteHeader(apiResponse.Status)
-				writer.Write([]byte(body))
-			default:
-				writer.Header().Set("content-type", "application/json")
-				writer.WriteHeader(apiResponse.Status)
-				writer.Write([]byte(util.MustJsonString(body)))
+			if bodyVal, ok := apiResponse["body"]; ok {
+				switch body := bodyVal.(type) {
+				case string:
+					writer.WriteHeader(responseStatus)
+					writer.Write([]byte(body))
+				default:
+					writer.Header().Set("content-type", "application/json")
+					writer.WriteHeader(responseStatus)
+					writer.Write([]byte(util.MustJsonString(body)))
+				}
+			} else {
+				reportHTTPError(errors.New("No 'body' specified"))
+				return
 			}
 		} else {
 			writer.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(writer, "Error: Did not get back an APIGatewayResponse")
+			fmt.Fprintf(writer, "Error: Did not get back an object")
 			return
 		}
 	})
 }
 
-func (ag *APIGateway) buildEvent(path string, request *http.Request) (*definition.APIGatewayRequestEvent, error) {
-	evt := &definition.APIGatewayRequestEvent{
-		Path:          fmt.Sprintf("/%s", path),
-		Method:        request.Method,
-		Headers:       util.FlatStringMap(request.Header),
-		RequestParams: util.FlatStringMap(request.URL.Query()),
+func (ag *APIGateway) buildEvent(path string, request *http.Request) (map[string]interface{}, error) {
+	evt := map[string]interface{}{
+		"path":           fmt.Sprintf("/%s", path),
+		"method":         request.Method,
+		"headers":        util.FlatStringMap(request.Header),
+		"request_params": util.FlatStringMap(request.URL.Query()),
 	}
 	if request.Header.Get("content-type") == "application/x-www-form-urlencoded" {
 		if err := request.ParseForm(); err != nil {
 			return nil, errors.Wrap(err, "parsing form")
 		}
-		evt.FormValues = util.FlatStringMap(request.PostForm)
+		evt["form_values"] = util.FlatStringMap(request.PostForm)
 	} else if request.Header.Get("content-type") == "application/json" {
 		var jsonBody interface{}
 		decoder := json.NewDecoder(request.Body)
 		if err := decoder.Decode(&jsonBody); err != nil {
 			return nil, errors.Wrap(err, "parsing json body")
 		}
-		evt.JSONBody = jsonBody
+		evt["json_Body"] = jsonBody
 	}
 	return evt, nil
 }

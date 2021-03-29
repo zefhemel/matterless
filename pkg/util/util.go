@@ -12,19 +12,10 @@ func TokenGenerator() string {
 	return fmt.Sprintf("%x", b)
 }
 
-var safeFilenameRE = regexp.MustCompile("[^A-Za-z0-9_]")
+var safeFilenameRE = regexp.MustCompile("[^A-Za-z0-9_\\.]")
 
 func SafeFilename(s string) string {
 	return safeFilenameRE.ReplaceAllString(s, "_")
-}
-
-func StringSliceContains(slice []string, s string) bool {
-	for _, a := range slice {
-		if a == s {
-			return true
-		}
-	}
-	return false
 }
 
 func ReverseStringSlice(ss []string) []string {
