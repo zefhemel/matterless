@@ -18,7 +18,7 @@ func TestEventHTTP(t *testing.T) {
 	}
 	a := assert.New(t)
 	log.SetLevel(log.DebugLevel)
-	cfg := config.Config{
+	cfg := &config.Config{
 		APIBindPort: 8123,
 		APIURL:      "http://host.docker.internal:8123",
 		DataDir:     os.TempDir(),

@@ -1,7 +1,11 @@
+# Environment
+```yaml
+TOKEN: cu7f3goontys8ctra5nd8hy59y
+```
 # Job: AClient
 ```yaml
 config:
-    token: cu7f3goontys8ctra5nd8hy59y
+    token: $TOKEN
     url: "100.111.247.128:8065"
     events:
       - hello
@@ -46,10 +50,13 @@ mattermost:hello:
   - MyCustomEventFunc
 mattermost:posted:
   - MyCustomEventFunc
+```
+
+# Events
+```
 "http:GET:/test":
   - MyHTTPFunc
 ```
-
 
 # Function: MyCustomEventFunc
 ```javascript
@@ -71,5 +78,3 @@ function handle(event) {
     });
 }
 ```
-
-

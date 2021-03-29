@@ -35,7 +35,7 @@ func init() {
 	}))
 }
 
-func NewAPIGateway(config config.Config, container *Container, functionInvokeFunc FunctionInvokeFunc) *APIGateway {
+func NewAPIGateway(config *config.Config, container *Container, functionInvokeFunc FunctionInvokeFunc) *APIGateway {
 	r := mux.NewRouter()
 
 	srv := &http.Server{
@@ -88,7 +88,7 @@ func (ag *APIGateway) Stop() {
 	ag.wg.Wait()
 }
 
-func (ag *APIGateway) buildRouter(config config.Config) {
+func (ag *APIGateway) buildRouter(config *config.Config) {
 	ag.rootRouter.Handle("/info", expvar.Handler())
 
 	// Expose internal API routes

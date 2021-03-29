@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewHTTPServer(t *testing.T) {
-	cfg := config.Config{
+	cfg := &config.Config{
 		APIBindPort: 8123,
 		DataDir:     os.TempDir(),
 	}

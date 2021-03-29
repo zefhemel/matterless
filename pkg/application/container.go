@@ -21,11 +21,11 @@ type Container struct {
 	eventBus          eventbus.EventBus
 	apps              map[string]*Application
 	apiGateway        *APIGateway
-	config            config.Config
+	config            *config.Config
 	deleteDataOnClose bool
 }
 
-func NewContainer(config config.Config) (*Container, error) {
+func NewContainer(config *config.Config) (*Container, error) {
 	appMap := map[string]*Application{}
 	c := &Container{
 		apps:     appMap,
@@ -136,4 +136,8 @@ func (c *Container) LoadAppsFromDisk() error {
 		}
 	}
 	return nil
+}
+
+func (c *Container) Config() *config.Config {
+	return c.config
 }

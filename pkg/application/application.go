@@ -29,7 +29,7 @@ type Application struct {
 	// API
 	apiToken    string
 	dataStore   store.Store
-	cfg         config.Config
+	cfg         *config.Config
 	appDataPath string
 }
 
@@ -38,7 +38,7 @@ type eventSubscription struct {
 	subscriptionFunc eventbus.SubscriptionFunc
 }
 
-func NewApplication(cfg config.Config, appName string) (*Application, error) {
+func NewApplication(cfg *config.Config, appName string) (*Application, error) {
 	appDataPath := fmt.Sprintf("%s/%s", cfg.DataDir, util.SafeFilename(appName))
 	if err := os.MkdirAll(appDataPath, 0700); err != nil {
 		return nil, errors.Wrap(err, "create data dir")
@@ -124,6 +124,10 @@ func (app *Application) Eval(code string) error {
 	if err != nil {
 		return err
 	}
+	for envName, envVal := range app.cfg.GlobalEnv {
+		defs.Environment[envName] = envVal
+	}
+
 	defs.Normalize()
 
 	app.definitions = defs

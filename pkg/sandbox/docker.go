@@ -293,7 +293,7 @@ func (inst *functionInstance) init(env EnvMap, modules ModuleMap, functionConfig
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return errors.Wrapf(err, "init http call: %s %s", err, resp)
+		return errors.Wrapf(err, "init http call: %s", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {

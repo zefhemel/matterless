@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func (ag *APIGateway) exposeRootAPI(cfg config.Config) {
+func (ag *APIGateway) exposeRootAPI(cfg *config.Config) {
 	ag.rootRouter.HandleFunc("/{app}", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
@@ -55,7 +55,7 @@ func (ag *APIGateway) exposeRootAPI(cfg config.Config) {
 	}).Methods("DELETE")
 }
 
-func (ag *APIGateway) rootApiAuth(w http.ResponseWriter, r *http.Request, cfg config.Config) bool {
+func (ag *APIGateway) rootApiAuth(w http.ResponseWriter, r *http.Request, cfg *config.Config) bool {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		w.WriteHeader(http.StatusUnauthorized)

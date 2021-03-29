@@ -58,6 +58,7 @@ func Parse(code string) (*Definitions, error) {
 		Functions:   map[FunctionID]*FunctionDef{},
 		Jobs:        map[FunctionID]*JobDef{},
 		Environment: map[string]string{},
+		Events:      map[string][]FunctionID{},
 		Modules:     map[string]*FunctionDef{},
 	}
 	codeBytes := []byte(code)
@@ -122,14 +123,27 @@ func Parse(code string) (*Definitions, error) {
 			if err != nil {
 				return err
 			}
-			decls.Events = def
+			// Merge into other Events blocks
+			for eventName, newFns := range def {
+				if existingFns, ok := decls.Events[eventName]; ok {
+					// Already has other listeners, add additional ones
+					decls.Events[eventName] = append(existingFns, newFns...)
+				} else {
+					decls.Events[eventName] = newFns
+				}
+			}
 		case "Environment":
-			err := yaml.Unmarshal([]byte(currentBody), &decls.Environment)
+			var newEnv map[string]string
+			err := yaml.Unmarshal([]byte(currentBody), &newEnv)
 			if err := Validate("schema/environment.schema.json", currentBody); err != nil {
 				return fmt.Errorf("Environment: %s", err)
 			}
 			if err != nil {
 				return err
+			}
+			for envName, envVal := range newEnv {
+				// Override or insert new
+				decls.Environment[envName] = envVal
 			}
 		}
 		return nil

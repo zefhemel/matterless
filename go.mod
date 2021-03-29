@@ -3,6 +3,7 @@ module github.com/zefhemel/matterless
 go 1.16
 
 require (
+	github.com/buildkite/interpolate v0.0.0-20200526001904-07f35b4ae251
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.8.0

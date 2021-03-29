@@ -24,15 +24,16 @@ func main() {
 	}
 
 	runWatch := false
-	var runConfig config.Config
+	runConfig := config.FromEnv()
 	var cmdRun = &cobra.Command{
 		Use:   "run [file1.md] ...",
 		Short: "Run Matterless and run listed apps",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			runConfig.APIURL = fmt.Sprintf("http://%s:%d", apiHost, runConfig.APIBindPort)
-			runServer(runConfig, false)
-			mlsClient := client.NewMatterlessClient(runConfig.APIURL, runConfig.RootToken)
+			container := runServer(runConfig, false)
+			log.Info("Config", container.Config())
+			mlsClient := client.NewMatterlessClient(runConfig.APIURL, container.Config().RootToken)
 			mlsClient.Deploy(args, runWatch)
 			busyLoop()
 		},
@@ -69,7 +70,7 @@ func main() {
 	cmdDeploy.Flags().StringVar(&deployURL, "url", "", "URL or Matterless server to deploy to")
 	cmdDeploy.Flags().StringVarP(&deployToken, "token", "t", "", "Root token for Matterless server")
 
-	var serverConfig config.Config
+	serverConfig := config.FromEnv()
 
 	var rootCmd = &cobra.Command{
 		Use:   "mls",
@@ -89,7 +90,7 @@ func main() {
 
 }
 
-func runServer(cfg config.Config, loadApps bool) {
+func runServer(cfg *config.Config, loadApps bool) *application.Container {
 	appContainer, err := application.NewContainer(cfg)
 	if err != nil {
 		log.Fatal("Could not start app container", err)
@@ -120,6 +121,8 @@ func runServer(cfg config.Config, loadApps bool) {
 		appContainer.Close()
 		os.Exit(0)
 	}()
+
+	return appContainer
 }
 
 func busyLoop() {
