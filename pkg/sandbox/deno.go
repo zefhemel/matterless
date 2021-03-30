@@ -106,7 +106,6 @@ func newDenoFunctionInstance(ctx context.Context, runMode string, name string, e
 		return nil, errors.Wrap(err, "write JS function file")
 	}
 
-	// TODO: Change to randomized port
 	listenPort := util.FindFreePort(8000)
 
 	// Run "docker run -i" as child process

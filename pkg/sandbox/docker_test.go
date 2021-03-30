@@ -46,7 +46,9 @@ func TestDockerSandboxFunction(t *testing.T) {
 	modules := sandbox.ModuleMap(map[string]string{})
 
 	// Init
-	funcInstance, err := s.Function(context.Background(), "test", env, modules, definition.FunctionConfig{}, code)
+	funcInstance, err := s.Function(context.Background(), "test", env, modules, definition.FunctionConfig{
+		Runtime: "node",
+	}, code)
 	assert.NoError(t, err)
 
 	// Invoke
@@ -102,6 +104,7 @@ func TestDockerSandboxJob(t *testing.T) {
 		Config: map[string]interface{}{
 			"something": "To do",
 		},
+		Runtime: "node",
 	}, code)
 	assert.NoError(t, err)
 

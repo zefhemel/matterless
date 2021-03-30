@@ -43,7 +43,7 @@ func TestEventHTTP(t *testing.T) {
 
 # Function: MyHTTPFunc
 |||javascript
-import {respondToEvent} from "matterless";
+import {respondToEvent} from "./matterless.ts";
 
 function handle(event) {
     respondToEvent(event, {

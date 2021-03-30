@@ -21,6 +21,8 @@ type LogEntry struct {
 type ModuleMap map[string]string
 type EnvMap map[string]string
 
+const DefaultRuntime = "deno"
+
 type FunctionInstance interface {
 	Name() string
 	Invoke(ctx context.Context, event interface{}) (interface{}, error)
@@ -83,9 +85,13 @@ func (s *Sandbox) Function(ctx context.Context, name string, env EnvMap, modules
 	)
 	inst, ok = s.runningFunctions[functionHash]
 	if !ok {
-		if functionConfig.Runtime == "" || functionConfig.Runtime == "node" {
+		if functionConfig.Runtime == "" {
+			functionConfig.Runtime = DefaultRuntime
+		}
+		switch functionConfig.Runtime {
+		case "node":
 			inst, err = newDockerFunctionInstance(ctx, "node-function", name, s.eventBus, env, modules, functionConfig, code)
-		} else if functionConfig.Runtime == "deno" {
+		case "deno":
 			inst, err = newDenoFunctionInstance(ctx, "function", name, s.eventBus, env, modules, functionConfig, code)
 		}
 		if inst == nil {
@@ -113,9 +119,13 @@ func (s *Sandbox) Job(ctx context.Context, name string, env EnvMap, modules Modu
 
 	inst, ok = s.runningJobs[name]
 	if !ok {
-		if functionConfig.Runtime == "" || functionConfig.Runtime == "node" {
+		if functionConfig.Runtime == "" {
+			functionConfig.Runtime = DefaultRuntime
+		}
+		switch functionConfig.Runtime {
+		case "node":
 			inst, err = newDockerJobInstance(ctx, name, s.eventBus, env, modules, functionConfig, code)
-		} else if functionConfig.Runtime == "deno" {
+		case "deno":
 			inst, err = newDenoJobInstance(ctx, name, s.eventBus, env, modules, functionConfig, code)
 		}
 		if inst == nil {

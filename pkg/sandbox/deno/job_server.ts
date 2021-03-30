@@ -4,7 +4,7 @@ import {init, start, stop, run} from "./function.js"
 
 const port = +Deno.args[0];
 const server = serve({ hostname: "0.0.0.0", port: port });
-console.log(`Server listening on: http://localhost:${port}`);
+console.log(`Starting deno job runtime (${port})`);
 
 // @ts-ignore
 Promise.resolve(init()).then(async () => {

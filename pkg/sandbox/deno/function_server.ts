@@ -4,7 +4,7 @@ import {init, handle} from "./function.js"
 
 const port = +Deno.args[0];
 const server = serve({ hostname: "0.0.0.0", port: port });
-console.log(`Server listening on: http://localhost:${port}`);
+console.log(`Starting deno function runtime.`);
 const textDecoder = new TextDecoder();
 
 // @ts-ignore
