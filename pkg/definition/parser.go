@@ -48,18 +48,44 @@ func Validate(schemaName string, yamlString string) error {
 	}
 }
 
-var headerRegex = regexp.MustCompile("\\s*(\\w+)\\:?\\s*(.*)")
+func ValidateObj(schemaName string, obj interface{}) error {
+	schemaBytes, err := jsonSchemas.ReadFile(schemaName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	schemaLoader := gojsonschema.NewStringLoader(string(schemaBytes))
+
+	// And then serialize it to JSON to be ready by the validator. Crazy times!
+	jsonObjectLoader := gojsonschema.NewStringLoader(util.MustJsonString(obj))
+	result, err := gojsonschema.Validate(schemaLoader, jsonObjectLoader)
+	if err != nil {
+		return errors.Wrap(err, "validation")
+	}
+	if result.Valid() {
+		return nil
+	} else {
+		errorItems := []string{}
+		for _, err := range result.Errors() {
+			errorItems = append(errorItems, fmt.Sprintf("- %s", err.String()))
+		}
+		return fmt.Errorf("Validation errors:\n\n%s", strings.Join(errorItems, "\n"))
+	}
+}
+
+var headerRegex = regexp.MustCompile("\\s*([\\w\\.]+)\\:?\\s*(.*)")
 
 // Parse uses the GoldMark Markdown parser to parse definitions
 func Parse(code string) (*Definitions, error) {
 	mdParser := goldmark.DefaultParser()
 
 	decls := &Definitions{
-		Functions:   map[FunctionID]*FunctionDef{},
-		Jobs:        map[FunctionID]*JobDef{},
-		Environment: map[string]string{},
-		Events:      map[string][]FunctionID{},
-		Modules:     map[string]*FunctionDef{},
+		Config:    map[string]string{},
+		Functions: map[FunctionID]*FunctionDef{},
+		Jobs:      map[FunctionID]*JobDef{},
+		Events:    map[string][]FunctionID{},
+		Modules:   map[string]*FunctionDef{},
+		Template:  map[string]*TemplateDef{},
+		CustomDef: map[string]*CustomDef{},
 	}
 	codeBytes := []byte(code)
 	node := mdParser.Parse(text.NewReader(codeBytes))
@@ -68,6 +94,7 @@ func Parse(code string) (*Definitions, error) {
 		currentDeclarationName string
 		currentBody            string
 		currentBody2           string
+		currentCodeBlock       string
 		currentLanguage        string
 	)
 	processDefinition := func() error {
@@ -132,18 +159,45 @@ func Parse(code string) (*Definitions, error) {
 					decls.Events[eventName] = newFns
 				}
 			}
-		case "Environment":
+		case "Config":
 			var newEnv map[string]string
 			err := yaml.Unmarshal([]byte(currentBody), &newEnv)
-			if err := Validate("schema/environment.schema.json", currentBody); err != nil {
-				return fmt.Errorf("Environment: %s", err)
-			}
 			if err != nil {
 				return err
 			}
+			if err := Validate("schema/config.schema.json", currentBody); err != nil {
+				return fmt.Errorf("Config: %s", err)
+			}
 			for envName, envVal := range newEnv {
 				// Override or insert new
-				decls.Environment[envName] = envVal
+				decls.Config[envName] = envVal
+			}
+		case "Template":
+			var config TemplateConfig
+			err := yaml.Unmarshal([]byte(currentBody), &config)
+			if err != nil {
+				return err
+			}
+			if err := ValidateObj("schema/schema.schema.json", config.InputSchema); err != nil {
+				return fmt.Errorf("Template: %s", err)
+			}
+			decls.Template[currentDeclarationName] = &TemplateDef{
+				Config:   config,
+				Template: currentCodeBlock,
+			}
+		default: // May be a custom one, let's try
+			if currentBody == "" {
+				// Not a template instatiation
+				return nil
+			}
+			var inputs interface{}
+			err := yaml.Unmarshal([]byte(currentBody), &inputs)
+			if err != nil {
+				return fmt.Errorf("[%s] %s: Could not parse YAML", currentDeclarationType, currentDeclarationName)
+			}
+			decls.CustomDef[currentDeclarationName] = &CustomDef{
+				Template: currentDeclarationType,
+				Input:    inputs,
 			}
 		}
 		return nil
@@ -158,6 +212,7 @@ func Parse(code string) (*Definitions, error) {
 			currentBody = ""
 			currentBody2 = ""
 			currentLanguage = ""
+			currentCodeBlock = ""
 			// Process next
 			parts := headerRegex.FindStringSubmatch(string(v.Text(codeBytes)))
 			currentDeclarationType = parts[1]
@@ -174,6 +229,14 @@ func Parse(code string) (*Definitions, error) {
 			} else {
 				currentBody = strings.Join(allCode, "")
 			}
+		case *ast.CodeBlock:
+			// Indented code block (for templates)
+			allCode := make([]string, 0, 10)
+			for i := 0; i < v.Lines().Len(); i++ {
+				seg := v.Lines().At(i)
+				allCode = append(allCode, string(seg.Value(codeBytes)))
+			}
+			currentCodeBlock = strings.Join(allCode, "")
 		}
 	}
 	if err := processDefinition(); err != nil {

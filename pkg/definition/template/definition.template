@@ -1,7 +1,7 @@
 {{ $root := . }}
-## Environment
+## Config
 These are the variables exposed to all functions:
-{{ range $key, $env := .Environment }}
+{{ range $key, $env := .Config }}
 - `{{ $key }}`{{ end }}
 
 {{if .Events}}
@@ -11,4 +11,7 @@ These are the variables exposed to all functions:
 {{ end }}
 ## Functions
 {{ range $key, $env := .Functions }}
-- `{{ $key }}`{{ end }}
+- `{{ $key }}` {{ end }}
+## Jobs
+{{ range $key, $env := .Jobs }}
+- `{{ $key }}` {{ end }}

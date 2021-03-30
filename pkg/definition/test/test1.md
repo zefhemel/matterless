@@ -24,7 +24,7 @@ token: $MattermostToken
 ```
 
 ---
-# Environment
+# Config
 
 ```yaml
 MattermostURL: http://localhost:8065

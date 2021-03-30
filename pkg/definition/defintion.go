@@ -15,11 +15,13 @@ type FunctionInvokeFunc func(name FunctionID, event interface{}) interface{}
 var markdownTemplate string
 
 type Definitions struct {
-	Environment map[string]string
-	Functions   map[FunctionID]*FunctionDef
-	Modules     map[string]*FunctionDef
-	Jobs        map[FunctionID]*JobDef
-	Events      map[string][]FunctionID
+	Config    map[string]string
+	Functions map[FunctionID]*FunctionDef
+	Modules   map[string]*FunctionDef
+	Jobs      map[FunctionID]*JobDef
+	Events    map[string][]FunctionID
+	Template  map[string]*TemplateDef
+	CustomDef map[string]*CustomDef
 }
 
 type FunctionConfig struct {
@@ -42,19 +44,33 @@ type JobDef struct {
 	Code     string
 }
 
-func (decls *Definitions) FunctionExists(id FunctionID) bool {
-	_, found := decls.Functions[id]
+type TemplateDef struct {
+	Config   TemplateConfig
+	Template string
+}
+
+type TemplateConfig struct {
+	InputSchema map[string]interface{} `yaml:"input_schema"`
+}
+
+type CustomDef struct {
+	Template string
+	Input    interface{}
+}
+
+func (defs *Definitions) FunctionExists(id FunctionID) bool {
+	_, found := defs.Functions[id]
 	return found
 }
 
-func (decls *Definitions) Markdown() string {
+func (defs *Definitions) Markdown() string {
 	tmpl, err := template.New("sourceTemplate").Parse(markdownTemplate)
 	if err != nil {
 		log.Error("Could not render markdown:", err)
 		return ""
 	}
 	var out bytes.Buffer
-	if err := tmpl.Execute(&out, decls); err != nil {
+	if err := tmpl.Execute(&out, defs); err != nil {
 		log.Error("Could not render markdown:", err)
 		return ""
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 func (app *Application) extendEnviron() {
-	app.definitions.Environment["API_TOKEN"] = app.apiToken
+	app.definitions.Config["API_TOKEN"] = app.apiToken
 }
 
 func (ag *APIGateway) exposeStoreAPI() {

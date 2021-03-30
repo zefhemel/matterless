@@ -95,7 +95,7 @@ func (app *Application) InvokeFunction(name definition.FunctionID, event interfa
 	// TODO: Remove hardcoded values
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
-	functionInstance, err := app.sandbox.Function(ctx, string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(functionDef.Language), functionDef.Config, functionDef.Code)
+	functionInstance, err := app.sandbox.Function(ctx, string(name), app.definitions.Config, app.definitions.ModulesForLanguage(functionDef.Language), functionDef.Config, functionDef.Code)
 	if err != nil {
 		app.EventBus().Publish(fmt.Sprintf("logs:%s", name), sandbox.LogEntry{
 			Instance: functionInstance,
@@ -125,10 +125,13 @@ func (app *Application) Eval(code string) error {
 		return err
 	}
 	for envName, envVal := range app.cfg.GlobalEnv {
-		defs.Environment[envName] = envVal
+		defs.Config[envName] = envVal
 	}
 
 	defs.Normalize()
+	if err := defs.Desugar(); err != nil {
+		return err
+	}
 
 	app.definitions = defs
 
@@ -154,7 +157,7 @@ func (app *Application) Eval(code string) error {
 	timeOutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	for name, def := range defs.Jobs {
-		ji, err := app.sandbox.Job(timeOutCtx, string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(def.Language), def.Config, def.Code)
+		ji, err := app.sandbox.Job(timeOutCtx, string(name), app.definitions.Config, app.definitions.ModulesForLanguage(def.Language), def.Config, def.Code)
 		if err != nil {
 			return errors.Wrap(err, "init job")
 		}

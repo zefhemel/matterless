@@ -15,7 +15,7 @@ import (
 var test1Md string
 
 func TestValidation(t *testing.T) {
-	err := definition.Validate("schema/environment.schema.json", `
+	err := definition.Validate("schema/config.schema.json", `
 url: http://localhost
 token: abc
 `)
@@ -29,8 +29,8 @@ func TestParser(t *testing.T) {
 	assert.Equal(t, "TestFunction1", decls.Functions["TestFunction1"].Name)
 	assert.Equal(t, "TestFunction2", decls.Functions["TestFunction2"].Name)
 	assert.Equal(t, "javascript", decls.Functions["TestFunction2"].Language)
-	assert.Equal(t, "http://localhost:8065", decls.Environment["MattermostURL"])
-	assert.Equal(t, "1234", decls.Environment["MattermostToken"])
+	assert.Equal(t, "http://localhost:8065", decls.Config["MattermostURL"])
+	assert.Equal(t, "1234", decls.Config["MattermostToken"])
 	assert.Equal(t, "javascript", decls.Modules["my-module"].Language)
 }
 
@@ -128,4 +128,57 @@ function run() {
 	log.Infof("%+v", defs.Jobs["MyJob"])
 	assert.Equal(t, 0, len(defs.Jobs["MyJob"].Config.Config))
 	assert.Contains(t, defs.Jobs["MyJob"].Code, "run()")
+}
+
+func TestTemplateParser(t *testing.T) {
+	defs, err := definition.Parse(strings.ReplaceAll(`# Template: HelloJob
+|||
+schema:
+   type: object
+   properties:
+      name:
+         type: string
+|||
+
+	# Job: {{$name}}
+
+    |||
+    config:
+       name: {{$input.name}}
+    |||
+
+    |||
+    function init(config) {
+       setInterval(() => {
+           console.log("Hello, ", config.name);
+       }, 1000);
+    }
+    |||
+
+# HelloJob: TheJob
+|||
+name: Zef
+|||
+`, "|||", "```"))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(defs.Template))
+	assert.Contains(t, defs.Template["HelloJob"].Template, "Job")
+
+	assert.Equal(t, 1, len(defs.CustomDef))
+	assert.Equal(t, "HelloJob", defs.CustomDef["TheJob"].Template)
+	assert.Equal(t, "Zef", defs.CustomDef["TheJob"].Input.(map[string]interface{})["name"])
+
+	assert.NoError(t, defs.Desugar())
+}
+
+func TestTemplateParserNonExisting(t *testing.T) {
+	defs, err := definition.Parse(strings.ReplaceAll(`
+# HelloJob: TheJob
+|||
+name: Zef
+|||
+`, "|||", "```"))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(defs.CustomDef))
+	assert.Error(t, defs.Desugar())
 }
