@@ -46,6 +46,7 @@ func (ag *APIGateway) exposeEventAPI() {
 		if err := decoder.Decode(&bodyJSON); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprint(w, err.Error())
+			log.Infof("Decode error: %s", err.Error())
 			return
 		}
 		app.EventBus().Publish(eventName, bodyJSON)

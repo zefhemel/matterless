@@ -65,8 +65,12 @@ export async function respondToEvent(toEventData : any, eventData : any) {
         },
         body: JSON.stringify(eventData)
     })
-    let jsonResult = await result.json();
-    if(jsonResult.status === "error") {
-        throw Error(jsonResult.error);
+    if(result.status == 200) {
+        let jsonResult = await result.json();
+        if(jsonResult.status === "error") {
+            throw Error(jsonResult.error);
+        }
+    } else {
+        throw new Error(`HTTP request not ok: ${await result.text()}`);
     }
 }

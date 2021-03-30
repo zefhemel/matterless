@@ -50,20 +50,21 @@ type Sandbox struct {
 	bootLock         sync.Mutex
 	eventBus         eventbus.EventBus
 	config           *config.Config
+	apiURL           string
 }
 
 // NewSandbox creates a new dockerFunctionInstance of the sandbox
 // Note: It is essential to listen to the .Logs() event channel (probably in a for loop in go routine) as soon as possible
 // after instantiation.
-func NewSandbox(cfg *config.Config, eventBus eventbus.EventBus, cleanupInterval time.Duration, keepAlive time.Duration) *Sandbox {
+func NewSandbox(apiURL string, eventBus eventbus.EventBus, cleanupInterval time.Duration, keepAlive time.Duration) *Sandbox {
 	sb := &Sandbox{
-		config:           cfg,
 		cleanupInterval:  cleanupInterval,
 		keepAlive:        keepAlive,
 		runningFunctions: map[functionHash]FunctionInstance{},
 		runningJobs:      map[string]JobInstance{},
 		eventBus:         eventBus,
 		stop:             make(chan struct{}),
+		apiURL:           apiURL,
 	}
 	if cleanupInterval != 0 {
 		sb.ticker = time.NewTicker(cleanupInterval)
@@ -93,9 +94,9 @@ func (s *Sandbox) Function(ctx context.Context, name string, env EnvMap, modules
 		}
 		switch functionConfig.Runtime {
 		case "node":
-			inst, err = newDockerFunctionInstance(ctx, s.config, "node-function", name, s.eventBus, env, modules, functionConfig, code)
+			inst, err = newDockerFunctionInstance(ctx, s.apiURL, "node-function", name, s.eventBus, env, modules, functionConfig, code)
 		case "deno":
-			inst, err = newDenoFunctionInstance(ctx, s.config, "function", name, s.eventBus, env, modules, functionConfig, code)
+			inst, err = newDenoFunctionInstance(ctx, s.apiURL, "function", name, s.eventBus, env, modules, functionConfig, code)
 		}
 		if inst == nil {
 			return nil, errors.New("invalid runtime")
@@ -127,9 +128,9 @@ func (s *Sandbox) Job(ctx context.Context, name string, env EnvMap, modules Modu
 		}
 		switch functionConfig.Runtime {
 		case "node":
-			inst, err = newDockerJobInstance(ctx, s.config, name, s.eventBus, env, modules, functionConfig, code)
+			inst, err = newDockerJobInstance(ctx, s.apiURL, name, s.eventBus, env, modules, functionConfig, code)
 		case "deno":
-			inst, err = newDenoJobInstance(ctx, s.config, name, s.eventBus, env, modules, functionConfig, code)
+			inst, err = newDenoJobInstance(ctx, s.apiURL, name, s.eventBus, env, modules, functionConfig, code)
 		}
 		if inst == nil {
 			return nil, errors.New("invalid runtime")

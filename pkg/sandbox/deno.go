@@ -89,10 +89,9 @@ func wrapScript(configMap map[string]interface{}, code string) string {
 	return out.String()
 }
 
-func newDenoFunctionInstance(ctx context.Context, config *config.Config, runMode string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoFunctionInstance, error) {
+func newDenoFunctionInstance(ctx context.Context, apiURL string, runMode string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoFunctionInstance, error) {
 	inst := &denoFunctionInstance{
-		name:   name,
-		config: config,
+		name: name,
 	}
 
 	denoDir, err := os.MkdirTemp(os.TempDir(), "mls-deno")
@@ -113,7 +112,7 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, runMode
 
 	// Run "docker run -i" as child process
 	inst.cmd = exec.Command("deno", "run", "--allow-net", "--allow-env", fmt.Sprintf("%s/%s_server.ts", denoDir, runMode), fmt.Sprintf("%d", listenPort))
-	inst.cmd.Env = append(inst.cmd.Env, "NO_COLOR=1", fmt.Sprintf("API_URL=http://localhost:%d", config.APIBindPort))
+	inst.cmd.Env = append(inst.cmd.Env, "NO_COLOR=1", fmt.Sprintf("API_URL=%s", fmt.Sprintf(apiURL, "localhost")))
 
 	for k, v := range env {
 		inst.cmd.Env = append(inst.cmd.Env, fmt.Sprintf("%s=%s", k, v))
@@ -149,6 +148,14 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, runMode
 	// Wait for server to come up
 waitLoop:
 	for {
+		select {
+		case <-ctx.Done():
+			if ctx.Err() == context.DeadlineExceeded {
+				return nil, ctx.Err()
+			}
+			break waitLoop
+		default:
+		}
 		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", listenPort))
 		if err == nil {
 			break waitLoop
@@ -249,12 +256,12 @@ func (inst *denoJobInstance) Name() string {
 	return inst.name
 }
 
-func newDenoJobInstance(ctx context.Context, config *config.Config, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoJobInstance, error) {
+func newDenoJobInstance(ctx context.Context, apiURL string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoJobInstance, error) {
 	inst := &denoJobInstance{
 		name: name,
 	}
 
-	functionInstance, err := newDenoFunctionInstance(ctx, config, "job", name, eventBus, env, modules, functionConfig, code)
+	functionInstance, err := newDenoFunctionInstance(ctx, apiURL, "job", name, eventBus, env, modules, functionConfig, code)
 	if err != nil {
 		return nil, err
 	}

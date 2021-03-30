@@ -56,7 +56,7 @@ func NewApplication(cfg *config.Config, appName string) (*Application, error) {
 		dataStore:   dataStore,
 		apiToken:    util.TokenGenerator(),
 		// TODO: Make this configurable
-		sandbox: sandbox.NewSandbox(cfg, eventBus, 1*time.Minute, 5*time.Minute),
+		sandbox: sandbox.NewSandbox(fmt.Sprintf("http://%s:%d/%s", "%s", cfg.APIBindPort, appName), eventBus, 1*time.Minute, 5*time.Minute),
 	}
 
 	return app, nil
@@ -82,7 +82,7 @@ func NewMockApplication(appName string) *Application {
 	return &Application{
 		appName:            appName,
 		definitions:        &definition.Definitions{},
-		sandbox:            sandbox.NewSandbox(nil, eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute),
+		sandbox:            sandbox.NewSandbox(fmt.Sprintf("http://localhost/%s", appName), eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute),
 		dataStore:          &store.MockStore{},
 		eventBus:           eventbus.NewLocalEventBus(),
 		eventSubscriptions: []eventSubscription{},
@@ -151,12 +151,14 @@ func (app *Application) Eval(code string) error {
 	}
 
 	log.Info("Starting jobs...")
+	timeOutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
 	for name, def := range defs.Jobs {
-		ji, err := app.sandbox.Job(context.Background(), string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(def.Language), def.Config, def.Code)
+		ji, err := app.sandbox.Job(timeOutCtx, string(name), app.definitions.Environment, app.definitions.ModulesForLanguage(def.Language), def.Config, def.Code)
 		if err != nil {
 			return errors.Wrap(err, "init job")
 		}
-		if err := ji.Start(context.Background()); err != nil {
+		if err := ji.Start(timeOutCtx); err != nil {
 			return errors.Wrap(err, "init job")
 		}
 	}
