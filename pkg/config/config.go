@@ -7,7 +7,6 @@ import (
 
 type Config struct {
 	APIBindPort int
-	APIURL      string
 	DataDir     string
 	RootToken   string
 	GlobalEnv   map[string]string

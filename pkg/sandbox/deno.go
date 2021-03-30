@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/util"
@@ -31,6 +32,7 @@ type denoFunctionInstance struct {
 	name        string
 	cmd         *exec.Cmd
 	tempDir     string
+	config      *config.Config
 }
 
 var _ FunctionInstance = &denoFunctionInstance{}
@@ -87,9 +89,10 @@ func wrapScript(configMap map[string]interface{}, code string) string {
 	return out.String()
 }
 
-func newDenoFunctionInstance(ctx context.Context, runMode string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoFunctionInstance, error) {
+func newDenoFunctionInstance(ctx context.Context, config *config.Config, runMode string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoFunctionInstance, error) {
 	inst := &denoFunctionInstance{
-		name: name,
+		name:   name,
+		config: config,
 	}
 
 	denoDir, err := os.MkdirTemp(os.TempDir(), "mls-deno")
@@ -110,7 +113,8 @@ func newDenoFunctionInstance(ctx context.Context, runMode string, name string, e
 
 	// Run "docker run -i" as child process
 	inst.cmd = exec.Command("deno", "run", "--allow-net", "--allow-env", fmt.Sprintf("%s/%s_server.ts", denoDir, runMode), fmt.Sprintf("%d", listenPort))
-	inst.cmd.Env = append(inst.cmd.Env, "NO_COLOR=1")
+	inst.cmd.Env = append(inst.cmd.Env, "NO_COLOR=1", fmt.Sprintf("API_URL=http://localhost:%d", config.APIBindPort))
+
 	for k, v := range env {
 		inst.cmd.Env = append(inst.cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
@@ -245,12 +249,12 @@ func (inst *denoJobInstance) Name() string {
 	return inst.name
 }
 
-func newDenoJobInstance(ctx context.Context, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoJobInstance, error) {
+func newDenoJobInstance(ctx context.Context, config *config.Config, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoJobInstance, error) {
 	inst := &denoJobInstance{
 		name: name,
 	}
 
-	functionInstance, err := newDenoFunctionInstance(ctx, "job", name, eventBus, env, modules, functionConfig, code)
+	functionInstance, err := newDenoFunctionInstance(ctx, config, "job", name, eventBus, env, modules, functionConfig, code)
 	if err != nil {
 		return nil, err
 	}

@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net/http"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +35,7 @@ type dockerFunctionInstance struct {
 	lastInvoked   time.Time
 	runLock       sync.Mutex
 	name          string
+	config        *config.Config
 }
 
 var _ FunctionInstance = &dockerFunctionInstance{}
@@ -45,9 +48,10 @@ func (inst *dockerFunctionInstance) LastInvoked() time.Time {
 	return inst.lastInvoked
 }
 
-func newDockerFunctionInstance(ctx context.Context, runnerType string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*dockerFunctionInstance, error) {
+func newDockerFunctionInstance(ctx context.Context, config *config.Config, runnerType string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*dockerFunctionInstance, error) {
 	inst := &dockerFunctionInstance{
 		name:          name,
+		config:        config,
 		containerName: fmt.Sprintf("mls-%s-%s", runnerType, newFunctionHash(modules, env, functionConfig, code)),
 	}
 
@@ -201,8 +205,13 @@ func (inst *dockerFunctionInstance) init(env EnvMap, modules ModuleMap, function
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	apiHost := "172.17.0.1"
+	if runtime.GOOS != "linux" {
+		apiHost = "host.docker.internal"
+	}
+
 	initMessage := DockerInitMessage{
-		Env:     env,
+		Env:     envMapWithKey(env, "API_URL", fmt.Sprintf("http://%s:%d", apiHost, inst.config.APIBindPort)),
 		Config:  functionConfig.Config,
 		Script:  code,
 		Modules: modules,
@@ -223,6 +232,15 @@ func (inst *dockerFunctionInstance) init(env EnvMap, modules ModuleMap, function
 	return nil
 }
 
+func envMapWithKey(env EnvMap, key string, val string) EnvMap {
+	newEnv := make(EnvMap, len(env)+1)
+	for k, v := range env {
+		newEnv[k] = v
+	}
+	newEnv[key] = val
+	return newEnv
+}
+
 // ======= Jobs ============
 
 type dockerJobInstance struct {
@@ -237,12 +255,12 @@ func (inst *dockerJobInstance) Name() string {
 	return inst.name
 }
 
-func newDockerJobInstance(ctx context.Context, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*dockerJobInstance, error) {
+func newDockerJobInstance(ctx context.Context, config *config.Config, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*dockerJobInstance, error) {
 	inst := &dockerJobInstance{
 		name: name,
 	}
 
-	functionInstance, err := newDockerFunctionInstance(ctx, "node-job", name, eventBus, env, modules, functionConfig, code)
+	functionInstance, err := newDockerFunctionInstance(ctx, config, "node-job", name, eventBus, env, modules, functionConfig, code)
 	if err != nil {
 		return nil, err
 	}

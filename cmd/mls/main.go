@@ -9,19 +9,12 @@ import (
 	"github.com/zefhemel/matterless/pkg/config"
 	"os"
 	"os/signal"
-	"runtime"
 	"syscall"
 	"time"
 )
 
 func main() {
 	log.SetLevel(log.DebugLevel)
-
-	// Linux docker parent host
-	apiHost := "172.17.0.1"
-	if runtime.GOOS != "linux" {
-		apiHost = "host.docker.internal"
-	}
 
 	runWatch := false
 	runConfig := config.FromEnv()
@@ -30,10 +23,10 @@ func main() {
 		Short: "Run Matterless and run listed apps",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			runConfig.APIURL = fmt.Sprintf("http://%s:%d", apiHost, runConfig.APIBindPort)
 			container := runServer(runConfig, false)
 			log.Info("Config", container.Config())
-			mlsClient := client.NewMatterlessClient(runConfig.APIURL, container.Config().RootToken)
+			apiURL := fmt.Sprintf("http://localhost:%d", runConfig.APIBindPort)
+			mlsClient := client.NewMatterlessClient(apiURL, container.Config().RootToken)
 			mlsClient.Deploy(args, runWatch)
 			busyLoop()
 		},
@@ -76,7 +69,6 @@ func main() {
 		Use:   "mls",
 		Short: "Matterless is friction-free serverless",
 		Run: func(cmd *cobra.Command, args []string) {
-			serverConfig.APIURL = fmt.Sprintf("http://%s:%d", apiHost, serverConfig.APIBindPort)
 			runServer(serverConfig, true)
 			busyLoop()
 		},

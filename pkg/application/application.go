@@ -56,7 +56,7 @@ func NewApplication(cfg *config.Config, appName string) (*Application, error) {
 		dataStore:   dataStore,
 		apiToken:    util.TokenGenerator(),
 		// TODO: Make this configurable
-		sandbox: sandbox.NewSandbox(eventBus, 1*time.Minute, 5*time.Minute),
+		sandbox: sandbox.NewSandbox(cfg, eventBus, 1*time.Minute, 5*time.Minute),
 	}
 
 	return app, nil
@@ -82,7 +82,7 @@ func NewMockApplication(appName string) *Application {
 	return &Application{
 		appName:            appName,
 		definitions:        &definition.Definitions{},
-		sandbox:            sandbox.NewSandbox(eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute),
+		sandbox:            sandbox.NewSandbox(nil, eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute),
 		dataStore:          &store.MockStore{},
 		eventBus:           eventbus.NewLocalEventBus(),
 		eventSubscriptions: []eventSubscription{},

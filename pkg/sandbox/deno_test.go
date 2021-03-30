@@ -3,6 +3,7 @@ package sandbox_test
 import (
 	"context"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventbus"
 	"testing"
@@ -13,14 +14,13 @@ import (
 )
 
 func TestDenoSandboxFunction(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode.")
-	}
 	sillyEvent := map[string]string{
 		"name": "Zef",
 	}
 	eventBus := eventbus.NewLocalEventBus()
-	s := sandbox.NewSandbox(eventBus, 10*time.Second, 15*time.Second)
+	s := sandbox.NewSandbox(&config.Config{
+		APIBindPort: 8123,
+	}, eventBus, 10*time.Second, 15*time.Second)
 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		logEntry := eventData.(sandbox.LogEntry)
 		log.Infof("Got log: %s", logEntry.Message)
@@ -55,11 +55,10 @@ func TestDenoSandboxFunction(t *testing.T) {
 }
 
 func TestDenoSandboxJob(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode.")
-	}
 	eventBus := eventbus.NewLocalEventBus()
-	s := sandbox.NewSandbox(eventBus, 10*time.Second, 15*time.Second)
+	s := sandbox.NewSandbox(&config.Config{
+		APIBindPort: 8123,
+	}, eventBus, 10*time.Second, 15*time.Second)
 	logCounter := 0
 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		logEntry := eventData.(sandbox.LogEntry)
