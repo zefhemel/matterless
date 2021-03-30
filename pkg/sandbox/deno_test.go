@@ -12,7 +12,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/sandbox"
 )
 
-func TestDockerSandboxFunction(t *testing.T) {
+func TestDenoSandboxFunction(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
@@ -29,24 +29,21 @@ func TestDockerSandboxFunction(t *testing.T) {
 	code := `
 	function handle(evt) {
 		console.log('Log message');
-		if(evt.name === "Zef") {
-			return {
-				status: "ok:" + process.env.ENVVAR
-			};
-		} else {
-			return {
-				status: "error"
-			};
-		}
+		return {
+			status: "ok:" + Deno.env.get("ENVVAR")
+		};
 	}
 	`
 	env := sandbox.EnvMap(map[string]string{
 		"ENVVAR": "VALUE",
 	})
 	modules := sandbox.ModuleMap(map[string]string{})
+	functionConfig := definition.FunctionConfig{
+		Runtime: "deno",
+	}
 
 	// Init
-	funcInstance, err := s.Function(context.Background(), "test", env, modules, definition.FunctionConfig{}, code)
+	funcInstance, err := s.Function(context.Background(), "test", env, modules, functionConfig, code)
 	assert.NoError(t, err)
 
 	// Invoke
@@ -57,7 +54,7 @@ func TestDockerSandboxFunction(t *testing.T) {
 	}
 }
 
-func TestDockerSandboxJob(t *testing.T) {
+func TestDenoSandboxJob(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
@@ -72,25 +69,22 @@ func TestDockerSandboxJob(t *testing.T) {
 	defer s.Close()
 	code := `
 	function init(config) {
-        console.log("Got config", config);
-    }
+       console.log("Got config", config, "and env", Deno.env.get("ENVVAR"));
+   }
 
 	function start() {
-        return {
-           MY_TOKEN: "1234"
-        };
 	}
 
-    function run() {
-        console.log("Running");
+   function run() {
+       console.log("Running");
 		setInterval(() => {
-            console.log("Iteration");
-        }, 500);
-    }
+           console.log("Iteration");
+       }, 500);
+   }
 
-    function stop() {
-        console.log("Stopping");
-    }
+   function stop() {
+       console.log("Stopping");
+   }
 	`
 	env := sandbox.EnvMap(map[string]string{
 		"ENVVAR": "VALUE",
@@ -102,6 +96,7 @@ func TestDockerSandboxJob(t *testing.T) {
 		Config: map[string]interface{}{
 			"something": "To do",
 		},
+		Runtime: "deno",
 	}, code)
 	assert.NoError(t, err)
 

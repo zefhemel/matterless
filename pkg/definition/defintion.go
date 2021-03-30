@@ -24,6 +24,7 @@ type Definitions struct {
 
 type FunctionConfig struct {
 	Config      map[string]interface{} `yaml:"config"`
+	Runtime     string                 `yaml:"runtime"`
 	DockerImage string                 `yaml:"docker_image"`
 }
 

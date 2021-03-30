@@ -128,7 +128,7 @@ func main() {
 			fmt.Fprintf(w, "Already inited")
 			return
 		}
-		var initMessage sandbox.InitMessage
+		var initMessage sandbox.DockerInitMessage
 		defer r.Body.Close()
 		reader := json.NewDecoder(r.Body)
 		if err := reader.Decode(&initMessage); err != nil {
