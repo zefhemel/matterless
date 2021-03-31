@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"github.com/buildkite/interpolate"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
-	"github.com/xeipuuv/gojsonschema"
-	"github.com/zefhemel/matterless/pkg/util"
+	"github.com/zefhemel/yamlschema"
 	"gopkg.in/yaml.v3"
-	"strings"
 	"text/template"
 )
 
@@ -23,22 +20,22 @@ func (defs *Definitions) Normalize() {
 	}
 
 	for _, def := range defs.Jobs {
-		for k, v := range def.Config.Config {
+		for k, v := range def.Config.Init {
 			yamlBuf, _ := yaml.Marshal(v)
 			if interPolatedYaml, err := interpolate.Interpolate(mapEnv, string(yamlBuf)); err == nil {
 				var val interface{}
 				yaml.Unmarshal([]byte(interPolatedYaml), &val)
-				def.Config.Config[k] = val
+				def.Config.Init[k] = val
 			}
 		}
 	}
 	for _, def := range defs.Functions {
-		for k, v := range def.Config.Config {
+		for k, v := range def.Config.Init {
 			yamlBuf, _ := yaml.Marshal(v)
 			if interPolatedYaml, err := interpolate.Interpolate(mapEnv, string(yamlBuf)); err == nil {
 				var val interface{}
 				yaml.Unmarshal([]byte(interPolatedYaml), &val)
-				def.Config.Config[k] = val
+				def.Config.Init[k] = val
 			}
 		}
 	}
@@ -55,30 +52,12 @@ func (defs *Definitions) Normalize() {
 
 func (defs *Definitions) Check() error {
 	for name, def := range defs.CustomDef {
-		tmpl, ok := defs.Template[def.Template]
+		tmpl, ok := defs.Macros[def.Macro]
 		if !ok {
-			return fmt.Errorf("No such template: %s", def.Template)
+			return fmt.Errorf("No such template: %s", def.Macro)
 		}
-		schema := tmpl.Config.InputSchema
-		schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-		schema["$id"] = "https://matterless.dev/app"
-
-		schemaLoader := gojsonschema.NewStringLoader(util.MustJsonString(schema))
-
-		// And then serialize it to JSON to be ready by the validator. Crazy times!
-		jsonObjectLoader := gojsonschema.NewStringLoader(util.MustJsonString(def.Input))
-		result, err := gojsonschema.Validate(schemaLoader, jsonObjectLoader)
-		if err != nil {
-			return errors.Wrap(err, "validation")
-		}
-		if result.Valid() {
-			return nil
-		} else {
-			errorItems := []string{}
-			for _, err := range result.Errors() {
-				errorItems = append(errorItems, fmt.Sprintf("- %s", err.String()))
-			}
-			return fmt.Errorf("[%s] Validation errors:\n\n%s", name, strings.Join(errorItems, "\n"))
+		if err := yamlschema.ValidateObjects(tmpl.Config.InputSchema, def.Input); err != nil {
+			return fmt.Errorf("[%s] %s", name, err)
 		}
 	}
 	return nil
@@ -89,19 +68,21 @@ func (defs *Definitions) Desugar() error {
 		return err
 	}
 	for name, def := range defs.CustomDef {
-		tmpl, ok := defs.Template[def.Template]
+		tmpl, ok := defs.Macros[def.Macro]
 		if !ok {
-			return fmt.Errorf("No such template: %s", def.Template)
+			return fmt.Errorf("No such template: %s", def.Macro)
 		}
-		t, err := template.New("template").Parse(fmt.Sprintf(`
+		t := template.New("template")
+		t.Funcs(CodeGenFuncs)
+		t2, err := t.Parse(fmt.Sprintf(`
 {{- $name := .Name -}}
 {{- $input := .Input -}}
-%s`, tmpl.Template))
+%s`, tmpl.TemplateCode))
 		if err != nil {
 			return errors.Wrap(err, "parsing template")
 		}
 		var out bytes.Buffer
-		if err := t.Execute(&out, struct {
+		if err := t2.Execute(&out, struct {
 			Name  string
 			Input interface{}
 		}{
@@ -110,8 +91,6 @@ func (defs *Definitions) Desugar() error {
 		}); err != nil {
 			return errors.Wrap(err, "render template")
 		}
-
-		log.Info("GOt this out: ", out.String())
 
 		moreDefs, err := Parse(out.String())
 		if err != nil {
@@ -128,8 +107,8 @@ func (defs *Definitions) Desugar() error {
 }
 
 func (defs *Definitions) MergeFrom(moreDefs *Definitions) {
-	for name, def := range moreDefs.Template {
-		defs.Template[name] = def
+	for name, def := range moreDefs.Macros {
+		defs.Macros[name] = def
 	}
 
 	for name, def := range moreDefs.CustomDef {

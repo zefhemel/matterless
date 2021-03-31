@@ -1,0 +1,44 @@
+{{ $root := . }}
+## Config
+```
+{{yaml $root.Config -}}
+```
+{{range $name, $def := .Functions}}
+## Function: {{$name}}
+```yaml
+{{yaml $def.Config -}}
+```
+```{{$def.Language}}
+{{$def.Code -}}
+```
+{{end}}
+{{range $name, $def := .Jobs}}
+## Job: {{$name}}
+```yaml
+{{yaml $def.Config -}}
+```
+```{{$def.Language}}
+{{$def.Code -}}
+```
+{{end}}
+{{range $name, $def := .Modules}}
+## Module: {{$name}}
+```{{$def.Language}}
+{{$def.Code -}}
+```
+{{end}}
+{{range $name, $def := .Macros}}
+## Macro: {{$name}}
+```
+{{yaml $def.Config -}}
+```
+Template:
+
+    {{prefixLines "    " .TemplateCode}}
+{{end}}
+{{- if .Events -}}
+## Events
+```yaml
+{{yaml .Events -}}
+```
+{{- end -}}

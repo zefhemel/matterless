@@ -47,15 +47,15 @@ func NewContainer(config *config.Config) (*Container, error) {
 		return nil, errors.Wrap(err, "create data dir")
 	}
 
-	if config.RootToken == "" {
+	if config.AdminToken == "" {
 		tokenFilePath := fmt.Sprintf("%s/root.token", config.DataDir)
 		if buf, err := os.ReadFile(tokenFilePath); err != nil {
-			config.RootToken = util.TokenGenerator()
-			if err := os.WriteFile(tokenFilePath, []byte(config.RootToken), 0600); err != nil {
+			config.AdminToken = util.TokenGenerator()
+			if err := os.WriteFile(tokenFilePath, []byte(config.AdminToken), 0600); err != nil {
 				log.Errorf("Could not write to %s: %s", tokenFilePath, err)
 			}
 		} else {
-			config.RootToken = string(buf)
+			config.AdminToken = string(buf)
 		}
 	}
 

@@ -14,6 +14,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/yuin/goldmark v1.3.2
+	github.com/zefhemel/yamlschema v0.0.0-20210331100236-6d05c787ad8c
 	golang.org/x/net v0.0.0-20210224082022-3d97a244fca7 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )

@@ -3,8 +3,10 @@ package sandbox_test
 import (
 	"context"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventbus"
+	"os"
 	"testing"
 	"time"
 
@@ -16,11 +18,16 @@ func TestDockerSandboxFunction(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
+	cfg := &config.Config{
+		DataDir: os.TempDir(),
+	}
+
 	sillyEvent := map[string]string{
 		"name": "Zef",
 	}
 	eventBus := eventbus.NewLocalEventBus()
-	s := sandbox.NewSandbox("", eventBus, 10*time.Second, 15*time.Second)
+	s, err := sandbox.NewSandbox(cfg, "", eventBus, 10*time.Second, 15*time.Second)
+	assert.NoError(t, err)
 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		logEntry := eventData.(sandbox.LogEntry)
 		log.Infof("Got log: %s", logEntry.Message)
@@ -63,8 +70,12 @@ func TestDockerSandboxJob(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
+	cfg := &config.Config{
+		DataDir: os.TempDir(),
+	}
 	eventBus := eventbus.NewLocalEventBus()
-	s := sandbox.NewSandbox("", eventBus, 10*time.Second, 15*time.Second)
+	s, err := sandbox.NewSandbox(cfg, "", eventBus, 10*time.Second, 15*time.Second)
+	assert.NoError(t, err)
 	logCounter := 0
 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		logEntry := eventData.(sandbox.LogEntry)
@@ -101,7 +112,7 @@ func TestDockerSandboxJob(t *testing.T) {
 
 	// Init
 	jobInstance, err := s.Job(context.Background(), "test", env, modules, definition.FunctionConfig{
-		Config: map[string]interface{}{
+		Init: map[string]interface{}{
 			"something": "To do",
 		},
 		Runtime: "node",

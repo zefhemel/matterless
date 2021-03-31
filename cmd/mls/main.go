@@ -24,16 +24,16 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			container := runServer(runConfig, false)
-			log.Info("Config", container.Config())
+			log.Info("Init", container.Config())
 			apiURL := fmt.Sprintf("http://localhost:%d", runConfig.APIBindPort)
-			mlsClient := client.NewMatterlessClient(apiURL, container.Config().RootToken)
+			mlsClient := client.NewMatterlessClient(apiURL, container.Config().AdminToken)
 			mlsClient.Deploy(args, runWatch)
 			busyLoop()
 		},
 	}
 	cmdRun.Flags().BoolVarP(&runWatch, "watch", "w", false, "watch apps for changes and reload")
 	cmdRun.Flags().IntVarP(&runConfig.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
-	cmdRun.Flags().StringVarP(&runConfig.RootToken, "token", "t", "", "Root API token")
+	cmdRun.Flags().StringVarP(&runConfig.AdminToken, "token", "t", "", "Admin API token")
 	cmdRun.Flags().StringVar(&runConfig.DataDir, "data", "", "Path to keep Matterless state")
 
 	var (
@@ -74,7 +74,7 @@ func main() {
 		},
 	}
 	rootCmd.Flags().IntVarP(&serverConfig.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
-	rootCmd.Flags().StringVarP(&serverConfig.RootToken, "token", "t", "", "Root API token")
+	rootCmd.Flags().StringVarP(&serverConfig.AdminToken, "token", "t", "", "Root API token")
 	rootCmd.Flags().StringVar(&serverConfig.DataDir, "data", "./mls-data", "location to keep Matterless state")
 
 	rootCmd.AddCommand(cmdRun, cmdDeploy)

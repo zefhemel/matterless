@@ -29,7 +29,7 @@ type Application struct {
 	// API
 	apiToken    string
 	dataStore   store.Store
-	cfg         *config.Config
+	config      *config.Config
 	appDataPath string
 }
 
@@ -48,15 +48,19 @@ func NewApplication(cfg *config.Config, appName string) (*Application, error) {
 		return nil, errors.Wrap(err, "create data store dir")
 	}
 	eventBus := eventbus.NewLocalEventBus()
+	sb, err := sandbox.NewSandbox(cfg, fmt.Sprintf("http://%s:%d/%s", "%s", cfg.APIBindPort, appName), eventBus, 1*time.Minute, 5*time.Minute)
+	if err != nil {
+		return nil, errors.Wrap(err, "sandbox init")
+	}
 	app := &Application{
-		cfg:         cfg,
+		config:      cfg,
 		appDataPath: appDataPath,
 		appName:     appName,
 		eventBus:    eventBus,
 		dataStore:   dataStore,
 		apiToken:    util.TokenGenerator(),
 		// TODO: Make this configurable
-		sandbox: sandbox.NewSandbox(fmt.Sprintf("http://%s:%d/%s", "%s", cfg.APIBindPort, appName), eventBus, 1*time.Minute, 5*time.Minute),
+		sandbox: sb,
 	}
 
 	return app, nil
@@ -78,11 +82,15 @@ func (app *Application) LoadFromDisk() error {
 }
 
 // Only for testing
-func NewMockApplication(appName string) *Application {
+func NewMockApplication(config *config.Config, appName string) *Application {
+	sb, err := sandbox.NewSandbox(config, fmt.Sprintf("http://localhost/%s", appName), eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute)
+	if err != nil {
+		log.Fatal(err)
+	}
 	return &Application{
 		appName:            appName,
 		definitions:        &definition.Definitions{},
-		sandbox:            sandbox.NewSandbox(fmt.Sprintf("http://localhost/%s", appName), eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute),
+		sandbox:            sb,
 		dataStore:          &store.MockStore{},
 		eventBus:           eventbus.NewLocalEventBus(),
 		eventSubscriptions: []eventSubscription{},
@@ -124,7 +132,7 @@ func (app *Application) Eval(code string) error {
 	if err != nil {
 		return err
 	}
-	for envName, envVal := range app.cfg.GlobalEnv {
+	for envName, envVal := range app.config.GlobalEnv {
 		defs.Config[envName] = envVal
 	}
 

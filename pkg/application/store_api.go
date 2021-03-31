@@ -34,7 +34,8 @@ func (ag *APIGateway) exposeStoreAPI() {
 			http.NotFound(w, r)
 			return
 		}
-		if token != app.apiToken {
+		if token != app.apiToken && token != ag.container.config.AdminToken {
+			// Both the root token and per-app token are acceptable
 			w.WriteHeader(http.StatusUnauthorized)
 			fmt.Fprint(w, "Wrong token")
 			return

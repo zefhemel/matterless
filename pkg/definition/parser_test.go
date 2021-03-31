@@ -37,7 +37,7 @@ func TestParser(t *testing.T) {
 func TestFunctionParserParameterBlock(t *testing.T) {
 	defs, err := definition.Parse(strings.ReplaceAll(`# Function: MyFunc
 |||
-config:
+init:
   arg1: Zef
   list:
   - a
@@ -54,7 +54,7 @@ function handle() {
 `, "|||", "```"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(defs.Functions))
-	assert.Equal(t, "Zef", defs.Functions["MyFunc"].Config.Config["arg1"])
+	assert.Equal(t, "Zef", defs.Functions["MyFunc"].Config.Init["arg1"])
 	assert.Equal(t, "bla/bla", defs.Functions["MyFunc"].Config.DockerImage)
 	assert.Contains(t, defs.Functions["MyFunc"].Code, "handle")
 }
@@ -86,14 +86,14 @@ function handle() {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(defs.Functions))
 	log.Infof("%+v", defs.Functions["MyFunc"])
-	assert.Equal(t, 0, len(defs.Functions["MyFunc"].Config.Config))
+	assert.Equal(t, 0, len(defs.Functions["MyFunc"].Config.Init))
 	assert.Contains(t, defs.Functions["MyFunc"].Code, "handle")
 }
 
 func TestJobParserParameterBlock(t *testing.T) {
 	defs, err := definition.Parse(strings.ReplaceAll(`# Job: MyJob
 |||
-config:
+init:
   arg1: Zef
   list:
   - a
@@ -110,7 +110,7 @@ function handle() {
 `, "|||", "```"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(defs.Jobs))
-	assert.Equal(t, "Zef", defs.Jobs["MyJob"].Config.Config["arg1"])
+	assert.Equal(t, "Zef", defs.Jobs["MyJob"].Config.Init["arg1"])
 	assert.Equal(t, "bla/bla", defs.Jobs["MyJob"].Config.DockerImage)
 	assert.Contains(t, defs.Jobs["MyJob"].Code, "handle")
 }
@@ -126,14 +126,14 @@ function run() {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(defs.Jobs))
 	log.Infof("%+v", defs.Jobs["MyJob"])
-	assert.Equal(t, 0, len(defs.Jobs["MyJob"].Config.Config))
+	assert.Equal(t, 0, len(defs.Jobs["MyJob"].Config.Init))
 	assert.Contains(t, defs.Jobs["MyJob"].Code, "run()")
 }
 
 func TestTemplateParser(t *testing.T) {
-	defs, err := definition.Parse(strings.ReplaceAll(`# Template: HelloJob
+	defs, err := definition.Parse(strings.ReplaceAll(`# Macro: HelloJob
 |||
-schema:
+input_schema:
    type: object
    properties:
       name:
@@ -143,7 +143,7 @@ schema:
 	# Job: {{$name}}
 
     |||
-    config:
+    init:
        name: {{$input.name}}
     |||
 
@@ -161,11 +161,11 @@ name: Zef
 |||
 `, "|||", "```"))
 	assert.NoError(t, err)
-	assert.Equal(t, 1, len(defs.Template))
-	assert.Contains(t, defs.Template["HelloJob"].Template, "Job")
+	assert.Equal(t, 1, len(defs.Macros))
+	assert.Contains(t, defs.Macros["HelloJob"].TemplateCode, "Job")
 
 	assert.Equal(t, 1, len(defs.CustomDef))
-	assert.Equal(t, "HelloJob", defs.CustomDef["TheJob"].Template)
+	assert.Equal(t, definition.MacroID("HelloJob"), defs.CustomDef["TheJob"].Macro)
 	assert.Equal(t, "Zef", defs.CustomDef["TheJob"].Input.(map[string]interface{})["name"])
 
 	assert.NoError(t, defs.Desugar())

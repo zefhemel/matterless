@@ -56,7 +56,7 @@ type Sandbox struct {
 // NewSandbox creates a new dockerFunctionInstance of the sandbox
 // Note: It is essential to listen to the .Logs() event channel (probably in a for loop in go routine) as soon as possible
 // after instantiation.
-func NewSandbox(apiURL string, eventBus eventbus.EventBus, cleanupInterval time.Duration, keepAlive time.Duration) *Sandbox {
+func NewSandbox(config *config.Config, apiURL string, eventBus eventbus.EventBus, cleanupInterval time.Duration, keepAlive time.Duration) (*Sandbox, error) {
 	sb := &Sandbox{
 		cleanupInterval:  cleanupInterval,
 		keepAlive:        keepAlive,
@@ -65,12 +65,16 @@ func NewSandbox(apiURL string, eventBus eventbus.EventBus, cleanupInterval time.
 		eventBus:         eventBus,
 		stop:             make(chan struct{}),
 		apiURL:           apiURL,
+		config:           config,
 	}
 	if cleanupInterval != 0 {
 		sb.ticker = time.NewTicker(cleanupInterval)
 		go sb.cleanupJob()
 	}
-	return sb
+	if err := ensureDeno(config); err != nil {
+		return nil, errors.Wrap(err, "ensure deno")
+	}
+	return sb, nil
 }
 
 // Function looks up a running function dockerFunctionInstance, or boots up an instance if it doesn't have one yet
@@ -96,7 +100,7 @@ func (s *Sandbox) Function(ctx context.Context, name string, env EnvMap, modules
 		case "node":
 			inst, err = newDockerFunctionInstance(ctx, s.apiURL, "node-function", name, s.eventBus, env, modules, functionConfig, code)
 		case "deno":
-			inst, err = newDenoFunctionInstance(ctx, s.apiURL, "function", name, s.eventBus, env, modules, functionConfig, code)
+			inst, err = newDenoFunctionInstance(ctx, s.config, s.apiURL, "function", name, s.eventBus, env, modules, functionConfig, code)
 		}
 		if inst == nil {
 			return nil, errors.New("invalid runtime")
@@ -130,7 +134,7 @@ func (s *Sandbox) Job(ctx context.Context, name string, env EnvMap, modules Modu
 		case "node":
 			inst, err = newDockerJobInstance(ctx, s.apiURL, name, s.eventBus, env, modules, functionConfig, code)
 		case "deno":
-			inst, err = newDenoJobInstance(ctx, s.apiURL, name, s.eventBus, env, modules, functionConfig, code)
+			inst, err = newDenoJobInstance(ctx, s.config, s.apiURL, name, s.eventBus, env, modules, functionConfig, code)
 		}
 		if inst == nil {
 			return nil, errors.New("invalid runtime")

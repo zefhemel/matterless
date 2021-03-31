@@ -1,6 +1,6 @@
 # Config
 ```yaml
-url: http://100.111.247.128:8065
+url: http://pi-jay:8065
 token: cu7f3goontys8ctra5nd8hy59y
 ```
 # MattermostClient: MyClient
@@ -16,12 +16,13 @@ events:
 
 # Function: MyCustomFunc
 ```javascript
-function handle(event) {
+
+async function handle(event) {
     console.log("Got custom event", event);
 }
 ```
 
-# Template: MattermostClient
+# Macro: MattermostClient
 Here's the schema
 ```yaml
 input_schema:
@@ -49,8 +50,8 @@ And the actual template implementation:
 
     # Job: {{$name}}
     ```yaml
-    config:
-        name: "{{$input.name}}"
+    init:
+        name: "{{$name}}"
         token: "{{$input.token}}"
         url: "{{$input.url}}"
         events:

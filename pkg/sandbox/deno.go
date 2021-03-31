@@ -89,30 +89,34 @@ func wrapScript(configMap map[string]interface{}, code string) string {
 	return out.String()
 }
 
-func newDenoFunctionInstance(ctx context.Context, apiURL string, runMode string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoFunctionInstance, error) {
+func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, runMode string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoFunctionInstance, error) {
 	inst := &denoFunctionInstance{
 		name: name,
 	}
 
-	denoDir, err := os.MkdirTemp(os.TempDir(), "mls-deno")
-	inst.tempDir = denoDir
-	if err != nil {
-		return nil, errors.Wrap(err, "create temp dir")
+	//denoDir, err := os.MkdirTemp(os.TempDir(), "mls-deno")
+	denoDir := fmt.Sprintf("%s/.deno/%s-%s", config.DataDir, runMode, newFunctionHash(modules, env, functionConfig, code))
+	if err := os.MkdirAll(denoDir, 0700); err != nil {
+		return nil, errors.Wrap(err, "create deno dir")
 	}
+	inst.tempDir = denoDir
 
 	if err := copyDenoFiles(denoDir); err != nil {
 		return nil, errors.Wrap(err, "copy deno files")
 	}
 
-	if err := os.WriteFile(fmt.Sprintf("%s/function.js", denoDir), []byte(wrapScript(functionConfig.Config, code)), 0600); err != nil {
+	if err := os.WriteFile(fmt.Sprintf("%s/function.js", denoDir), []byte(wrapScript(functionConfig.Init, code)), 0600); err != nil {
 		return nil, errors.Wrap(err, "write JS function file")
 	}
 
 	listenPort := util.FindFreePort(8000)
 
 	// Run "docker run -i" as child process
-	inst.cmd = exec.Command("deno", "run", "--allow-net", "--allow-env", fmt.Sprintf("%s/%s_server.ts", denoDir, runMode), fmt.Sprintf("%d", listenPort))
-	inst.cmd.Env = append(inst.cmd.Env, "NO_COLOR=1", fmt.Sprintf("API_URL=%s", fmt.Sprintf(apiURL, "localhost")))
+	inst.cmd = exec.Command(denoBinPath(config), "run", "--allow-net", "--allow-env", fmt.Sprintf("%s/%s_server.ts", denoDir, runMode), fmt.Sprintf("%d", listenPort))
+	inst.cmd.Env = append(inst.cmd.Env,
+		"NO_COLOR=1",
+		fmt.Sprintf("DENO_DIR=%s/.deno/cache", config.DataDir),
+		fmt.Sprintf("API_URL=%s", fmt.Sprintf(apiURL, "localhost")))
 
 	for k, v := range env {
 		inst.cmd.Env = append(inst.cmd.Env, fmt.Sprintf("%s=%s", k, v))
@@ -256,12 +260,12 @@ func (inst *denoJobInstance) Name() string {
 	return inst.name
 }
 
-func newDenoJobInstance(ctx context.Context, apiURL string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoJobInstance, error) {
+func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoJobInstance, error) {
 	inst := &denoJobInstance{
 		name: name,
 	}
 
-	functionInstance, err := newDenoFunctionInstance(ctx, apiURL, "job", name, eventBus, env, modules, functionConfig, code)
+	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, "job", name, eventBus, env, modules, functionConfig, code)
 	if err != nil {
 		return nil, err
 	}

@@ -211,7 +211,7 @@ func (inst *dockerFunctionInstance) init(env EnvMap, modules ModuleMap, function
 
 	initMessage := DockerInitMessage{
 		Env:     envMapWithKey(env, "API_URL", fmt.Sprintf(inst.apiURL, apiHost)),
-		Config:  functionConfig.Config,
+		Config:  functionConfig.Init,
 		Script:  code,
 		Modules: modules,
 	}

@@ -1,8 +1,3 @@
-interface User {
-    name: string;
-    id: number;
-}
-
 export class Store {
     constructor() {
 

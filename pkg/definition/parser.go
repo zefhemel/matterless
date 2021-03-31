@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/xeipuuv/gojsonschema"
-	"github.com/zefhemel/matterless/pkg/util"
 	"regexp"
 	"strings"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
+	"github.com/zefhemel/yamlschema"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,28 +23,7 @@ func Validate(schemaName string, yamlString string) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	schemaLoader := gojsonschema.NewStringLoader(string(schemaBytes))
-
-	// We're going to parse YAML
-	var obj interface{}
-	if err := yaml.Unmarshal([]byte(yamlString), &obj); err != nil {
-		return errors.Wrap(err, "parsing yaml")
-	}
-	// And then serialize it to JSON to be ready by the validator. Crazy times!
-	jsonObjectLoader := gojsonschema.NewStringLoader(util.MustJsonString(obj))
-	result, err := gojsonschema.Validate(schemaLoader, jsonObjectLoader)
-	if err != nil {
-		return errors.Wrap(err, "validation")
-	}
-	if result.Valid() {
-		return nil
-	} else {
-		errorItems := []string{}
-		for _, err := range result.Errors() {
-			errorItems = append(errorItems, fmt.Sprintf("- %s", err.String()))
-		}
-		return fmt.Errorf("Validation errors:\n\n%s", strings.Join(errorItems, "\n"))
-	}
+	return yamlschema.ValidateStrings(string(schemaBytes), yamlString)
 }
 
 func ValidateObj(schemaName string, obj interface{}) error {
@@ -53,23 +31,11 @@ func ValidateObj(schemaName string, obj interface{}) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	schemaLoader := gojsonschema.NewStringLoader(string(schemaBytes))
-
-	// And then serialize it to JSON to be ready by the validator. Crazy times!
-	jsonObjectLoader := gojsonschema.NewStringLoader(util.MustJsonString(obj))
-	result, err := gojsonschema.Validate(schemaLoader, jsonObjectLoader)
-	if err != nil {
-		return errors.Wrap(err, "validation")
+	var yamlSchema map[string]interface{}
+	if err := yaml.Unmarshal(schemaBytes, &yamlSchema); err != nil {
+		return errors.Wrap(err, "parsing schema")
 	}
-	if result.Valid() {
-		return nil
-	} else {
-		errorItems := []string{}
-		for _, err := range result.Errors() {
-			errorItems = append(errorItems, fmt.Sprintf("- %s", err.String()))
-		}
-		return fmt.Errorf("Validation errors:\n\n%s", strings.Join(errorItems, "\n"))
-	}
+	return yamlschema.ValidateObjects(yamlSchema, obj)
 }
 
 var headerRegex = regexp.MustCompile("\\s*([\\w\\.]+)\\:?\\s*(.*)")
@@ -84,7 +50,7 @@ func Parse(code string) (*Definitions, error) {
 		Jobs:      map[FunctionID]*JobDef{},
 		Events:    map[string][]FunctionID{},
 		Modules:   map[string]*FunctionDef{},
-		Template:  map[string]*TemplateDef{},
+		Macros:    map[MacroID]*MacroDef{},
 		CustomDef: map[string]*CustomDef{},
 	}
 	codeBytes := []byte(code)
@@ -166,24 +132,24 @@ func Parse(code string) (*Definitions, error) {
 				return err
 			}
 			if err := Validate("schema/config.schema.json", currentBody); err != nil {
-				return fmt.Errorf("Config: %s", err)
+				return fmt.Errorf("Init: %s", err)
 			}
 			for envName, envVal := range newEnv {
 				// Override or insert new
 				decls.Config[envName] = envVal
 			}
-		case "Template":
-			var config TemplateConfig
+		case "Macro":
+			var config MacroConfig
 			err := yaml.Unmarshal([]byte(currentBody), &config)
 			if err != nil {
 				return err
 			}
 			if err := ValidateObj("schema/schema.schema.json", config.InputSchema); err != nil {
-				return fmt.Errorf("Template: %s", err)
+				return fmt.Errorf("Macros %s: %s", currentDeclarationName, err)
 			}
-			decls.Template[currentDeclarationName] = &TemplateDef{
-				Config:   config,
-				Template: currentCodeBlock,
+			decls.Macros[MacroID(currentDeclarationName)] = &MacroDef{
+				Config:       config,
+				TemplateCode: currentCodeBlock,
 			}
 		default: // May be a custom one, let's try
 			if currentBody == "" {
@@ -196,8 +162,8 @@ func Parse(code string) (*Definitions, error) {
 				return fmt.Errorf("[%s] %s: Could not parse YAML", currentDeclarationType, currentDeclarationName)
 			}
 			decls.CustomDef[currentDeclarationName] = &CustomDef{
-				Template: currentDeclarationType,
-				Input:    inputs,
+				Macro: MacroID(currentDeclarationType),
+				Input: inputs,
 			}
 		}
 		return nil

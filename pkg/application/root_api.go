@@ -69,7 +69,7 @@ func (ag *APIGateway) rootApiAuth(w http.ResponseWriter, r *http.Request, cfg *c
 		return false
 	}
 	token := authHeaderParts[1]
-	if token != cfg.RootToken {
+	if token != cfg.AdminToken {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprint(w, "Wrong token")
 		return false

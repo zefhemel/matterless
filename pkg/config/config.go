@@ -8,7 +8,7 @@ import (
 type Config struct {
 	APIBindPort int
 	DataDir     string
-	RootToken   string
+	AdminToken  string
 	GlobalEnv   map[string]string
 }
 

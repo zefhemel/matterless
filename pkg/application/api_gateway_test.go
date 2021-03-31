@@ -18,7 +18,7 @@ func TestNewHTTPServer(t *testing.T) {
 	c, err := application.NewContainer(cfg)
 	assert.NoError(t, err)
 	defer c.Close()
-	app := application.NewMockApplication("test")
+	app := application.NewMockApplication(cfg, "test")
 	c.Register("test", app)
 	app.EventBus().Subscribe("http:GET:/ping", func(eventName string, eventData interface{}) {
 		app.EventBus().Respond(eventData, map[string]interface{}{

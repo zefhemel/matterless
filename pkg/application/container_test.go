@@ -21,7 +21,7 @@ func TestEventHTTP(t *testing.T) {
 	cfg := &config.Config{
 		APIBindPort: 8123,
 		DataDir:     os.TempDir(),
-		RootToken:   "1234",
+		AdminToken:  "1234",
 	}
 	container, err := application.NewContainer(cfg)
 	defer container.Close()
