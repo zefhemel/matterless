@@ -75,7 +75,7 @@ func (client *MatterlessClient) Get(appName string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP Error: %d", resp.Status)
+		return "", fmt.Errorf("HTTP Error: %s", resp.Status)
 	}
 
 	bodyData, _ := io.ReadAll(resp.Body)
@@ -100,7 +100,7 @@ func (client *MatterlessClient) ListApps() ([]string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP Error: %d", resp.Status)
+		return nil, fmt.Errorf("HTTP Error: %s", resp.Status)
 	}
 
 	bodyData, _ := io.ReadAll(resp.Body)
@@ -137,7 +137,7 @@ func (client *MatterlessClient) storeOp(appName string, op []interface{}) (inter
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP Error (%d) %s", resp.Status, bodyData)
+		return nil, fmt.Errorf("HTTP Error (%d) %s", resp.StatusCode, bodyData)
 	}
 	var resultObj interface{}
 	if err := json.Unmarshal(bodyData, &resultObj); err != nil {
@@ -224,7 +224,7 @@ func (client *MatterlessClient) Restart(appName string) error {
 	bodyData, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP Error (%d) %s", resp.Status, bodyData)
+		return fmt.Errorf("HTTP Error (%d) %s", resp.StatusCode, bodyData)
 	}
 	return nil
 }

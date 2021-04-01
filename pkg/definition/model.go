@@ -19,6 +19,7 @@ var summaryTemplate string
 var rerenderTemplate string
 
 type Definitions struct {
+	Imports   []string
 	Functions map[FunctionID]*FunctionDef
 	Jobs      map[FunctionID]*JobDef
 	Events    map[string][]FunctionID
