@@ -71,9 +71,10 @@ func NewSandbox(config *config.Config, apiURL string, eventBus eventbus.EventBus
 		sb.ticker = time.NewTicker(cleanupInterval)
 		go sb.cleanupJob()
 	}
-	if err := ensureDeno(config); err != nil {
-		return nil, errors.Wrap(err, "ensure deno")
-	}
+	// TODO: Reenable auto download
+	//if err := ensureDeno(config); err != nil {
+	//	return nil, errors.Wrap(err, "ensure deno")
+	//}
 	return sb, nil
 }
 

@@ -15,14 +15,16 @@ import (
 
 // TODO: Add windows versions
 var denoDownloadUrls = map[string]string{
-	"linux-arm64":  "https://matterless-releases.s3.eu-central-1.amazonaws.com/deno-linux-amd64.zip",
+	"linux-arm64":  "https://matterless-releases.s3.eu-central-1.amazonaws.com/deno-linux-arm64.zip",
 	"linux-amd64":  "https://github.com/denoland/deno/releases/download/v1.8.2/deno-x86_64-unknown-linux-gnu.zip",
 	"darwin-arm64": "https://github.com/denoland/deno/releases/download/v1.8.2/deno-aarch64-apple-darwin.zip",
 	"darwin-amd64": "https://github.com/denoland/deno/releases/download/v1.8.2/deno-x86_64-apple-darwin.zip",
 }
 
 func denoBinPath(config *config.Config) string {
-	return fmt.Sprintf("%s/.deno/deno", config.DataDir)
+	// TODO: Reenable auto download
+	//return fmt.Sprintf("%s/.deno/deno", config.DataDir)
+	return "deno"
 }
 
 func ensureDeno(config *config.Config) error {

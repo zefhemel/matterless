@@ -23,7 +23,8 @@ func main() {
 		Short: "Run Matterless and run listed apps",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			container := runServer(runConfig, false)
+			runConfig.PersistApps = false
+			container := runServer(runConfig)
 			log.Info("Init", container.Config())
 			apiURL := fmt.Sprintf("http://localhost:%d", runConfig.APIBindPort)
 			mlsClient := client.NewMatterlessClient(apiURL, container.Config().AdminToken)
@@ -34,7 +35,7 @@ func main() {
 	cmdRun.Flags().BoolVarP(&runWatch, "watch", "w", false, "watch apps for changes and reload")
 	cmdRun.Flags().IntVarP(&runConfig.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
 	cmdRun.Flags().StringVarP(&runConfig.AdminToken, "token", "t", "", "Admin API token")
-	cmdRun.Flags().StringVar(&runConfig.DataDir, "data", "", "Path to keep Matterless state")
+	cmdRun.Flags().StringVar(&runConfig.DataDir, "data", "./mls-data", "Path to keep Matterless state")
 
 	var (
 		deployWatch bool
@@ -69,7 +70,8 @@ func main() {
 		Use:   "mls",
 		Short: "Matterless is friction-free serverless",
 		Run: func(cmd *cobra.Command, args []string) {
-			runServer(serverConfig, true)
+			serverConfig.PersistApps = true
+			runServer(serverConfig)
 			busyLoop()
 		},
 	}
@@ -82,7 +84,7 @@ func main() {
 
 }
 
-func runServer(cfg *config.Config, loadApps bool) *application.Container {
+func runServer(cfg *config.Config) *application.Container {
 	appContainer, err := application.NewContainer(cfg)
 	if err != nil {
 		log.Fatal("Could not start app container", err)
@@ -99,7 +101,7 @@ func runServer(cfg *config.Config, loadApps bool) *application.Container {
 		}
 	})
 
-	if loadApps {
+	if cfg.PersistApps {
 		if err := appContainer.LoadAppsFromDisk(); err != nil {
 			log.Errorf("Could not load apps from disk: %s", err)
 		}

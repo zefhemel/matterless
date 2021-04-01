@@ -94,7 +94,6 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 		name: name,
 	}
 
-	//denoDir, err := os.MkdirTemp(os.TempDir(), "mls-deno")
 	denoDir := fmt.Sprintf("%s/.deno/%s-%s", config.DataDir, runMode, newFunctionHash(modules, env, functionConfig, code))
 	if err := os.MkdirAll(denoDir, 0700); err != nil {
 		return nil, errors.Wrap(err, "create deno dir")
@@ -133,21 +132,22 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 
 	// Kick off the command
 	if err := inst.cmd.Start(); err != nil {
-		return nil, errors.Wrap(err, "docker run")
+		return nil, errors.Wrap(err, "deno run")
 	}
 
 	// Listen to the stderr and log pipes and ship everything to logChannel
 	bufferedStdout := bufio.NewReader(stdoutPipe)
 	bufferedStderr := bufio.NewReader(stderrPipe)
-	if _, err := bufferedStderr.Peek(1); err != nil {
-		log.Error("Could not peek stdout data", err)
-	}
+	//if _, err := bufferedStdout.Peek(1); err != nil {
+	//	log.Error("Could not peek stdout data", err)
+	//}
 
 	// Send stdout and stderr to the log channel
 	go inst.pipeStream(bufferedStdout, eventBus)
 	go inst.pipeStream(bufferedStderr, eventBus)
 
 	inst.serverURL = fmt.Sprintf("http://localhost:%d", listenPort)
+	log.Info("HERe 5")
 
 	// Wait for server to come up
 waitLoop:
@@ -160,6 +160,7 @@ waitLoop:
 			break waitLoop
 		default:
 		}
+		log.Info("Checking server at ", fmt.Sprintf("localhost:%d", listenPort))
 		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", listenPort))
 		if err == nil {
 			break waitLoop

@@ -10,6 +10,7 @@ type Config struct {
 	DataDir     string
 	AdminToken  string
 	GlobalEnv   map[string]string
+	PersistApps bool // Whether to write deployed app code to disk
 }
 
 func FromEnv() *Config {

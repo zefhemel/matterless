@@ -173,8 +173,11 @@ func (app *Application) Eval(code string) error {
 			return errors.Wrap(err, "init job")
 		}
 	}
-	if err := os.WriteFile(fmt.Sprintf("%s/application.md", app.appDataPath), []byte(code), 0600); err != nil {
-		log.Errorf("Could not write application.md file to disk: %s", err)
+
+	if app.config.PersistApps {
+		if err := os.WriteFile(fmt.Sprintf("%s/application.md", app.appDataPath), []byte(code), 0600); err != nil {
+			log.Errorf("Could not write application.md file to disk: %s", err)
+		}
 	}
 
 	log.Info("Ready to go.")

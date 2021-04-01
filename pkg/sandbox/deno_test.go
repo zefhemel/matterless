@@ -46,11 +46,13 @@ func TestDenoSandboxFunction(t *testing.T) {
 	}
 
 	// Init
+	log.Info("HEre")
 	funcInstance, err := s.Function(context.Background(), "test", env, modules, functionConfig, code)
 	assert.NoError(t, err)
-
+	log.Info("HEre")
 	// Invoke
 	for i := 0; i < 10; i++ {
+		log.Info("HEre")
 		result, err := funcInstance.Invoke(context.Background(), sillyEvent)
 		assert.NoError(t, err)
 		assert.Equal(t, "ok:VALUE", result.(map[string]interface{})["status"])

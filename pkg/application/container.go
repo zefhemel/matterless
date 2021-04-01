@@ -10,6 +10,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/util"
 	"os"
+	"strings"
 )
 
 type LogEntry struct {
@@ -18,11 +19,10 @@ type LogEntry struct {
 }
 
 type Container struct {
-	eventBus          eventbus.EventBus
-	apps              map[string]*Application
-	apiGateway        *APIGateway
-	config            *config.Config
-	deleteDataOnClose bool
+	eventBus   eventbus.EventBus
+	apps       map[string]*Application
+	apiGateway *APIGateway
+	config     *config.Config
 }
 
 func NewContainer(config *config.Config) (*Container, error) {
@@ -31,16 +31,6 @@ func NewContainer(config *config.Config) (*Container, error) {
 		apps:     appMap,
 		config:   config,
 		eventBus: eventbus.NewLocalEventBus(),
-	}
-
-	if config.DataDir == "" {
-		// Create a temporary directory to be cleaned later
-		var err error
-		config.DataDir, err = os.MkdirTemp(os.TempDir(), "matterless")
-		if err != nil {
-			return nil, errors.Wrap(err, "create temporary data dir")
-		}
-		c.deleteDataOnClose = true
 	}
 
 	if err := os.MkdirAll(config.DataDir, 0700); err != nil {
@@ -78,12 +68,6 @@ func (c *Container) Close() {
 		app.Close()
 	}
 	c.apiGateway.Stop()
-	if c.deleteDataOnClose {
-		log.Debug("Cleaning temporary data")
-		if err := os.RemoveAll(c.config.DataDir); err != nil {
-			log.Errorf("Could not delete directory %s: %s", c.config.DataDir, err)
-		}
-	}
 }
 
 func (c *Container) Register(name string, app *Application) {
@@ -121,10 +105,15 @@ func (c *Container) LoadAppsFromDisk() error {
 	if err != nil {
 		return err
 	}
+fileLoop:
 	for _, file := range files {
-		if file.IsDir() {
+		appName := file.Name()
+		if file.IsDir() && !strings.HasPrefix(file.Name(), ".") {
+			if _, err := os.Stat(fmt.Sprintf("%s/%s/application.md", c.config.DataDir, appName)); err != nil {
+				// No application file
+				continue fileLoop
+			}
 			// It's an app, let's load it
-			appName := file.Name()
 			app, err := NewApplication(c.config, appName)
 			if err != nil {
 				return errors.Wrapf(err, "creating app: %s", appName)
