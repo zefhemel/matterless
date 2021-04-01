@@ -11,6 +11,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/store"
 	"github.com/zefhemel/matterless/pkg/util"
+	"gopkg.in/yaml.v3"
 	"os"
 	"time"
 )
@@ -141,7 +142,11 @@ func (app *Application) Eval(code string) error {
 
 	app.definitions = defs
 
+	app.NormalizeDefinitions()
+
 	app.reset()
+
+	log.Info("Here")
 
 	for eventName, funcs := range defs.Events {
 		// Copy variable into loop scope (closure)
@@ -205,4 +210,41 @@ func (app *Application) Definitions() *definition.Definitions {
 
 func (app *Application) EventBus() eventbus.EventBus {
 	return app.eventBus
+}
+
+// Normalize replaces environment variables with their values
+func (app *Application) NormalizeDefinitions() {
+	defs := app.definitions
+
+	logCallback := func(message string) {
+		log.Errorf("[%s] %s", app.appName, message)
+	}
+
+	for _, def := range defs.Jobs {
+		for k, v := range def.Config.Init {
+			yamlBuf, _ := yaml.Marshal(v)
+
+			interPolatedYaml := interPolateStoreValues(app.dataStore, string(yamlBuf), logCallback)
+			var val interface{}
+			yaml.Unmarshal([]byte(interPolatedYaml), &val)
+			def.Config.Init[k] = val
+		}
+	}
+	for _, def := range defs.Functions {
+		for k, v := range def.Config.Init {
+			yamlBuf, _ := yaml.Marshal(v)
+			interPolatedYaml := interPolateStoreValues(app.dataStore, string(yamlBuf), logCallback)
+			var val interface{}
+			yaml.Unmarshal([]byte(interPolatedYaml), &val)
+			def.Config.Init[k] = val
+		}
+	}
+
+	for _, def := range defs.CustomDef {
+		yamlBuf, _ := yaml.Marshal(def.Input)
+		interPolatedYaml := interPolateStoreValues(app.dataStore, string(yamlBuf), logCallback)
+		var val interface{}
+		yaml.Unmarshal([]byte(interPolatedYaml), &val)
+		def.Input = val
+	}
 }

@@ -29,7 +29,8 @@ func main() {
 			apiURL := fmt.Sprintf("http://localhost:%d", runConfig.APIBindPort)
 			mlsClient := client.NewMatterlessClient(apiURL, container.Config().AdminToken)
 			mlsClient.Deploy(args, runWatch)
-			busyLoop()
+			runPrompt(mlsClient)
+			container.Close()
 		},
 	}
 	cmdRun.Flags().BoolVarP(&runWatch, "watch", "w", false, "watch apps for changes and reload")

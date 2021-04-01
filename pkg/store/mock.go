@@ -8,7 +8,7 @@ func (m MockStore) Put(key string, val interface{}) error {
 }
 
 func (m MockStore) Get(key string) (interface{}, error) {
-	panic("implement me")
+	return key, nil
 }
 
 func (m MockStore) Delete(key string) error {

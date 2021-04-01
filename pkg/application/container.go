@@ -130,3 +130,11 @@ fileLoop:
 func (c *Container) Config() *config.Config {
 	return c.config
 }
+
+func (c *Container) List() []string {
+	appNames := make([]string, 0, len(c.apps))
+	for name := range c.apps {
+		appNames = append(appNames, name)
+	}
+	return appNames
+}

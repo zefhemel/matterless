@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/zefhemel/matterless/pkg/config"
+	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net/http"
 	"strings"
 )
 
-func (ag *APIGateway) exposeRootAPI(cfg *config.Config) {
+func (ag *APIGateway) exposeAdminAPI(cfg *config.Config) {
 	ag.rootRouter.HandleFunc("/{app}", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
@@ -43,6 +44,30 @@ func (ag *APIGateway) exposeRootAPI(cfg *config.Config) {
 		fmt.Fprint(w, app.Definitions().Markdown())
 	}).Methods("PUT")
 
+	ag.rootRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		if !ag.rootApiAuth(w, r, cfg) {
+			return
+		}
+
+		fmt.Fprint(w, util.MustJsonString(ag.container.List()))
+	}).Methods("GET")
+
+	ag.rootRouter.HandleFunc("/{app}", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		vars := mux.Vars(r)
+		appName := vars["app"]
+		if !ag.rootApiAuth(w, r, cfg) {
+			return
+		}
+		app := ag.container.Get(appName)
+		if app == nil {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, app.Definitions().Markdown())
+	}).Methods("GET")
+
 	ag.rootRouter.HandleFunc("/{app}", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
@@ -53,6 +78,26 @@ func (ag *APIGateway) exposeRootAPI(cfg *config.Config) {
 		ag.container.UnRegister(appName)
 		fmt.Fprint(w, "OK")
 	}).Methods("DELETE")
+
+	ag.rootRouter.HandleFunc("/{app}/_restart", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		vars := mux.Vars(r)
+		appName := vars["app"]
+		if !ag.rootApiAuth(w, r, cfg) {
+			return
+		}
+		app := ag.container.Get(appName)
+		if app == nil {
+			http.NotFound(w, r)
+			return
+		}
+		if err := app.Eval(app.CurrentCode()); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "Error: %s", err)
+			return
+		}
+		fmt.Fprint(w, "OK")
+	}).Methods("POST")
 }
 
 func (ag *APIGateway) rootApiAuth(w http.ResponseWriter, r *http.Request, cfg *config.Config) bool {

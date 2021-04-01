@@ -1,8 +1,8 @@
 
 # MattermostClient: MyClient
 ```yaml
-url: http://pi-jay:8065
-token: cu7f3goontys8ctra5nd8hy59y
+url: ${config:url}
+token: ${config:token}
 events:
   hello:
     - MyCustomFunc
@@ -61,6 +61,10 @@ And the actual template implementation:
     
     function init(config) {
         console.log("Starting mattermost client with config", config);
+        if(!config.token || !config.url) {
+           console.error("Token and URL not configured yet.");
+           return
+        }
         return new Promise((resolve, reject) => {
             const url = `${config.url}/api/v4/websocket`.replaceAll("https://", "wss://").replaceAll("http://", "ws://");
             const socket = new WebSocket(url);
