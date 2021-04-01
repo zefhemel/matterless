@@ -24,14 +24,10 @@ token: abc
 
 func TestParser(t *testing.T) {
 	decls, err := definition.Parse(test1Md)
-	decls.Normalize()
 	assert.NoError(t, err)
 	assert.Equal(t, "TestFunction1", decls.Functions["TestFunction1"].Name)
 	assert.Equal(t, "TestFunction2", decls.Functions["TestFunction2"].Name)
 	assert.Equal(t, "javascript", decls.Functions["TestFunction2"].Language)
-	assert.Equal(t, "http://localhost:8065", decls.Config["MattermostURL"])
-	assert.Equal(t, "1234", decls.Config["MattermostToken"])
-	assert.Equal(t, "javascript", decls.Modules["my-module"].Language)
 }
 
 func TestFunctionParserParameterBlock(t *testing.T) {

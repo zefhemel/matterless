@@ -45,11 +45,9 @@ func Parse(code string) (*Definitions, error) {
 	mdParser := goldmark.DefaultParser()
 
 	decls := &Definitions{
-		Config:    map[string]string{},
 		Functions: map[FunctionID]*FunctionDef{},
 		Jobs:      map[FunctionID]*JobDef{},
 		Events:    map[string][]FunctionID{},
-		Modules:   map[string]*FunctionDef{},
 		Macros:    map[MacroID]*MacroDef{},
 		CustomDef: map[string]*CustomDef{},
 	}
@@ -101,12 +99,6 @@ func Parse(code string) (*Definitions, error) {
 				jobDef.Code = currentBody
 			}
 			decls.Jobs[FunctionID(currentDeclarationName)] = jobDef
-		case "Module":
-			decls.Modules[currentDeclarationName] = &FunctionDef{
-				Name:     currentDeclarationName,
-				Language: currentLanguage,
-				Code:     currentBody,
-			}
 		case "Events":
 			var def map[string][]FunctionID
 			if err := Validate("schema/events.schema.json", currentBody); err != nil {
@@ -124,19 +116,6 @@ func Parse(code string) (*Definitions, error) {
 				} else {
 					decls.Events[eventName] = newFns
 				}
-			}
-		case "Config":
-			var newEnv map[string]string
-			err := yaml.Unmarshal([]byte(currentBody), &newEnv)
-			if err != nil {
-				return err
-			}
-			if err := Validate("schema/config.schema.json", currentBody); err != nil {
-				return fmt.Errorf("Init: %s", err)
-			}
-			for envName, envVal := range newEnv {
-				// Override or insert new
-				decls.Config[envName] = envVal
 			}
 		case "Macro":
 			var config MacroConfig

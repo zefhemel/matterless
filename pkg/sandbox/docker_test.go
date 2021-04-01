@@ -26,7 +26,7 @@ func TestDockerSandboxFunction(t *testing.T) {
 		"name": "Zef",
 	}
 	eventBus := eventbus.NewLocalEventBus()
-	s, err := sandbox.NewSandbox(cfg, "", eventBus, 10*time.Second, 15*time.Second)
+	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus, 10*time.Second, 15*time.Second)
 	assert.NoError(t, err)
 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		logEntry := eventData.(sandbox.LogEntry)
@@ -38,7 +38,7 @@ func TestDockerSandboxFunction(t *testing.T) {
 		console.log('Log message');
 		if(evt.name === "Zef") {
 			return {
-				status: "ok:" + process.env.ENVVAR
+				status: "ok"
 			};
 		} else {
 			return {
@@ -47,13 +47,9 @@ func TestDockerSandboxFunction(t *testing.T) {
 		}
 	}
 	`
-	env := sandbox.EnvMap(map[string]string{
-		"ENVVAR": "VALUE",
-	})
-	modules := sandbox.ModuleMap(map[string]string{})
 
 	// Init
-	funcInstance, err := s.Function(context.Background(), "test", env, modules, definition.FunctionConfig{
+	funcInstance, err := s.Function(context.Background(), "test", definition.FunctionConfig{
 		Runtime: "node",
 	}, code)
 	assert.NoError(t, err)
@@ -62,7 +58,7 @@ func TestDockerSandboxFunction(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, err := funcInstance.Invoke(context.Background(), sillyEvent)
 		assert.NoError(t, err)
-		assert.Equal(t, "ok:VALUE", result.(map[string]interface{})["status"])
+		assert.Equal(t, "ok", result.(map[string]interface{})["status"])
 	}
 }
 
@@ -74,7 +70,7 @@ func TestDockerSandboxJob(t *testing.T) {
 		DataDir: os.TempDir(),
 	}
 	eventBus := eventbus.NewLocalEventBus()
-	s, err := sandbox.NewSandbox(cfg, "", eventBus, 10*time.Second, 15*time.Second)
+	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus, 10*time.Second, 15*time.Second)
 	assert.NoError(t, err)
 	logCounter := 0
 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
@@ -105,13 +101,9 @@ func TestDockerSandboxJob(t *testing.T) {
         console.log("Stopping");
     }
 	`
-	env := sandbox.EnvMap(map[string]string{
-		"ENVVAR": "VALUE",
-	})
-	modules := sandbox.ModuleMap(map[string]string{})
 
 	// Init
-	jobInstance, err := s.Job(context.Background(), "test", env, modules, definition.FunctionConfig{
+	jobInstance, err := s.Job(context.Background(), "test", definition.FunctionConfig{
 		Init: map[string]interface{}{
 			"something": "To do",
 		},

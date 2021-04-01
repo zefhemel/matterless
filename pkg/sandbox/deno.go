@@ -89,12 +89,12 @@ func wrapScript(configMap map[string]interface{}, code string) string {
 	return out.String()
 }
 
-func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, runMode string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoFunctionInstance, error) {
+func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode string, name string, eventBus eventbus.EventBus, functionConfig definition.FunctionConfig, code string) (*denoFunctionInstance, error) {
 	inst := &denoFunctionInstance{
 		name: name,
 	}
 
-	denoDir := fmt.Sprintf("%s/.deno/%s-%s", config.DataDir, runMode, newFunctionHash(modules, env, functionConfig, code))
+	denoDir := fmt.Sprintf("%s/.deno/%s-%s", config.DataDir, runMode, name)
 	if err := os.MkdirAll(denoDir, 0700); err != nil {
 		return nil, errors.Wrap(err, "create deno dir")
 	}
@@ -115,11 +115,8 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 	inst.cmd.Env = append(inst.cmd.Env,
 		"NO_COLOR=1",
 		fmt.Sprintf("DENO_DIR=%s/.deno/cache", config.DataDir),
-		fmt.Sprintf("API_URL=%s", fmt.Sprintf(apiURL, "localhost")))
-
-	for k, v := range env {
-		inst.cmd.Env = append(inst.cmd.Env, fmt.Sprintf("%s=%s", k, v))
-	}
+		fmt.Sprintf("API_URL=%s", fmt.Sprintf(apiURL, "localhost")),
+		fmt.Sprintf("API_TOKEN=%s", apiToken))
 
 	stdoutPipe, err := inst.cmd.StdoutPipe()
 	if err != nil {
@@ -147,7 +144,6 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 	go inst.pipeStream(bufferedStderr, eventBus)
 
 	inst.serverURL = fmt.Sprintf("http://localhost:%d", listenPort)
-	log.Info("HERe 5")
 
 	// Wait for server to come up
 waitLoop:
@@ -160,7 +156,6 @@ waitLoop:
 			break waitLoop
 		default:
 		}
-		log.Info("Checking server at ", fmt.Sprintf("localhost:%d", listenPort))
 		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", listenPort))
 		if err == nil {
 			break waitLoop
@@ -261,12 +256,12 @@ func (inst *denoJobInstance) Name() string {
 	return inst.name
 }
 
-func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*denoJobInstance, error) {
+func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, eventBus eventbus.EventBus, functionConfig definition.FunctionConfig, code string) (*denoJobInstance, error) {
 	inst := &denoJobInstance{
 		name: name,
 	}
 
-	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, "job", name, eventBus, env, modules, functionConfig, code)
+	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, apiToken, "job", name, eventBus, functionConfig, code)
 	if err != nil {
 		return nil, err
 	}

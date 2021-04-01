@@ -1,12 +1,8 @@
-# Config
+
+# MattermostClient: MyClient
 ```yaml
 url: http://pi-jay:8065
 token: cu7f3goontys8ctra5nd8hy59y
-```
-# MattermostClient: MyClient
-```yaml
-url: $url
-token: $token
 events:
   hello:
     - MyCustomFunc

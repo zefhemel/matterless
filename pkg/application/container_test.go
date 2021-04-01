@@ -45,6 +45,7 @@ func TestEventHTTP(t *testing.T) {
 import {respondToEvent} from "./matterless.ts";
 
 function handle(event) {
+console.log(Deno.env.get("API_TOKEN"));
     respondToEvent(event, {
         status: 200,
         body: "OK"

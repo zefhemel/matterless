@@ -19,10 +19,8 @@ var summaryTemplate string
 var rerenderTemplate string
 
 type Definitions struct {
-	Config    map[string]string
 	Functions map[FunctionID]*FunctionDef
 	Jobs      map[FunctionID]*JobDef
-	Modules   map[string]*FunctionDef
 	Events    map[string][]FunctionID
 	Macros    map[MacroID]*MacroDef
 	CustomDef map[string]*CustomDef
@@ -116,15 +114,4 @@ func (defs *Definitions) SummaryMarkdown() string {
 		return ""
 	}
 	return strings.TrimSpace(out.String())
-}
-
-func (defs *Definitions) ModulesForLanguage(lang string) map[string]string {
-	codeMap := make(map[string]string)
-	for name, def := range defs.Modules {
-		// TODO: Implemenet filtering
-		//if def.Language == lang {
-		codeMap[name] = def.Code
-		//}
-	}
-	return codeMap
 }

@@ -1,8 +1,4 @@
 {{ $root := . }}
-## Config
-```
-{{yaml $root.Config -}}
-```
 {{range $name, $def := .Functions}}
 ## Function: {{$name}}
 ```yaml
@@ -17,12 +13,6 @@
 ```yaml
 {{yaml $def.Config -}}
 ```
-```{{$def.Language}}
-{{$def.Code -}}
-```
-{{end}}
-{{range $name, $def := .Modules}}
-## Module: {{$name}}
 ```{{$def.Language}}
 {{$def.Code -}}
 ```

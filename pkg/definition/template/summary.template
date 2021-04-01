@@ -1,9 +1,4 @@
 {{ $root := . }}
-## Config
-These are the variables exposed to all functions:
-{{ range $key, $env := .Config }}
-- `{{ $key }}`{{ end }}
-
 {{if .Events}}
 ## Events
 {{ range $key, $fns := .Events }}

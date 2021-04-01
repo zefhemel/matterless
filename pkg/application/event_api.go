@@ -36,7 +36,7 @@ func (ag *APIGateway) exposeEventAPI() {
 			log.Infof("Not found app")
 			return
 		}
-		if token != app.apiToken {
+		if token != app.apiToken && token != ag.container.config.AdminToken {
 			w.WriteHeader(http.StatusUnauthorized)
 			fmt.Fprint(w, "Wrong token")
 			return

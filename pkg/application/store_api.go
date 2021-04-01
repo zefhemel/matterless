@@ -8,10 +8,6 @@ import (
 	"strings"
 )
 
-func (app *Application) extendEnviron() {
-	app.definitions.Config["API_TOKEN"] = app.apiToken
-}
-
 func (ag *APIGateway) exposeStoreAPI() {
 	ag.rootRouter.HandleFunc("/{app}/_store", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)

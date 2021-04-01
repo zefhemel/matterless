@@ -69,14 +69,9 @@ func wrapScript(runnerConfig runnerConfig, configMap map[string]interface{}, cod
 
 var cmd *exec.Cmd
 
-func run(runnerConfig runnerConfig, env sandbox.EnvMap, processStdout io.WriteCloser, processStderr io.WriteCloser) error {
+func run(runnerConfig runnerConfig, processStdout io.WriteCloser, processStderr io.WriteCloser) error {
 	cmd = exec.Command(runnerConfig.cmd[0], runnerConfig.cmd[1:]...)
-
-	envSlice := make([]string, 0, len(env))
-	for k, v := range env {
-		envSlice = append(envSlice, fmt.Sprintf("%s=%s", k, v))
-	}
-	cmd.Env = envSlice
+	cmd.Env = os.Environ()
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
@@ -145,18 +140,9 @@ func main() {
 			return
 		}
 
-		// Write modules
-		for moduleName, code := range initMessage.Modules {
-			if err := createModule(moduleName, code); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "Error writing module %s: %s", moduleName, err)
-				scheduleShutdown()
-			}
-		}
-
 		errorChan := make(chan error, 1)
 		go func() {
-			if err := run(runnerConfig, initMessage.Env, os.Stdout, os.Stderr); err != nil {
+			if err := run(runnerConfig, os.Stdout, os.Stderr); err != nil {
 				errorChan <- err
 			}
 		}()

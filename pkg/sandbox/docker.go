@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/util"
@@ -20,10 +21,8 @@ import (
 )
 
 type DockerInitMessage struct {
-	Env     map[string]string      `json:"env"`
-	Script  string                 `json:"script"`
-	Modules map[string]string      `json:"modules"`
-	Config  map[string]interface{} `json:"config"`
+	Script string                 `json:"script"`
+	Config map[string]interface{} `json:"config"`
 }
 
 // ======= Functions ============
@@ -47,16 +46,23 @@ func (inst *dockerFunctionInstance) LastInvoked() time.Time {
 	return inst.lastInvoked
 }
 
-func newDockerFunctionInstance(ctx context.Context, apiURL string, runnerType string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*dockerFunctionInstance, error) {
+func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runnerType string, name string, eventBus eventbus.EventBus, functionConfig definition.FunctionConfig, code string) (*dockerFunctionInstance, error) {
 	inst := &dockerFunctionInstance{
 		name:          name,
 		apiURL:        apiURL,
-		containerName: fmt.Sprintf("mls-%s-%s", runnerType, newFunctionHash(modules, env, functionConfig, code)),
+		containerName: fmt.Sprintf("mls-%s-%s", runnerType, name),
+	}
+
+	apiHost := "172.17.0.1"
+	if runtime.GOOS != "linux" {
+		apiHost = "host.docker.internal"
 	}
 
 	// Run "docker run -i" as child process
 	cmd := exec.Command("docker", "run", "--rm", "-P", "-i",
 		fmt.Sprintf("--name=%s", inst.containerName),
+		fmt.Sprintf("-e API_URL=%s", fmt.Sprintf(inst.apiURL, apiHost)),
+		fmt.Sprintf("-e API_TOKEN=%s", apiToken),
 		"zefhemel/matterless-runner-docker", runnerType)
 
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -112,7 +118,7 @@ func newDockerFunctionInstance(ctx context.Context, apiURL string, runnerType st
 	inst.serverURL = fmt.Sprintf("http://localhost:%s", dockerInspectOutputs[0].NetworkSettings.Ports["8080/tcp"][0].HostPort)
 
 	// Initialize the container via the /init call that uploads the code
-	if err := inst.init(env, modules, functionConfig, code); err != nil {
+	if err := inst.init(functionConfig, code); err != nil {
 		return nil, err
 	}
 
@@ -198,22 +204,15 @@ func (inst *dockerFunctionInstance) Invoke(ctx context.Context, event interface{
 	return result, nil
 }
 
-func (inst *dockerFunctionInstance) init(env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) error {
+func (inst *dockerFunctionInstance) init(functionConfig definition.FunctionConfig, code string) error {
 	httpClient := http.DefaultClient
 	// TODO: Remove magic 15s value
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	apiHost := "172.17.0.1"
-	if runtime.GOOS != "linux" {
-		apiHost = "host.docker.internal"
-	}
-
 	initMessage := DockerInitMessage{
-		Env:     envMapWithKey(env, "API_URL", fmt.Sprintf(inst.apiURL, apiHost)),
-		Config:  functionConfig.Init,
-		Script:  code,
-		Modules: modules,
+		Config: functionConfig.Init,
+		Script: code,
 	}
 	req, err := http.NewRequestWithContext(timeoutCtx, "POST", fmt.Sprintf("%s/init", inst.controlURL), strings.NewReader(util.MustJsonString(initMessage)))
 	if err != nil {
@@ -231,15 +230,6 @@ func (inst *dockerFunctionInstance) init(env EnvMap, modules ModuleMap, function
 	return nil
 }
 
-func envMapWithKey(env EnvMap, key string, val string) EnvMap {
-	newEnv := make(EnvMap, len(env)+1)
-	for k, v := range env {
-		newEnv[k] = v
-	}
-	newEnv[key] = val
-	return newEnv
-}
-
 // ======= Jobs ============
 
 type dockerJobInstance struct {
@@ -254,12 +244,12 @@ func (inst *dockerJobInstance) Name() string {
 	return inst.name
 }
 
-func newDockerJobInstance(ctx context.Context, apiURL string, name string, eventBus eventbus.EventBus, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (*dockerJobInstance, error) {
+func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, eventBus eventbus.EventBus, functionConfig definition.FunctionConfig, code string) (*dockerJobInstance, error) {
 	inst := &dockerJobInstance{
 		name: name,
 	}
 
-	functionInstance, err := newDockerFunctionInstance(ctx, apiURL, "node-job", name, eventBus, env, modules, functionConfig, code)
+	functionInstance, err := newDockerFunctionInstance(ctx, cfg, apiURL, apiToken, "node-job", name, eventBus, functionConfig, code)
 	if err != nil {
 		return nil, err
 	}

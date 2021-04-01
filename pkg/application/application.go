@@ -48,7 +48,10 @@ func NewApplication(cfg *config.Config, appName string) (*Application, error) {
 		return nil, errors.Wrap(err, "create data store dir")
 	}
 	eventBus := eventbus.NewLocalEventBus()
-	sb, err := sandbox.NewSandbox(cfg, fmt.Sprintf("http://%s:%d/%s", "%s", cfg.APIBindPort, appName), eventBus, 1*time.Minute, 5*time.Minute)
+
+	apiToken := util.TokenGenerator()
+
+	sb, err := sandbox.NewSandbox(cfg, fmt.Sprintf("http://%s:%d/%s", "%s", cfg.APIBindPort, appName), apiToken, eventBus, 1*time.Minute, 5*time.Minute)
 	if err != nil {
 		return nil, errors.Wrap(err, "sandbox init")
 	}
@@ -58,7 +61,7 @@ func NewApplication(cfg *config.Config, appName string) (*Application, error) {
 		appName:     appName,
 		eventBus:    eventBus,
 		dataStore:   dataStore,
-		apiToken:    util.TokenGenerator(),
+		apiToken:    apiToken,
 		// TODO: Make this configurable
 		sandbox: sb,
 	}
@@ -83,7 +86,7 @@ func (app *Application) LoadFromDisk() error {
 
 // Only for testing
 func NewMockApplication(config *config.Config, appName string) *Application {
-	sb, err := sandbox.NewSandbox(config, fmt.Sprintf("http://localhost/%s", appName), eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute)
+	sb, err := sandbox.NewSandbox(config, fmt.Sprintf("http://localhost/%s", appName), "1234", eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -103,7 +106,7 @@ func (app *Application) InvokeFunction(name definition.FunctionID, event interfa
 	// TODO: Remove hardcoded values
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
-	functionInstance, err := app.sandbox.Function(ctx, string(name), app.definitions.Config, app.definitions.ModulesForLanguage(functionDef.Language), functionDef.Config, functionDef.Code)
+	functionInstance, err := app.sandbox.Function(ctx, string(name), functionDef.Config, functionDef.Code)
 	if err != nil {
 		app.EventBus().Publish(fmt.Sprintf("logs:%s", name), sandbox.LogEntry{
 			Instance: functionInstance,
@@ -132,18 +135,12 @@ func (app *Application) Eval(code string) error {
 	if err != nil {
 		return err
 	}
-	for envName, envVal := range app.config.GlobalEnv {
-		defs.Config[envName] = envVal
-	}
-
-	defs.Normalize()
 	if err := defs.Desugar(); err != nil {
 		return err
 	}
 
 	app.definitions = defs
 
-	app.extendEnviron()
 	app.reset()
 
 	for eventName, funcs := range defs.Events {
@@ -165,7 +162,7 @@ func (app *Application) Eval(code string) error {
 	timeOutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	for name, def := range defs.Jobs {
-		ji, err := app.sandbox.Job(timeOutCtx, string(name), app.definitions.Config, app.definitions.ModulesForLanguage(def.Language), def.Config, def.Code)
+		ji, err := app.sandbox.Job(timeOutCtx, string(name), def.Config, def.Code)
 		if err != nil {
 			return errors.Wrap(err, "init job")
 		}

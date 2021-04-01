@@ -2,14 +2,11 @@ package sandbox
 
 import (
 	"context"
-	"crypto/sha1"
-	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventbus"
-	"github.com/zefhemel/matterless/pkg/util"
 	"sync"
 	"time"
 )
@@ -18,9 +15,6 @@ type LogEntry struct {
 	Instance FunctionInstance
 	Message  string
 }
-
-type ModuleMap map[string]string
-type EnvMap map[string]string
 
 const DefaultRuntime = "deno"
 
@@ -38,10 +32,8 @@ type JobInstance interface {
 	Kill() error
 }
 
-type functionHash string
-
 type Sandbox struct {
-	runningFunctions map[functionHash]FunctionInstance
+	runningFunctions map[string]FunctionInstance
 	runningJobs      map[string]JobInstance // key: job name
 	cleanupInterval  time.Duration
 	keepAlive        time.Duration
@@ -51,20 +43,22 @@ type Sandbox struct {
 	eventBus         eventbus.EventBus
 	config           *config.Config
 	apiURL           string
+	apiToken         string
 }
 
 // NewSandbox creates a new dockerFunctionInstance of the sandbox
 // Note: It is essential to listen to the .Logs() event channel (probably in a for loop in go routine) as soon as possible
 // after instantiation.
-func NewSandbox(config *config.Config, apiURL string, eventBus eventbus.EventBus, cleanupInterval time.Duration, keepAlive time.Duration) (*Sandbox, error) {
+func NewSandbox(config *config.Config, apiURL string, apiToken string, eventBus eventbus.EventBus, cleanupInterval time.Duration, keepAlive time.Duration) (*Sandbox, error) {
 	sb := &Sandbox{
 		cleanupInterval:  cleanupInterval,
 		keepAlive:        keepAlive,
-		runningFunctions: map[functionHash]FunctionInstance{},
+		runningFunctions: map[string]FunctionInstance{},
 		runningJobs:      map[string]JobInstance{},
 		eventBus:         eventBus,
 		stop:             make(chan struct{}),
 		apiURL:           apiURL,
+		apiToken:         apiToken,
 		config:           config,
 	}
 	if cleanupInterval != 0 {
@@ -80,28 +74,27 @@ func NewSandbox(config *config.Config, apiURL string, eventBus eventbus.EventBus
 
 // Function looks up a running function dockerFunctionInstance, or boots up an instance if it doesn't have one yet
 // It also performs initialization (cals the init()) function, errors out when no running server runs in time
-func (s *Sandbox) Function(ctx context.Context, name string, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (FunctionInstance, error) {
+func (s *Sandbox) Function(ctx context.Context, name string, functionConfig definition.FunctionConfig, code string) (FunctionInstance, error) {
 	// Only one function can be booted at once for now
 	// TODO: Remove this restriction
 	s.bootLock.Lock()
 	defer s.bootLock.Unlock()
 
-	functionHash := newFunctionHash(modules, env, functionConfig, code)
 	var (
 		inst FunctionInstance
 		err  error
 		ok   bool
 	)
-	inst, ok = s.runningFunctions[functionHash]
+	inst, ok = s.runningFunctions[name]
 	if !ok {
 		if functionConfig.Runtime == "" {
 			functionConfig.Runtime = DefaultRuntime
 		}
 		switch functionConfig.Runtime {
 		case "node":
-			inst, err = newDockerFunctionInstance(ctx, s.apiURL, "node-function", name, s.eventBus, env, modules, functionConfig, code)
+			inst, err = newDockerFunctionInstance(ctx, s.config, s.apiURL, s.apiToken, "node-function", name, s.eventBus, functionConfig, code)
 		case "deno":
-			inst, err = newDenoFunctionInstance(ctx, s.config, s.apiURL, "function", name, s.eventBus, env, modules, functionConfig, code)
+			inst, err = newDenoFunctionInstance(ctx, s.config, s.apiURL, s.apiToken, "function", name, s.eventBus, functionConfig, code)
 		}
 		if inst == nil {
 			return nil, errors.New("invalid runtime")
@@ -109,12 +102,12 @@ func (s *Sandbox) Function(ctx context.Context, name string, env EnvMap, modules
 		if err != nil {
 			return nil, err
 		}
-		s.runningFunctions[functionHash] = inst
+		s.runningFunctions[name] = inst
 	}
 	return inst, nil
 }
 
-func (s *Sandbox) Job(ctx context.Context, name string, env EnvMap, modules ModuleMap, functionConfig definition.FunctionConfig, code string) (JobInstance, error) {
+func (s *Sandbox) Job(ctx context.Context, name string, functionConfig definition.FunctionConfig, code string) (JobInstance, error) {
 	// Only one function can be booted at once for now
 	// TODO: Remove this restriction
 	s.bootLock.Lock()
@@ -133,9 +126,9 @@ func (s *Sandbox) Job(ctx context.Context, name string, env EnvMap, modules Modu
 		}
 		switch functionConfig.Runtime {
 		case "node":
-			inst, err = newDockerJobInstance(ctx, s.apiURL, name, s.eventBus, env, modules, functionConfig, code)
+			inst, err = newDockerJobInstance(ctx, s.config, s.apiURL, s.apiToken, name, s.eventBus, functionConfig, code)
 		case "deno":
-			inst, err = newDenoJobInstance(ctx, s.config, s.apiURL, name, s.eventBus, env, modules, functionConfig, code)
+			inst, err = newDenoJobInstance(ctx, s.config, s.apiURL, s.apiToken, name, s.eventBus, functionConfig, code)
 		}
 		if inst == nil {
 			return nil, errors.New("invalid runtime")
@@ -194,7 +187,7 @@ func (s *Sandbox) Flush() {
 			log.Error("Error killing dockerFunctionInstance", err)
 		}
 	}
-	s.runningFunctions = map[functionHash]FunctionInstance{}
+	s.runningFunctions = map[string]FunctionInstance{}
 	// Close all running jobs
 	log.Infof("Stopping %d running jobs...", len(s.runningJobs))
 	for _, inst := range s.runningJobs {
@@ -203,15 +196,4 @@ func (s *Sandbox) Flush() {
 		}
 	}
 	s.runningJobs = map[string]JobInstance{}
-}
-
-func newFunctionHash(modules map[string]string, env map[string]string, functionConfig definition.FunctionConfig, code string) functionHash {
-	// This can probably be optimized, the goal is to generate a unique string representing a mix of the code, modules and environment
-	h := sha1.New()
-	h.Write([]byte(util.MustJsonString(modules)))
-	h.Write([]byte(util.MustJsonString(env)))
-	h.Write([]byte(util.MustJsonString(functionConfig)))
-	h.Write([]byte(code))
-	bs := h.Sum(nil)
-	return functionHash(fmt.Sprintf("%x", bs))
 }
