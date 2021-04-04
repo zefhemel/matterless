@@ -60,6 +60,7 @@ func Parse(code string) (*Definitions, error) {
 		currentBody2           string
 		currentCodeBlock       string
 		currentLanguage        string
+		listItems              []string
 	)
 	processDefinition := func() error {
 		switch currentDeclarationType {
@@ -130,6 +131,8 @@ func Parse(code string) (*Definitions, error) {
 				Config:       config,
 				TemplateCode: currentCodeBlock,
 			}
+		case "Import":
+			decls.Imports = append(decls.Imports, listItems...)
 		default: // May be a custom one, let's try
 			if currentBody == "" {
 				// Not a template instatiation
@@ -158,6 +161,7 @@ func Parse(code string) (*Definitions, error) {
 			currentBody2 = ""
 			currentLanguage = ""
 			currentCodeBlock = ""
+			listItems = []string{}
 			// Process next
 			parts := headerRegex.FindStringSubmatch(string(v.Text(codeBytes)))
 			currentDeclarationType = parts[1]
@@ -182,6 +186,12 @@ func Parse(code string) (*Definitions, error) {
 				allCode = append(allCode, string(seg.Value(codeBytes)))
 			}
 			currentCodeBlock = strings.Join(allCode, "")
+		case *ast.List:
+			currentChild := v.FirstChild()
+			for currentChild != nil {
+				listItems = append(listItems, strings.TrimSpace(string(currentChild.Text(codeBytes))))
+				currentChild = currentChild.NextSibling()
+			}
 		}
 	}
 	if err := processDefinition(); err != nil {

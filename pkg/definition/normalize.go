@@ -4,7 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/util"
 	"github.com/zefhemel/yamlschema"
+	"io"
+	"net/http"
+	"os"
+	"strings"
 	"text/template"
 )
 
@@ -89,4 +95,56 @@ func (defs *Definitions) MergeFrom(moreDefs *Definitions) {
 	for name, def := range moreDefs.Jobs {
 		defs.Jobs[name] = def
 	}
+}
+
+func (defs *Definitions) InlineImports(cacheDir string) error {
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+		return errors.Wrap(err, "create cache dir")
+	}
+	for _, importUrl := range defs.Imports {
+		cachedPath := fmt.Sprintf("%s/%s", cacheDir, util.SafeFilename(importUrl))
+		var fileContent string
+		if strings.HasPrefix(importUrl, "file:") {
+			// Fetch from local path
+			filePath := importUrl[len("file:"):]
+			buf, err := os.ReadFile(filePath)
+			if err != nil {
+				return errors.Wrap(err, "reading local file")
+			}
+			fileContent = string(buf)
+		} else if _, err := os.Stat(cachedPath); err != nil {
+			log.Info("Now fetching ", importUrl)
+			// Fetch it now
+			resp, err := http.Get(importUrl)
+			if err != nil {
+				return errors.Wrapf(err, "Error fetching %s", importUrl)
+			}
+			buf, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				return errors.Wrap(err, "reading body")
+			}
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("HTTP error (%d): %s", resp.StatusCode, buf)
+			}
+			if err := os.WriteFile(cachedPath, buf, 0600); err != nil {
+				return errors.Wrap(err, "writing cached file")
+			}
+			fileContent = string(buf)
+		} else {
+			// Load from local file
+			buf, err := os.ReadFile(cachedPath)
+			if err != nil {
+				return errors.Wrap(err, "reading cached file")
+			}
+			fileContent = string(buf)
+		}
+		moreDefs, err := Parse(fileContent)
+		if err != nil {
+			return fmt.Errorf("Error parsing imported URL (%s): %s", importUrl, err)
+		}
+		defs.Imports = []string{}
+		defs.MergeFrom(moreDefs)
+	}
+	return nil
 }

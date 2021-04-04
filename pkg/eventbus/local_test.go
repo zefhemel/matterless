@@ -47,7 +47,6 @@ func TestLocalEventBus(t *testing.T) {
 	a.False(called2)
 
 	eb.Subscribe("http:/hello", func(eventName string, eventData interface{}) {
-		log.Info("HERE")
 		eb.Respond(eventData, eventData)
 	})
 	//eb.Unsubscribe("*", catchAllCallback)

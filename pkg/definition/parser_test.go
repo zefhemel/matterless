@@ -178,3 +178,18 @@ name: Zef
 	assert.Equal(t, 1, len(defs.CustomDef))
 	assert.Error(t, defs.Desugar())
 }
+
+func TestImportParsing(t *testing.T) {
+	defs, err := definition.Parse(strings.ReplaceAll(`
+# Import
+* http://bla.com
+
+# Import
+- http://bla2.com
+
+`, "|||", "```"))
+	assert.NoError(t, err)
+	assert.Len(t, defs.Imports, 2)
+	assert.Equal(t, "http://bla.com", defs.Imports[0])
+	assert.Equal(t, "http://bla2.com", defs.Imports[1])
+}

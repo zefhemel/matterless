@@ -136,17 +136,18 @@ func (app *Application) Eval(code string) error {
 	if err != nil {
 		return err
 	}
+
+	if err := defs.InlineImports(fmt.Sprintf("%s/%s/.importcache", app.config.DataDir, app.appName)); err != nil {
+		return err
+	}
 	if err := defs.Desugar(); err != nil {
 		return err
 	}
 
 	app.definitions = defs
-
-	app.NormalizeDefinitions()
+	app.InterpolateStoreValues()
 
 	app.reset()
-
-	log.Info("Here")
 
 	for eventName, funcs := range defs.Events {
 		// Copy variable into loop scope (closure)
@@ -213,7 +214,7 @@ func (app *Application) EventBus() eventbus.EventBus {
 }
 
 // Normalize replaces environment variables with their values
-func (app *Application) NormalizeDefinitions() {
+func (app *Application) InterpolateStoreValues() {
 	defs := app.definitions
 
 	logCallback := func(message string) {
