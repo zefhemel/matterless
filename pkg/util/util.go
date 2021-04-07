@@ -27,11 +27,3 @@ func FlatStringMap(m map[string][]string) map[string]string {
 	}
 	return m2
 }
-
-func ListStringMap(m map[string]string) map[string][]string {
-	m2 := map[string][]string{}
-	for k, v := range m {
-		m2[k] = []string{v}
-	}
-	return m2
-}

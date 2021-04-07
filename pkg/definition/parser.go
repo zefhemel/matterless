@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"regexp"
-	"strings"
-
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
 	"github.com/zefhemel/yamlschema"
 	"gopkg.in/yaml.v3"
+	"regexp"
+	"strings"
 )
 
 //go:embed schema/*.schema.json
@@ -124,9 +123,10 @@ func Parse(code string) (*Definitions, error) {
 			if err != nil {
 				return err
 			}
-			if err := validateObj("schema/schema.schema.json", config.InputSchema); err != nil {
-				return fmt.Errorf("Macros %s: %s", currentDeclarationName, err)
-			}
+			// TODO: Comment out because it's slooooooooow
+			//if err := validateObj("schema/schema.schema.json", config.InputSchema); err != nil {
+			//	return fmt.Errorf("Macros %s: %s", currentDeclarationName, err)
+			//}
 			decls.Macros[MacroID(currentDeclarationName)] = &MacroDef{
 				Config:       config,
 				TemplateCode: currentCodeBlock,

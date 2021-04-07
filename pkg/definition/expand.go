@@ -201,7 +201,6 @@ importLoop:
 			if err != nil {
 				return fmt.Errorf("Error parsing imported URL (%s): %s", importUrl, err)
 			}
-
 			if err := defs.MergeFrom(moreDefs); err != nil {
 				return errors.Wrap(err, "merging definitions during import")
 			}

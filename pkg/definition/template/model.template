@@ -1,25 +1,29 @@
 {{ $root := . }}
 {{range $name, $def := .Functions}}
 ## Function: {{$name}}
+{{if or $def.Config.Init $def.Config.Runtime -}}
 ```yaml
 {{yaml $def.Config -}}
 ```
+{{end}}
 ```{{$def.Language}}
 {{$def.Code -}}
 ```
 {{end}}
 {{range $name, $def := .Jobs}}
 ## Job: {{$name}}
+{{if or $def.Config.Init $def.Config.Runtime -}}
 ```yaml
 {{yaml $def.Config -}}
 ```
+{{end}}
 ```{{$def.Language}}
 {{$def.Code -}}
 ```
 {{end}}
 {{range $name, $def := .Macros}}
 ## Macro: {{$name}}
-```
+```yaml
 {{yaml $def.Config -}}
 ```
 Template:

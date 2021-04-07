@@ -4,7 +4,7 @@
 
 Or URL: https://raw.githubusercontent.com/zefhemel/matterless/reset/lib/mattermost.md
 
-# MattermostClient: MyClient
+# MattermostListener: MyClient
 ```yaml
 url: ${config:url}
 token: ${config:token}

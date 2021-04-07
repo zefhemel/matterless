@@ -30,9 +30,9 @@ type Definitions struct {
 }
 
 type FunctionConfig struct {
-	Init        interface{} `yaml:"init"`
-	Runtime     string      `yaml:"runtime"`
-	DockerImage string      `yaml:"docker_image"`
+	Init        interface{} `yaml:"init,omitempty"`
+	Runtime     string      `yaml:"runtime,omitempty"`
+	DockerImage string      `yaml:"docker_image,omitempty"`
 }
 
 type FunctionDef struct {

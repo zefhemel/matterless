@@ -125,7 +125,7 @@ func (app *Application) Eval(code string) error {
 		return err
 	}
 
-	if err := defs.InlineImports(fmt.Sprintf("%s/%s/.importcache", app.config.DataDir, app.appName)); err != nil {
+	if err := defs.InlineImports(fmt.Sprintf("%s/.importcache", app.config.DataDir)); err != nil {
 		return err
 	}
 	if err := defs.ExpandMacros(); err != nil {
