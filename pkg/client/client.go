@@ -26,7 +26,11 @@ func NewMatterlessClient(url string, token string) *MatterlessClient {
 	}
 }
 
-func (client *MatterlessClient) Deploy(files []string, watch bool) {
+func appNameFromPath(path string) string {
+	return strings.Replace(filepath.Base(path), ".md", "", 1)
+}
+
+func (client *MatterlessClient) DeployAppFiles(files []string, watch bool) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		panic(err)
@@ -35,33 +39,26 @@ func (client *MatterlessClient) Deploy(files []string, watch bool) {
 	for _, path := range files {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			fmt.Printf("Could not open file %s: %s", path, err)
-			continue
+			return errors.Wrapf(err, "read file: %s", path)
 		}
-		appName := strings.Replace(filepath.Base(path), ".md", "", 1)
-		fmt.Printf("Deploying %s\n", appName)
-		client.updateApp(appName, string(data))
+		if err := client.DeployApp(appNameFromPath(path), string(data)); err != nil {
+			return errors.Wrap(err, "deploy")
+		}
 		err = watcher.Add(path)
 		if err != nil {
-			panic(err)
+			return errors.Wrap(err, "watcher")
 		}
 	}
 
 	if watch {
 		// File watch the definition file and reload on changes
-		client.watcher(watcher)
+		go client.watcher(watcher)
 	}
+
+	return nil
 }
 
-func (client *MatterlessClient) Delete(files []string) {
-	for _, path := range files {
-		appName := filepath.Base(path)
-		fmt.Printf("Undeploying %s\n", appName)
-		client.deleteApp(appName)
-	}
-}
-
-func (client *MatterlessClient) Get(appName string) (string, error) {
+func (client *MatterlessClient) GetAppCode(appName string) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", client.URL, appName), nil)
 	if err != nil {
 		return "", errors.Wrap(err, "request failed")
@@ -183,35 +180,29 @@ func (client *MatterlessClient) StoreQueryPrefix(appName string, prefix string) 
 	return nil, errors.New("Invalid result")
 }
 
-func (client *MatterlessClient) updateApp(appName, code string) {
-	fmt.Printf("Updating app %s...\n", appName)
-
+func (client *MatterlessClient) DeployApp(appName, code string) error {
 	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", client.URL, appName), strings.NewReader(code))
 	if err != nil {
-		fmt.Println("Updating app fail: ", err)
-		return
+		return errors.Wrap(err, "create request")
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", client.Token))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Println("Updating app fail: ", err)
-		return
+		return errors.Wrap(err, "perform request")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyData, _ := io.ReadAll(resp.Body)
 		if err != nil {
-			panic(err)
+			return errors.Wrap(err, "read response body")
 		}
-		fmt.Printf("Error: %s", bodyData)
-	} else {
-
-		fmt.Println("All good!")
+		return errors.Wrapf(err, "app update error: %s", bodyData)
 	}
+	return nil
 }
 
-func (client *MatterlessClient) Restart(appName string) error {
+func (client *MatterlessClient) RestartApp(appName string) error {
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/%s/_restart", client.URL, appName), nil)
 	if err != nil {
 		return err
@@ -229,16 +220,63 @@ func (client *MatterlessClient) Restart(appName string) error {
 	return nil
 }
 
-func (client *MatterlessClient) deleteApp(appName string) {
+func (client *MatterlessClient) DeleteApp(appName string) error {
 	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", client.URL, appName), nil)
 	if err != nil {
-		fmt.Println("Deleting app fail: ", err)
-		return
+		return errors.Wrap(err, "create request")
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", client.Token))
-	if _, err := http.DefaultClient.Do(req); err != nil {
-		fmt.Println("Deleting app fail: ", err)
+	if resp, err := http.DefaultClient.Do(req); err != nil {
+		return errors.Wrap(err, "perform request")
+	} else {
+		defer resp.Body.Close()
+		bodyData, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("HTTP Error (%d) %s", resp.StatusCode, bodyData)
+		}
 	}
+	return nil
+}
+
+func (client *MatterlessClient) TriggerEvent(appName string, eventName string, eventData interface{}) error {
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/%s/_event/%s", client.URL, appName, eventName), strings.NewReader(util.MustJsonString(eventData)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", client.Token))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	bodyData, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP Error (%d) %s", resp.StatusCode, bodyData)
+	}
+	return nil
+}
+
+func (client *MatterlessClient) InvokeFunction(appName string, functionName string, eventData interface{}) (interface{}, error) {
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/%s/_function/%s", client.URL, appName, functionName), strings.NewReader(util.MustJsonString(eventData)))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", client.Token))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	bodyData, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP Error (%d) %s", resp.StatusCode, bodyData)
+	}
+
+	var resultObj interface{}
+	if err := json.Unmarshal(bodyData, &resultObj); err != nil {
+		return nil, err
+	}
+	return resultObj, nil
 }
 
 func (client *MatterlessClient) watcher(watcher *fsnotify.Watcher) {
@@ -257,13 +295,15 @@ eventLoop:
 					log.Fatalf("Could not open file %s: %s", path, err)
 					continue eventLoop
 				}
-				client.updateApp(filepath.Base(path), string(data))
+				if err := client.DeployApp(appNameFromPath(path), string(data)); err != nil {
+					log.Errorf("Could not redeploy app %s: %s", appNameFromPath(path), err)
+				}
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return
 			}
-			log.Println("error:", err)
+			log.Errorf("Watcher error: %s", err)
 		}
 	}
 }

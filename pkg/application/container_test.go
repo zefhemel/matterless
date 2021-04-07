@@ -18,11 +18,11 @@ func TestEventHTTP(t *testing.T) {
 	}
 	a := assert.New(t)
 	log.SetLevel(log.DebugLevel)
-	cfg := &config.Config{
-		APIBindPort: 8123,
-		DataDir:     os.TempDir(),
-		AdminToken:  "1234",
-	}
+	cfg := config.NewConfig()
+	cfg.APIBindPort = 8123
+	cfg.DataDir = os.TempDir()
+	cfg.AdminToken = "1234"
+
 	container, err := application.NewContainer(cfg)
 	defer container.Close()
 	container.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) {
@@ -44,9 +44,8 @@ func TestEventHTTP(t *testing.T) {
 |||javascript
 import {respondToEvent} from "./matterless.ts";
 
-function handle(event) {
-console.log(Deno.env.get("API_TOKEN"));
-    respondToEvent(event, {
+async function handle(event) {
+    await respondToEvent(event, {
         status: 200,
         body: "OK"
     });
@@ -55,7 +54,7 @@ console.log(Deno.env.get("API_TOKEN"));
 `, "|||", "```")))
 
 	// The actual benchmark
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 10; i++ {
 		resp, err := http.Get("http://localhost:8123/test/hello")
 		a.NoError(err)
 		a.Equal(http.StatusOK, resp.StatusCode)

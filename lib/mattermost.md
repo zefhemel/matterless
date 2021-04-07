@@ -1,5 +1,5 @@
-# Macro: MattermostClient
-Implements a mattermost client, authenticating to a specific `url` using a `token` listening to `events` and triggering subscribed functions appropriately.
+# Macro: MattermostListener
+Implements a mattermost event listener, authenticating to a specific `url` using a `token` listening to `events` and triggering subscribed functions appropriately.
 
 ```yaml
 input_schema:

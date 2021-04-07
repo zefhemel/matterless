@@ -26,7 +26,7 @@ func TestDockerSandboxFunction(t *testing.T) {
 		"name": "Zef",
 	}
 	eventBus := eventbus.NewLocalEventBus()
-	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus, 10*time.Second, 15*time.Second)
+	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus)
 	assert.NoError(t, err)
 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		logEntry := eventData.(sandbox.LogEntry)
@@ -49,7 +49,7 @@ func TestDockerSandboxFunction(t *testing.T) {
 	`
 
 	// Init
-	funcInstance, err := s.Function(context.Background(), "test", definition.FunctionConfig{
+	funcInstance, err := s.Function(context.Background(), "test", &definition.FunctionConfig{
 		Runtime: "node",
 	}, code)
 	assert.NoError(t, err)
@@ -66,11 +66,12 @@ func TestDockerSandboxJob(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
-	cfg := &config.Config{
-		DataDir: os.TempDir(),
-	}
+	cfg := config.NewConfig()
+	cfg.DataDir = os.TempDir()
+	cfg.UseSystemDeno = true
+
 	eventBus := eventbus.NewLocalEventBus()
-	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus, 10*time.Second, 15*time.Second)
+	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus)
 	assert.NoError(t, err)
 	logCounter := 0
 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
@@ -85,6 +86,7 @@ func TestDockerSandboxJob(t *testing.T) {
     }
 
 	function start() {
+console.log("Starting");
         return {
            MY_TOKEN: "1234"
         };
@@ -103,7 +105,7 @@ func TestDockerSandboxJob(t *testing.T) {
 	`
 
 	// Init
-	jobInstance, err := s.Job(context.Background(), "test", definition.FunctionConfig{
+	jobInstance, err := s.Job(context.Background(), "test", &definition.FunctionConfig{
 		Init: map[string]interface{}{
 			"something": "To do",
 		},
@@ -111,7 +113,7 @@ func TestDockerSandboxJob(t *testing.T) {
 	}, code)
 	assert.NoError(t, err)
 
-	err = jobInstance.Start(context.Background())
+	err = jobInstance.Start()
 	assert.NoError(t, err)
 	time.Sleep(2 * time.Second)
 	// Some iteration logs should have been written

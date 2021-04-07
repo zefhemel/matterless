@@ -18,14 +18,6 @@ func SafeFilename(s string) string {
 	return safeFilenameRE.ReplaceAllString(s, "_")
 }
 
-func ReverseStringSlice(ss []string) []string {
-	ss2 := make([]string, 0, len(ss))
-	for i := len(ss) - 1; i >= 0; i-- {
-		ss2 = append(ss2, ss[i])
-	}
-	return ss2
-}
-
 func FlatStringMap(m map[string][]string) map[string]string {
 	m2 := map[string]string{}
 	for k, vs := range m {

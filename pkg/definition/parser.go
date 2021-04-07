@@ -18,7 +18,7 @@ import (
 //go:embed schema/*.schema.json
 var jsonSchemas embed.FS
 
-func Validate(schemaName string, yamlString string) error {
+func validate(schemaName string, yamlString string) error {
 	schemaBytes, err := jsonSchemas.ReadFile(schemaName)
 	if err != nil {
 		log.Fatal(err)
@@ -26,7 +26,7 @@ func Validate(schemaName string, yamlString string) error {
 	return yamlschema.ValidateStrings(string(schemaBytes), yamlString)
 }
 
-func ValidateObj(schemaName string, obj interface{}) error {
+func validateObj(schemaName string, obj interface{}) error {
 	schemaBytes, err := jsonSchemas.ReadFile(schemaName)
 	if err != nil {
 		log.Fatal(err)
@@ -45,11 +45,11 @@ func Parse(code string) (*Definitions, error) {
 	mdParser := goldmark.DefaultParser()
 
 	decls := &Definitions{
-		Functions: map[FunctionID]*FunctionDef{},
-		Jobs:      map[FunctionID]*JobDef{},
-		Events:    map[string][]FunctionID{},
-		Macros:    map[MacroID]*MacroDef{},
-		CustomDef: map[string]*CustomDef{},
+		Functions:      map[FunctionID]*FunctionDef{},
+		Jobs:           map[FunctionID]*JobDef{},
+		Events:         map[string][]FunctionID{},
+		Macros:         map[MacroID]*MacroDef{},
+		MacroInstances: map[string]*MacroInstanceDef{},
 	}
 	codeBytes := []byte(code)
 	node := mdParser.Parse(text.NewReader(codeBytes))
@@ -68,7 +68,7 @@ func Parse(code string) (*Definitions, error) {
 			funcDef := &FunctionDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
-				Config:   FunctionConfig{},
+				Config:   &FunctionConfig{},
 			}
 			if currentBody2 != "" {
 				// We got a parameter clause on our hands, parse the currentBody as YAML
@@ -86,7 +86,7 @@ func Parse(code string) (*Definitions, error) {
 			jobDef := &JobDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
-				Config:   FunctionConfig{},
+				Config:   &FunctionConfig{},
 			}
 			if currentBody2 != "" {
 				// We got a parameter clause on our hands, parse the currentBody as YAML
@@ -102,7 +102,7 @@ func Parse(code string) (*Definitions, error) {
 			decls.Jobs[FunctionID(currentDeclarationName)] = jobDef
 		case "Events":
 			var def map[string][]FunctionID
-			if err := Validate("schema/events.schema.json", currentBody); err != nil {
+			if err := validate("schema/events.schema.json", currentBody); err != nil {
 				return fmt.Errorf("Events: %s", err)
 			}
 			err := yaml.Unmarshal([]byte(currentBody), &def)
@@ -124,7 +124,7 @@ func Parse(code string) (*Definitions, error) {
 			if err != nil {
 				return err
 			}
-			if err := ValidateObj("schema/schema.schema.json", config.InputSchema); err != nil {
+			if err := validateObj("schema/schema.schema.json", config.InputSchema); err != nil {
 				return fmt.Errorf("Macros %s: %s", currentDeclarationName, err)
 			}
 			decls.Macros[MacroID(currentDeclarationName)] = &MacroDef{
@@ -143,7 +143,7 @@ func Parse(code string) (*Definitions, error) {
 			if err != nil {
 				return fmt.Errorf("[%s] %s: Could not parse YAML", currentDeclarationType, currentDeclarationName)
 			}
-			decls.CustomDef[currentDeclarationName] = &CustomDef{
+			decls.MacroInstances[currentDeclarationName] = &MacroInstanceDef{
 				Macro: MacroID(currentDeclarationType),
 				Input: inputs,
 			}

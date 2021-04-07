@@ -15,14 +15,15 @@ import (
 )
 
 func TestDenoSandboxFunction(t *testing.T) {
-	cfg := &config.Config{
-		DataDir: os.TempDir(),
-	}
+	cfg := config.NewConfig()
+	cfg.DataDir = os.TempDir()
+	cfg.UseSystemDeno = true
+
 	sillyEvent := map[string]string{
 		"name": "Zef",
 	}
 	eventBus := eventbus.NewLocalEventBus()
-	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus, 10*time.Second, 15*time.Second)
+	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus)
 	assert.NoError(t, err)
 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		logEntry := eventData.(sandbox.LogEntry)
@@ -37,7 +38,7 @@ func TestDenoSandboxFunction(t *testing.T) {
 		};
 	}
 	`
-	functionConfig := definition.FunctionConfig{
+	functionConfig := &definition.FunctionConfig{
 		Runtime: "deno",
 	}
 
@@ -53,12 +54,12 @@ func TestDenoSandboxFunction(t *testing.T) {
 }
 
 func TestDenoSandboxJob(t *testing.T) {
-	cfg := &config.Config{
-		DataDir: os.TempDir(),
-	}
+	cfg := config.NewConfig()
+	cfg.DataDir = os.TempDir()
+	cfg.UseSystemDeno = true
 
 	eventBus := eventbus.NewLocalEventBus()
-	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus, 10*time.Second, 15*time.Second)
+	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus)
 	assert.NoError(t, err)
 	logCounter := 0
 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
@@ -82,12 +83,12 @@ func TestDenoSandboxJob(t *testing.T) {
        }, 500);
    }
 
-   function stop() {
+   function done() {
        console.log("Stopping");
    }
 	`
 	// Init
-	jobInstance, err := s.Job(context.Background(), "test", definition.FunctionConfig{
+	jobInstance, err := s.Job(context.Background(), "test", &definition.FunctionConfig{
 		Init: map[string]interface{}{
 			"something": "To do",
 		},
@@ -95,7 +96,7 @@ func TestDenoSandboxJob(t *testing.T) {
 	}, code)
 	assert.NoError(t, err)
 
-	err = jobInstance.Start(context.Background())
+	err = jobInstance.Start()
 	assert.NoError(t, err)
 	time.Sleep(2 * time.Second)
 	// Some iteration logs should have been written

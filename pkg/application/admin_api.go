@@ -3,19 +3,17 @@ package application
 import (
 	"fmt"
 	"github.com/gorilla/mux"
-	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net/http"
-	"strings"
 )
 
-func (ag *APIGateway) exposeAdminAPI(cfg *config.Config) {
+func (ag *APIGateway) exposeAdminAPI() {
 	ag.rootRouter.HandleFunc("/{app}", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
 		appName := vars["app"]
-		if !ag.rootApiAuth(w, r, cfg) {
+		if !ag.authAdmin(w, r) {
 			return
 		}
 		defBytes, err := io.ReadAll(r.Body)
@@ -27,7 +25,7 @@ func (ag *APIGateway) exposeAdminAPI(cfg *config.Config) {
 
 		app := ag.container.Get(appName)
 		if app == nil {
-			app, err = NewApplication(cfg, appName)
+			app, err = NewApplication(ag.config, appName)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				fmt.Fprintf(w, "Could not create app: %s", err)
@@ -46,7 +44,7 @@ func (ag *APIGateway) exposeAdminAPI(cfg *config.Config) {
 
 	ag.rootRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
-		if !ag.rootApiAuth(w, r, cfg) {
+		if !ag.authAdmin(w, r) {
 			return
 		}
 
@@ -57,7 +55,7 @@ func (ag *APIGateway) exposeAdminAPI(cfg *config.Config) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
 		appName := vars["app"]
-		if !ag.rootApiAuth(w, r, cfg) {
+		if !ag.authAdmin(w, r) {
 			return
 		}
 		app := ag.container.Get(appName)
@@ -72,10 +70,10 @@ func (ag *APIGateway) exposeAdminAPI(cfg *config.Config) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
 		appName := vars["app"]
-		if !ag.rootApiAuth(w, r, cfg) {
+		if !ag.authAdmin(w, r) {
 			return
 		}
-		ag.container.UnRegister(appName)
+		ag.container.Deregister(appName)
 		fmt.Fprint(w, "OK")
 	}).Methods("DELETE")
 
@@ -83,7 +81,7 @@ func (ag *APIGateway) exposeAdminAPI(cfg *config.Config) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
 		appName := vars["app"]
-		if !ag.rootApiAuth(w, r, cfg) {
+		if !ag.authAdmin(w, r) {
 			return
 		}
 		app := ag.container.Get(appName)
@@ -91,33 +89,11 @@ func (ag *APIGateway) exposeAdminAPI(cfg *config.Config) {
 			http.NotFound(w, r)
 			return
 		}
-		if err := app.Eval(app.CurrentCode()); err != nil {
+		if err := app.Eval(app.code); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "Error: %s", err)
 			return
 		}
 		fmt.Fprint(w, "OK")
 	}).Methods("POST")
-}
-
-func (ag *APIGateway) rootApiAuth(w http.ResponseWriter, r *http.Request, cfg *config.Config) bool {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, "ROOT: No authorization provided")
-		return false
-	}
-	authHeaderParts := strings.Split(authHeader, " ")
-	if len(authHeaderParts) != 2 || len(authHeaderParts) == 2 && authHeaderParts[0] != "bearer" {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "ROOT2: No authorization provided: %+v", authHeaderParts)
-		return false
-	}
-	token := authHeaderParts[1]
-	if token != cfg.AdminToken {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, "Wrong token")
-		return false
-	}
-	return true
 }

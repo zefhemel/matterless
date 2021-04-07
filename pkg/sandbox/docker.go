@@ -21,8 +21,8 @@ import (
 )
 
 type DockerInitMessage struct {
-	Script string                 `json:"script"`
-	Config map[string]interface{} `json:"config"`
+	Script string      `json:"script"`
+	Config interface{} `json:"config"`
 }
 
 // ======= Functions ============
@@ -46,11 +46,13 @@ func (inst *dockerFunctionInstance) LastInvoked() time.Time {
 	return inst.lastInvoked
 }
 
-func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runnerType string, name string, eventBus eventbus.EventBus, functionConfig definition.FunctionConfig, code string) (*dockerFunctionInstance, error) {
+func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runMode RunMode, name string, eventBus eventbus.EventBus, functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
+
+	funcHash := newFunctionHash(name, code)
 	inst := &dockerFunctionInstance{
 		name:          name,
 		apiURL:        apiURL,
-		containerName: fmt.Sprintf("mls-%s-%s", runnerType, name),
+		containerName: fmt.Sprintf("mls-%s", funcHash),
 	}
 
 	apiHost := "172.17.0.1"
@@ -59,6 +61,10 @@ func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL s
 	}
 
 	// Run "docker run -i" as child process
+	runnerType := "node-function"
+	if runMode == RunModeJob {
+		runnerType = "node-job"
+	}
 	cmd := exec.Command("docker", "run", "--rm", "-P", "-i",
 		fmt.Sprintf("--name=%s", inst.containerName),
 		fmt.Sprintf("-e API_URL=%s", fmt.Sprintf(inst.apiURL, apiHost)),
@@ -87,8 +93,8 @@ func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL s
 	}
 
 	// Send stdout and stderr to the log channel
-	go inst.pipeStream(bufferedStdout, eventBus)
-	go inst.pipeStream(bufferedStderr, eventBus)
+	go pipeLogStreamToEventBus(name, bufferedStdout, eventBus)
+	go pipeLogStreamToEventBus(name, bufferedStderr, eventBus)
 
 	// Run "docker inspect" to fetch exposed ports
 	inspectData, err := exec.Command("docker", "inspect", inst.containerName).CombinedOutput()
@@ -134,28 +140,10 @@ func (inst *dockerFunctionInstance) Kill() error {
 	http.Get(fmt.Sprintf("%s/stop", inst.controlURL))
 
 	// Now hard Kill the docker container, if it's still running
-	exec.Command("docker", "Kill", inst.containerName).Run()
+	exec.Command("docker", "kill", inst.containerName).Run()
 
-	log.Info("Killed dockerFunctionInstance.")
+	log.Debug("Killed function instance.")
 	return nil
-}
-
-func (inst *dockerFunctionInstance) pipeStream(bufferedReader *bufio.Reader, eventBus eventbus.EventBus) {
-readLoop:
-	for {
-		line, err := bufferedReader.ReadString('\n')
-		if err == io.EOF {
-			break readLoop
-		}
-		if err != nil {
-			log.Error("log read error", err)
-			break readLoop
-		}
-		eventBus.Publish(fmt.Sprintf("logs:%s", inst.name), LogEntry{
-			Instance: inst,
-			Message:  line,
-		})
-	}
 }
 
 type jsError struct {
@@ -204,7 +192,7 @@ func (inst *dockerFunctionInstance) Invoke(ctx context.Context, event interface{
 	return result, nil
 }
 
-func (inst *dockerFunctionInstance) init(functionConfig definition.FunctionConfig, code string) error {
+func (inst *dockerFunctionInstance) init(functionConfig *definition.FunctionConfig, code string) error {
 	httpClient := http.DefaultClient
 	// TODO: Remove magic 15s value
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -234,6 +222,7 @@ func (inst *dockerFunctionInstance) init(functionConfig definition.FunctionConfi
 
 type dockerJobInstance struct {
 	dockerFunctionInstance
+	config      *config.Config
 	timeStarted time.Time
 	name        string
 }
@@ -244,30 +233,30 @@ func (inst *dockerJobInstance) Name() string {
 	return inst.name
 }
 
-func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, eventBus eventbus.EventBus, functionConfig definition.FunctionConfig, code string) (*dockerJobInstance, error) {
+func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, eventBus eventbus.EventBus, functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
 	inst := &dockerJobInstance{
-		name: name,
+		name:   name,
+		config: cfg,
 	}
 
-	functionInstance, err := newDockerFunctionInstance(ctx, cfg, apiURL, apiToken, "node-job", name, eventBus, functionConfig, code)
+	functionInstance, err := newDockerFunctionInstance(ctx, cfg, apiURL, apiToken, RunModeJob, name, eventBus, functionConfig, code)
 	if err != nil {
 		return nil, err
 	}
 
-	inst.dockerFunctionInstance = *functionInstance
+	inst.dockerFunctionInstance = *(functionInstance.(*dockerFunctionInstance))
 
 	return inst, nil
 }
 
-func (inst *dockerJobInstance) Start(ctx context.Context) error {
-	inst.timeStarted = time.Now()
-
-	httpClient := http.DefaultClient
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/start", inst.serverURL), nil)
+func (inst *dockerJobInstance) Start() error {
+	startCtx, cancel := context.WithTimeout(context.Background(), inst.config.SandboxJobStartTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(startCtx, http.MethodGet, fmt.Sprintf("%s/start", inst.serverURL), nil)
 	if err != nil {
 		return errors.Wrap(err, "invoke call")
 	}
-	resp, err := httpClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
 	}
@@ -280,6 +269,17 @@ func (inst *dockerJobInstance) Start(ctx context.Context) error {
 	return nil
 }
 
-func (inst *dockerJobInstance) Stop() {
-	http.Get(fmt.Sprintf("%s/stop", inst.serverURL))
+func (inst *dockerJobInstance) Stop() error {
+	startCtx, cancel := context.WithTimeout(context.Background(), inst.config.SandboxJobStopTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(startCtx, http.MethodGet, fmt.Sprintf("%s/stop", inst.serverURL), nil)
+	if err != nil {
+		return errors.Wrap(err, "stop call")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
+	}
+	defer resp.Body.Close()
+	return inst.Kill()
 }

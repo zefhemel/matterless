@@ -1,8 +1,4 @@
 export class Store {
-    constructor() {
-
-    }
-
     async get(key : string) : Promise<any> {
         return (await this.performOp("get", key)).value;
     }
@@ -65,6 +61,26 @@ export async function respondToEvent(toEventData : any, eventData : any) {
         if(jsonResult.status === "error") {
             throw Error(jsonResult.error);
         }
+    } else {
+        throw new Error(`HTTP request not ok: ${await result.text()}`);
+    }
+}
+
+export async function invokeFunction(name : string, eventData : any) {
+    let result = await fetch(`${Deno.env.get("API_URL")}/_function/${name}`, {
+        method: "POST",
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `bearer ${Deno.env.get("API_TOKEN")}`
+        },
+        body: JSON.stringify(eventData || {})
+    })
+    if(result.status == 200) {
+        let jsonResult = await result.json();
+        if(jsonResult.status === "error") {
+            throw Error(jsonResult.error);
+        }
+        return jsonResult;
     } else {
         throw new Error(`HTTP request not ok: ${await result.text()}`);
     }

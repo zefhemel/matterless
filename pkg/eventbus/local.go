@@ -1,10 +1,9 @@
 package eventbus
 
 import (
-	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	log "github.com/sirupsen/logrus"
+	"github.com/pkg/errors"
 	"reflect"
 	"regexp"
 	"strings"
@@ -54,33 +53,30 @@ func (l *LocalEventBus) Unsubscribe(pattern string, subscriptionFunc Subscriptio
 	l.subscribers = newSubscribers
 }
 
-func (l *LocalEventBus) UnsubscribeAllMatchingPattern(pattern string) {
-	l.subscribeLock.Lock()
-	defer l.subscribeLock.Unlock()
-	newSubscribers := make([]*subscription, 0, len(l.subscribers))
-	rePattern := patternToRegexp(pattern)
-	for _, subscriber := range l.subscribers {
-		if !rePattern.MatchString(subscriber.pattern) {
-			newSubscribers = append(newSubscribers, subscriber)
-		}
-	}
-	l.subscribers = newSubscribers
-}
-
 func patternToRegexp(pattern string) *regexp.Regexp {
 	return regexp.MustCompile(fmt.Sprintf("^%s$", strings.ReplaceAll(regexp.QuoteMeta(pattern), "\\*", "(.*)")))
 }
 
-func (l *LocalEventBus) Publish(eventName string, eventData interface{}) {
+func (l *LocalEventBus) Publish(eventName string, eventData interface{}) int {
+	listenersNotified := 0
 	for _, subscriber := range l.subscribers {
 		if subscriber.rePattern.MatchString(eventName) {
 			subscriber.callback(eventName, eventData)
+			listenersNotified++
 		}
 	}
+	return listenersNotified
 }
 
-func (l *LocalEventBus) PublishAsync(eventName string, eventData interface{}) {
-	go l.Publish(eventName, eventData)
+func (l *LocalEventBus) PublishAsync(eventName string, eventData interface{}) int {
+	listenersNotified := 0
+	for _, subscriber := range l.subscribers {
+		if subscriber.rePattern.MatchString(eventName) {
+			go subscriber.callback(eventName, eventData)
+			listenersNotified++
+		}
+	}
+	return listenersNotified
 }
 
 func (l *LocalEventBus) Request(eventName string, eventData map[string]interface{}, timeout time.Duration) (interface{}, error) {
@@ -94,45 +90,56 @@ func (l *LocalEventBus) Request(eventName string, eventData map[string]interface
 	// Setup a channel to listen to the response
 	responseChannel := make(chan interface{})
 	stopped := false
+
+	// Subscribe to the response event
+	responseListener = func(eventName string, eventData interface{}) {
+		// Validate if unexpected happened (e.g. timeout)
+		if !stopped {
+			responseChannel <- eventData
+		}
+	}
+	l.Subscribe(responseEventName, responseListener)
+
+	// Ensure cleanup
 	defer func() {
 		// Clean up
 		stopped = true
 		close(responseChannel)
+		l.Unsubscribe(responseEventName, responseListener)
 	}()
 
-	// Subscribe to the response event
-	responseListener = func(eventName string, eventData interface{}) {
-		// Check if unexpected happened (e.g. timeout)
-		if !stopped {
-			responseChannel <- eventData
-		}
-		l.Unsubscribe(responseEventName, responseListener)
-	}
-	l.Subscribe(responseEventName, responseListener)
-
 	// Trigger the request event
-	l.PublishAsync(eventName, eventData)
+	listeners := l.PublishAsync(eventName, eventData)
+
+	if listeners == 0 {
+		// Nobody's listening, return immediately
+		return nil, NoListenersError
+	}
 
 	select {
 	case response := <-responseChannel:
 		return response, nil
 	case <-time.After(timeout):
-		return nil, errors.New("timeout")
+		return nil, RequestTimeoutError
 	}
 }
 
-func (l *LocalEventBus) Respond(to interface{}, eventData interface{}) {
+func (l *LocalEventBus) Respond(to interface{}, eventData interface{}) error {
 	if toEvent, ok := to.(map[string]interface{}); ok {
 		if responseEvent, ok := toEvent[ResponseEventKey]; ok {
 			if responseEventName, ok := responseEvent.(string); ok {
-				l.Publish(responseEventName, eventData)
+				listeners := l.Publish(responseEventName, eventData)
+				if listeners == 0 {
+					return errors.New("No listeners")
+				}
 			} else {
-				log.Errorf("Response %s not a string: %s", ResponseEventKey, responseEvent)
+				return fmt.Errorf("Response %s not a string: %s", ResponseEventKey, responseEvent)
 			}
 		} else {
-			log.Errorf("No %s specified in event: %+v", ResponseEventKey, to)
+			return fmt.Errorf("No %s specified in event: %+v", ResponseEventKey, to)
 		}
 	} else {
-		log.Errorf("Respond to event is not a map: %+v", to)
+		return fmt.Errorf("Respond to event is not a map: %+v", to)
 	}
+	return nil
 }

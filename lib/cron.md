@@ -1,53 +1,49 @@
 # Macro: Cron
+Implements a simple cronjob scheduler.
+
 ```yaml
-schema:
-  type: object
-  properties:
-     items: 
-       type: array
-       items:
-          type: object
-          properties:
-            schedule:
-              type: string
-            function:
-              type: string
-          additionalProperties: false
-            required:
-            - url
-            - token
+input_schema:
+   type: object
+   additionalProperties: 
+     type: object
+     properties:
+        schedule:
+          type: string
+        function:
+          type: string
+     required:
+     - schedule
+     - function
+     additionalProperties: false
 
 ```
 
-# Job: MyCron
-```yaml
-init:
-  items:
-    - schedule: "*/10 * * * * *"
-      function: MyCronFunction
-```
-```javascript
-import {cron} from 'https://deno.land/x/deno_cron@v1.0.0/cron.ts';
-import {publishEvent} from "./matterless.ts";
+Template:
 
-function init(config) {
-    config.items.forEach((entry, i) => {
-        cron(entry.schedule, () => {
-            publishEvent(`MyCron:schedule-${i}`, {});
+    # Job: CronJob
+    ```yaml
+    init:
+      {{yaml $input | prefixLines "  "}}
+    ```
+    ```javascript
+    import {cron} from 'https://deno.land/x/deno_cron@v1.0.0/cron.ts';
+    import {publishEvent} from "./matterless.ts";
+    
+    function init(config) {
+        console.log("Config", config)
+        Object.keys(config).forEach(cronName => {
+            let cronDef = config[cronName];
+            cron(cronDef.schedule, () => {
+                publishEvent(`cron:${cronName}`, {});
+            });
         });
-    })
-}
-```
-
-# Events
-```
-"MyCron:schedule-0":
-- MyCronFunction
-```
-
-# Function: MyCronFunction
-```javascript
-function handle() {
-    console.log("Triggered!");
-}
-```
+    }
+    ```
+    
+    # Events
+    ```
+    {{range $cronName, $def := $input}}
+    "cron:{{$cronName}}":
+    - {{$def.function}}
+    {{- end}}
+    ```

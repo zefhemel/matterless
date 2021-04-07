@@ -1,27 +1,34 @@
 package config
 
 import (
-	"os"
-	"strings"
+	"time"
 )
 
 type Config struct {
 	APIBindPort int
 	DataDir     string
 	AdminToken  string
-	GlobalEnv   map[string]string
-	PersistApps bool // Whether to write deployed app code to disk
+
+	PersistApps   bool // Whether to write deployed app code to disk
+	UseSystemDeno bool // Use the system installed deno rather than the version downloaded automatically
+
+	FunctionRunTimeout         time.Duration
+	HTTPGatewayResponseTimeout time.Duration
+	JobInitTimeout             time.Duration
+	SandboxCleanupInterval     time.Duration
+	SandboxFunctionKeepAlive   time.Duration
+	SandboxJobStartTimeout     time.Duration
+	SandboxJobStopTimeout      time.Duration
 }
 
-func FromEnv() *Config {
-	globalEnv := map[string]string{}
-	for _, envCombo := range os.Environ() {
-		parts := strings.Split(envCombo, "=")
-		if strings.HasPrefix(parts[0], "MLS_") {
-			globalEnv[parts[0]] = parts[1]
-		}
-	}
+func NewConfig() *Config {
 	return &Config{
-		GlobalEnv: globalEnv,
+		FunctionRunTimeout:         1 * time.Minute,
+		HTTPGatewayResponseTimeout: 10 * time.Second,
+		JobInitTimeout:             20 * time.Second,
+		SandboxCleanupInterval:     1 * time.Minute,
+		SandboxFunctionKeepAlive:   2 * time.Minute,
+		SandboxJobStartTimeout:     30 * time.Second,
+		SandboxJobStopTimeout:      2 * time.Second,
 	}
 }

@@ -22,11 +22,14 @@ var denoDownloadUrls = map[string]string{
 }
 
 func denoBinPath(config *config.Config) string {
-	// TODO: Reenable auto download
-	//return fmt.Sprintf("%s/.deno/deno", config.DataDir)
-	return "deno"
+	if config.UseSystemDeno {
+		return "deno"
+	} else {
+		return fmt.Sprintf("%s/.deno/deno", config.DataDir)
+	}
 }
 
+// Automatically download deno executable into the data folder if it's not there
 func ensureDeno(config *config.Config) error {
 	denoPath := denoBinPath(config)
 	buildToGet := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)

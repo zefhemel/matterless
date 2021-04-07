@@ -41,20 +41,20 @@ func TestLocalEventBus(t *testing.T) {
 	a.True(called2)
 	called = false
 	called2 = false
-	eb.UnsubscribeAllMatchingPattern("myApp:*")
-	eb.Publish("myApp:something", struct{}{})
-	a.False(called)
-	a.False(called2)
 
-	eb.Subscribe("http:/hello", func(eventName string, eventData interface{}) {
+	eb.Subscribe("http:GET:/hello", func(eventName string, eventData interface{}) {
 		eb.Respond(eventData, eventData)
 	})
-	//eb.Unsubscribe("*", catchAllCallback)
 
 	myEvent := map[string]interface{}{
 		"name": "pete",
 	}
-	r, err := eb.Request("http:/hello", myEvent, time.Second)
+	r, err := eb.Request("http:GET:/hello", myEvent, time.Second)
 	a.NoError(err)
 	a.Equal(myEvent, r)
+
+	eb.Unsubscribe("*", catchAllCallback)
+
+	r, err = eb.Request("http:GET:/non-existing", myEvent, time.Second)
+	a.Equal(eventbus.NoListenersError, err)
 }

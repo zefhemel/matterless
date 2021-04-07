@@ -1,6 +1,7 @@
 package definition_test
 
 import (
+	"fmt"
 	log "github.com/sirupsen/logrus"
 	"strings"
 	"testing"
@@ -11,19 +12,24 @@ import (
 	"github.com/zefhemel/matterless/pkg/definition"
 )
 
-//go:embed test/test1.md
-var test1Md string
-
-func TestValidation(t *testing.T) {
-	err := definition.Validate("schema/config.schema.json", `
-url: http://localhost
-token: abc
-`)
-	assert.NoError(t, err)
-}
-
 func TestParser(t *testing.T) {
-	decls, err := definition.Parse(test1Md)
+	decls, err := definition.Parse(strings.ReplaceAll(`
+# Function: TestFunction1
+
+|||
+function handle(event) {
+	console.log("Hello world!");
+}
+|||
+
+# Function TestFunction2
+
+|||javascript
+function handle(event) {
+	console.log("Hello world 2!");
+}
+|||
+`, "|||", "```"))
 	assert.NoError(t, err)
 	assert.Equal(t, "TestFunction1", decls.Functions["TestFunction1"].Name)
 	assert.Equal(t, "TestFunction2", decls.Functions["TestFunction2"].Name)
@@ -50,7 +56,7 @@ function handle() {
 `, "|||", "```"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(defs.Functions))
-	assert.Equal(t, "Zef", defs.Functions["MyFunc"].Config.Init["arg1"])
+	assert.Equal(t, "Zef", defs.Functions["MyFunc"].Config.Init.(map[string]interface{})["arg1"])
 	assert.Equal(t, "bla/bla", defs.Functions["MyFunc"].Config.DockerImage)
 	assert.Contains(t, defs.Functions["MyFunc"].Code, "handle")
 }
@@ -82,7 +88,6 @@ function handle() {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(defs.Functions))
 	log.Infof("%+v", defs.Functions["MyFunc"])
-	assert.Equal(t, 0, len(defs.Functions["MyFunc"].Config.Init))
 	assert.Contains(t, defs.Functions["MyFunc"].Code, "handle")
 }
 
@@ -106,7 +111,7 @@ function handle() {
 `, "|||", "```"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(defs.Jobs))
-	assert.Equal(t, "Zef", defs.Jobs["MyJob"].Config.Init["arg1"])
+	assert.Equal(t, "Zef", defs.Jobs["MyJob"].Config.Init.(map[string]interface{})["arg1"])
 	assert.Equal(t, "bla/bla", defs.Jobs["MyJob"].Config.DockerImage)
 	assert.Contains(t, defs.Jobs["MyJob"].Code, "handle")
 }
@@ -122,7 +127,6 @@ function run() {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(defs.Jobs))
 	log.Infof("%+v", defs.Jobs["MyJob"])
-	assert.Equal(t, 0, len(defs.Jobs["MyJob"].Config.Init))
 	assert.Contains(t, defs.Jobs["MyJob"].Code, "run()")
 }
 
@@ -160,11 +164,11 @@ name: Zef
 	assert.Equal(t, 1, len(defs.Macros))
 	assert.Contains(t, defs.Macros["HelloJob"].TemplateCode, "Job")
 
-	assert.Equal(t, 1, len(defs.CustomDef))
-	assert.Equal(t, definition.MacroID("HelloJob"), defs.CustomDef["TheJob"].Macro)
-	assert.Equal(t, "Zef", defs.CustomDef["TheJob"].Input.(map[string]interface{})["name"])
+	assert.Equal(t, 1, len(defs.MacroInstances))
+	assert.Equal(t, definition.MacroID("HelloJob"), defs.MacroInstances["TheJob"].Macro)
+	assert.Equal(t, "Zef", defs.MacroInstances["TheJob"].Input.(map[string]interface{})["name"])
 
-	assert.NoError(t, defs.Desugar())
+	assert.NoError(t, defs.ExpandMacros())
 }
 
 func TestTemplateParserNonExisting(t *testing.T) {
@@ -175,8 +179,8 @@ name: Zef
 |||
 `, "|||", "```"))
 	assert.NoError(t, err)
-	assert.Equal(t, 1, len(defs.CustomDef))
-	assert.Error(t, defs.Desugar())
+	assert.Equal(t, 1, len(defs.MacroInstances))
+	assert.Error(t, defs.ExpandMacros())
 }
 
 func TestImportParsing(t *testing.T) {
@@ -192,4 +196,80 @@ func TestImportParsing(t *testing.T) {
 	assert.Len(t, defs.Imports, 2)
 	assert.Equal(t, "http://bla.com", defs.Imports[0])
 	assert.Equal(t, "http://bla2.com", defs.Imports[1])
+}
+
+func TestMergeJobs(t *testing.T) {
+	defs1, err := definition.Parse(strings.ReplaceAll(`
+# Job: MyCron
+|||
+init:
+- schedule: "* * * * * *"
+  function: MyFunc
+|||
+
+|||javascript
+function handle() {
+
+}
+|||
+`, "|||", "```"))
+	assert.NoError(t, err)
+
+	defs2, err := definition.Parse(strings.ReplaceAll(`
+# Job: MyCron
+|||
+init:
+- schedule: "*/2 * * * * *"
+  function: MyFunc2
+|||
+
+|||javascript
+function handle() {
+
+}
+|||
+`, "|||", "```"))
+
+	assert.NoError(t, defs1.MergeFrom(defs2))
+	assert.Equal(t, 2, len(defs1.Jobs["MyCron"].Config.Init.([]interface{})))
+	//fmt.Println(defs1.Markdown())
+
+	// validate with nested slice
+	defs1, err = definition.Parse(strings.ReplaceAll(`
+# Job: MyCron
+|||
+init:
+   bla1:
+     schedule: "* * * * * *"
+     function: MyFunc
+|||
+
+|||javascript
+function handle() {
+
+}
+|||
+`, "|||", "```"))
+	assert.NoError(t, err)
+
+	defs2, err = definition.Parse(strings.ReplaceAll(`
+# Job: MyCron
+|||
+init:
+   bla2:
+     schedule: "*/2 * * * * *"
+     function: MyFunc2
+|||
+
+|||javascript
+function handle() {
+
+}
+|||
+`, "|||", "```"))
+
+	assert.NoError(t, defs1.MergeFrom(defs2))
+	//assert.Equal(t, 2, len(defs1.Jobs["MyCron"].Config.Init.(map[string]interface{})["bla"].([]interface{})))
+	fmt.Println(defs1.Markdown())
+
 }

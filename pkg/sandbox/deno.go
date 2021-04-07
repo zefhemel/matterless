@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -24,15 +25,15 @@ import (
 	"time"
 )
 
-// ======= Functions ============
+// ======= Function ============
 type denoFunctionInstance struct {
-	serverURL   string
-	lastInvoked time.Time
-	runLock     sync.Mutex
+	config      *config.Config
 	name        string
 	cmd         *exec.Cmd
+	lastInvoked time.Time
+	runLock     sync.Mutex
+	serverURL   string
 	tempDir     string
-	config      *config.Config
 }
 
 var _ FunctionInstance = &denoFunctionInstance{}
@@ -45,6 +46,7 @@ func (inst *denoFunctionInstance) LastInvoked() time.Time {
 	return inst.lastInvoked
 }
 
+// All these files will be copied into a temporary function directory that deno will be invoked on
 //go:embed deno/*.ts
 var denoFiles embed.FS
 
@@ -65,36 +67,47 @@ func copyDenoFiles(destDir string) error {
 //go:embed deno/template.js
 var denoFunctionTemplate string
 
-func wrapScript(configMap map[string]interface{}, code string) string {
-	if configMap == nil {
-		configMap = map[string]interface{}{}
-	}
+func wrapScript(initData interface{}, code string) string {
 	data := struct {
-		Code       string
-		ConfigJSON string
+		Code     string
+		InitData string
 	}{
-		Code:       code,
-		ConfigJSON: util.MustJsonString(configMap),
+		Code:     code,
+		InitData: util.MustJsonString(initData),
 	}
 	tmpl, err := template.New("sourceTemplate").Parse(denoFunctionTemplate)
 	if err != nil {
-		log.Error("Could not render javascript:", err)
-		return ""
+		log.Fatal("Could not render javascript:", err)
 	}
 	var out bytes.Buffer
 	if err := tmpl.Execute(&out, data); err != nil {
-		log.Error("Could not render javascript:", err)
-		return ""
+		log.Fatal("Could not render javascript:", err)
 	}
 	return out.String()
 }
 
-func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode string, name string, eventBus eventbus.EventBus, functionConfig definition.FunctionConfig, code string) (*denoFunctionInstance, error) {
+type functionHash string
+
+// Generates a content-based hash to be used as unique identifier for this function
+func newFunctionHash(name string, code string) functionHash {
+	h := sha1.New()
+	h.Write([]byte(name))
+	h.Write([]byte(code))
+	bs := h.Sum(nil)
+	return functionHash(fmt.Sprintf("%x", bs))
+}
+
+func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode RunMode, name string, eventBus eventbus.EventBus, functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
 	inst := &denoFunctionInstance{
-		name: name,
+		name:   name,
+		config: config,
 	}
 
-	denoDir := fmt.Sprintf("%s/.deno/%s-%s", config.DataDir, runMode, name)
+	runModeString := "function"
+	if runMode == RunModeJob {
+		runModeString = "job"
+	}
+	denoDir := fmt.Sprintf("%s/.deno/%s-%s", config.DataDir, runModeString, newFunctionHash(name, code))
 	if err := os.MkdirAll(denoDir, 0700); err != nil {
 		return nil, errors.Wrap(err, "create deno dir")
 	}
@@ -110,8 +123,8 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 
 	listenPort := util.FindFreePort(8000)
 
-	// Run "docker run -i" as child process
-	inst.cmd = exec.Command(denoBinPath(config), "run", "--allow-net", "--allow-env", fmt.Sprintf("%s/%s_server.ts", denoDir, runMode), fmt.Sprintf("%d", listenPort))
+	// Run deno as child process with only network and environment variable access
+	inst.cmd = exec.Command(denoBinPath(config), "run", "--allow-net", "--allow-env", fmt.Sprintf("%s/%s_server.ts", denoDir, runModeString), fmt.Sprintf("%d", listenPort))
 	inst.cmd.Env = append(inst.cmd.Env,
 		"NO_COLOR=1",
 		fmt.Sprintf("DENO_DIR=%s/.deno/cache", config.DataDir),
@@ -127,7 +140,7 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 		return nil, errors.Wrap(err, "stderr pipe")
 	}
 
-	// Kick off the command
+	// Kick off the command in the background
 	if err := inst.cmd.Start(); err != nil {
 		return nil, errors.Wrap(err, "deno run")
 	}
@@ -135,13 +148,10 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 	// Listen to the stderr and log pipes and ship everything to logChannel
 	bufferedStdout := bufio.NewReader(stdoutPipe)
 	bufferedStderr := bufio.NewReader(stderrPipe)
-	//if _, err := bufferedStdout.Peek(1); err != nil {
-	//	log.Error("Could not peek stdout data", err)
-	//}
 
 	// Send stdout and stderr to the log channel
-	go inst.pipeStream(bufferedStdout, eventBus)
-	go inst.pipeStream(bufferedStderr, eventBus)
+	go pipeLogStreamToEventBus(name, bufferedStdout, eventBus)
+	go pipeLogStreamToEventBus(name, bufferedStderr, eventBus)
 
 	inst.serverURL = fmt.Sprintf("http://localhost:%d", listenPort)
 
@@ -181,24 +191,6 @@ func (inst *denoFunctionInstance) Kill() error {
 	}
 
 	return nil
-}
-
-func (inst *denoFunctionInstance) pipeStream(bufferedReader *bufio.Reader, eventBus eventbus.EventBus) {
-readLoop:
-	for {
-		line, err := bufferedReader.ReadString('\n')
-		if err == io.EOF {
-			break readLoop
-		}
-		if err != nil {
-			log.Error("log read error", err)
-			break readLoop
-		}
-		eventBus.Publish(fmt.Sprintf("logs:%s", inst.name), LogEntry{
-			Instance: inst,
-			Message:  line,
-		})
-	}
 }
 
 func (inst *denoFunctionInstance) Invoke(ctx context.Context, event interface{}) (interface{}, error) {
@@ -246,8 +238,6 @@ func (inst *denoFunctionInstance) Invoke(ctx context.Context, event interface{})
 
 type denoJobInstance struct {
 	denoFunctionInstance
-	timeStarted time.Time
-	name        string
 }
 
 var _ JobInstance = &denoJobInstance{}
@@ -256,30 +246,27 @@ func (inst *denoJobInstance) Name() string {
 	return inst.name
 }
 
-func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, eventBus eventbus.EventBus, functionConfig definition.FunctionConfig, code string) (*denoJobInstance, error) {
-	inst := &denoJobInstance{
-		name: name,
-	}
+func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, eventBus eventbus.EventBus, functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
+	inst := &denoJobInstance{}
 
-	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, apiToken, "job", name, eventBus, functionConfig, code)
+	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, apiToken, RunModeJob, name, eventBus, functionConfig, code)
 	if err != nil {
 		return nil, err
 	}
 
-	inst.denoFunctionInstance = *functionInstance
+	inst.denoFunctionInstance = *(functionInstance.(*denoFunctionInstance))
 
 	return inst, nil
 }
 
-func (inst *denoJobInstance) Start(ctx context.Context) error {
-	inst.timeStarted = time.Now()
-
-	httpClient := http.DefaultClient
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/start", inst.serverURL), nil)
+func (inst *denoJobInstance) Start() error {
+	startCtx, cancel := context.WithTimeout(context.Background(), inst.config.SandboxJobStartTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(startCtx, http.MethodGet, fmt.Sprintf("%s/start", inst.serverURL), nil)
 	if err != nil {
 		return errors.Wrap(err, "invoke call")
 	}
-	resp, err := httpClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
 	}
@@ -292,6 +279,17 @@ func (inst *denoJobInstance) Start(ctx context.Context) error {
 	return nil
 }
 
-func (inst *denoJobInstance) Stop() {
-	http.Get(fmt.Sprintf("%s/stop", inst.serverURL))
+func (inst *denoJobInstance) Stop() error {
+	startCtx, cancel := context.WithTimeout(context.Background(), inst.config.SandboxJobStopTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(startCtx, http.MethodGet, fmt.Sprintf("%s/stop", inst.serverURL), nil)
+	if err != nil {
+		return errors.Wrap(err, "stop call")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
+	}
+	defer resp.Body.Close()
+	return inst.Kill()
 }

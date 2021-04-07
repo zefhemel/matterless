@@ -7,7 +7,7 @@ import (
 )
 
 func TestInterpolate(t *testing.T) {
-	log.Info(interPolateStoreValues(store.MockStore{}, "Hello there ${config.bla}", func(s string) {
+	log.Info(interpolateStoreValues(store.MockStore{}, "Hello there ${config.bla}", func(s string) {
 
 	}))
 }

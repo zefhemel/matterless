@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
@@ -12,8 +13,29 @@ import (
 )
 
 type LogEntry struct {
-	Instance FunctionInstance
-	Message  string
+	FunctionName string
+	Message      string
+}
+
+type RunMode int
+
+const (
+	RunModeFunction RunMode = iota
+	RunModeJob      RunMode = iota
+)
+
+type RuntimeFunctionInstantiator func(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode RunMode, name string, eventBus eventbus.EventBus, functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error)
+
+var runtimeFunctionInstantiators = map[string]RuntimeFunctionInstantiator{
+	"deno": newDenoFunctionInstance,
+	"node": newDockerFunctionInstance,
+}
+
+type RuntimeJobInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, eventBus eventbus.EventBus, functionConfig *definition.FunctionConfig, code string) (JobInstance, error)
+
+var runtimeJobInstantiators = map[string]RuntimeJobInstantiator{
+	"deno": newDenoJobInstance,
+	"node": newDockerJobInstance,
 }
 
 const DefaultRuntime = "deno"
@@ -27,116 +49,109 @@ type FunctionInstance interface {
 
 type JobInstance interface {
 	Name() string
-	Start(ctx context.Context) error
-	Stop()
-	Kill() error
+	Start() error
+	Stop() error
 }
 
 type Sandbox struct {
-	runningFunctions map[string]FunctionInstance
-	runningJobs      map[string]JobInstance // key: job name
-	cleanupInterval  time.Duration
-	keepAlive        time.Duration
-	ticker           *time.Ticker
-	stop             chan struct{}
-	bootLock         sync.Mutex
-	eventBus         eventbus.EventBus
-	config           *config.Config
-	apiURL           string
-	apiToken         string
+	config                  *config.Config
+	runningFunctions        map[string]FunctionInstance
+	runningJobs             map[string]JobInstance
+	ticker                  *time.Ticker
+	done                    chan struct{}
+	internalStateUpdateLock sync.RWMutex
+	eventBus                eventbus.EventBus
+	apiURL                  string
+	apiToken                string
 }
 
 // NewSandbox creates a new dockerFunctionInstance of the sandbox
 // Note: It is essential to listen to the .Logs() event channel (probably in a for loop in go routine) as soon as possible
 // after instantiation.
-func NewSandbox(config *config.Config, apiURL string, apiToken string, eventBus eventbus.EventBus, cleanupInterval time.Duration, keepAlive time.Duration) (*Sandbox, error) {
+func NewSandbox(config *config.Config, apiURL string, apiToken string, eventBus eventbus.EventBus) (*Sandbox, error) {
 	sb := &Sandbox{
-		cleanupInterval:  cleanupInterval,
-		keepAlive:        keepAlive,
+		config:           config,
 		runningFunctions: map[string]FunctionInstance{},
 		runningJobs:      map[string]JobInstance{},
 		eventBus:         eventBus,
-		stop:             make(chan struct{}),
+		done:             make(chan struct{}),
 		apiURL:           apiURL,
 		apiToken:         apiToken,
-		config:           config,
 	}
-	if cleanupInterval != 0 {
-		sb.ticker = time.NewTicker(cleanupInterval)
+	if config.SandboxCleanupInterval != 0 {
+		sb.ticker = time.NewTicker(config.SandboxCleanupInterval)
 		go sb.cleanupJob()
 	}
-	// TODO: Reenable auto download
-	//if err := ensureDeno(config); err != nil {
-	//	return nil, errors.Wrap(err, "ensure deno")
-	//}
+	if !config.UseSystemDeno {
+		if err := ensureDeno(config); err != nil {
+			return nil, errors.Wrap(err, "ensure deno")
+		}
+	}
 	return sb, nil
 }
 
 // Function looks up a running function dockerFunctionInstance, or boots up an instance if it doesn't have one yet
 // It also performs initialization (cals the init()) function, errors out when no running server runs in time
-func (s *Sandbox) Function(ctx context.Context, name string, functionConfig definition.FunctionConfig, code string) (FunctionInstance, error) {
-	// Only one function can be booted at once for now
-	// TODO: Remove this restriction
-	s.bootLock.Lock()
-	defer s.bootLock.Unlock()
-
+func (s *Sandbox) Function(ctx context.Context, name string, functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
 	var (
 		inst FunctionInstance
 		err  error
 		ok   bool
 	)
+	s.internalStateUpdateLock.RLock()
 	inst, ok = s.runningFunctions[name]
+	s.internalStateUpdateLock.RUnlock()
+
 	if !ok {
 		if functionConfig.Runtime == "" {
 			functionConfig.Runtime = DefaultRuntime
 		}
-		switch functionConfig.Runtime {
-		case "node":
-			inst, err = newDockerFunctionInstance(ctx, s.config, s.apiURL, s.apiToken, "node-function", name, s.eventBus, functionConfig, code)
-		case "deno":
-			inst, err = newDenoFunctionInstance(ctx, s.config, s.apiURL, s.apiToken, "function", name, s.eventBus, functionConfig, code)
+
+		builder, ok := runtimeFunctionInstantiators[functionConfig.Runtime]
+		if !ok {
+			return nil, fmt.Errorf("Unsupported runtime: %s", functionConfig.Runtime)
 		}
-		if inst == nil {
-			return nil, errors.New("invalid runtime")
-		}
+
+		inst, err = builder(ctx, s.config, s.apiURL, s.apiToken, RunModeFunction, name, s.eventBus, functionConfig, code)
+
 		if err != nil {
 			return nil, err
 		}
+		s.internalStateUpdateLock.Lock()
 		s.runningFunctions[name] = inst
+		s.internalStateUpdateLock.Unlock()
 	}
 	return inst, nil
 }
 
-func (s *Sandbox) Job(ctx context.Context, name string, functionConfig definition.FunctionConfig, code string) (JobInstance, error) {
-	// Only one function can be booted at once for now
-	// TODO: Remove this restriction
-	s.bootLock.Lock()
-	defer s.bootLock.Unlock()
-
+func (s *Sandbox) Job(ctx context.Context, name string, functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
 	var (
 		inst JobInstance
 		err  error
 		ok   bool
 	)
 
+	s.internalStateUpdateLock.RLock()
 	inst, ok = s.runningJobs[name]
+	s.internalStateUpdateLock.RUnlock()
 	if !ok {
 		if functionConfig.Runtime == "" {
 			functionConfig.Runtime = DefaultRuntime
 		}
-		switch functionConfig.Runtime {
-		case "node":
-			inst, err = newDockerJobInstance(ctx, s.config, s.apiURL, s.apiToken, name, s.eventBus, functionConfig, code)
-		case "deno":
-			inst, err = newDenoJobInstance(ctx, s.config, s.apiURL, s.apiToken, name, s.eventBus, functionConfig, code)
+
+		builder, ok := runtimeJobInstantiators[functionConfig.Runtime]
+		if !ok {
+			return nil, fmt.Errorf("Unsupported runtime: %s", functionConfig.Runtime)
 		}
-		if inst == nil {
-			return nil, errors.New("invalid runtime")
-		}
+
+		inst, err = builder(ctx, s.config, s.apiURL, s.apiToken, name, s.eventBus, functionConfig, code)
 		if err != nil {
 			return nil, err
 		}
+
+		s.internalStateUpdateLock.Lock()
 		s.runningJobs[name] = inst
+		s.internalStateUpdateLock.Unlock()
 	}
 	return inst, nil
 }
@@ -148,12 +163,11 @@ func (s *Sandbox) cleanup() {
 	}
 	log.Debugf("Cleaning up %d running functions...", len(s.runningFunctions))
 	for id, inst := range s.runningFunctions {
-		if inst.LastInvoked().Add(s.keepAlive).Before(now) {
-			log.Debugf("Killing dockerFunctionInstance '%s'.", inst.Name())
+		if inst.LastInvoked().Add(s.config.SandboxFunctionKeepAlive).Before(now) {
+			log.Debugf("Killing function '%s'.", inst.Name())
 			if err := inst.Kill(); err != nil {
-				log.Error("Error killing dockerFunctionInstance", err)
+				log.Errorf("Error killing function instance: %s", err)
 			}
-			// Is it ok to delete entries from a map while iterating over it?
 			delete(s.runningFunctions, id)
 		}
 	}
@@ -163,7 +177,7 @@ func (s *Sandbox) Close() {
 	// Close the cleanup ticker
 	if s.ticker != nil {
 		s.ticker.Stop()
-		s.stop <- struct{}{}
+		close(s.done)
 	}
 	s.Flush()
 }
@@ -171,7 +185,7 @@ func (s *Sandbox) Close() {
 func (s *Sandbox) cleanupJob() {
 	for {
 		select {
-		case <-s.stop:
+		case <-s.done:
 			return
 		case <-s.ticker.C:
 			s.cleanup()
@@ -180,19 +194,20 @@ func (s *Sandbox) cleanupJob() {
 }
 
 func (s *Sandbox) Flush() {
-	// Close all running instances
+	// Kill all running function instances
 	log.Infof("Stopping %d running functions...", len(s.runningFunctions))
 	for _, inst := range s.runningFunctions {
 		if err := inst.Kill(); err != nil {
-			log.Error("Error killing dockerFunctionInstance", err)
+			log.Errorf("Error killing function instance %s: %s", inst.Name(), err)
 		}
 	}
 	s.runningFunctions = map[string]FunctionInstance{}
-	// Close all running jobs
+
+	// Stop all running jobs
 	log.Infof("Stopping %d running jobs...", len(s.runningJobs))
 	for _, inst := range s.runningJobs {
-		if err := inst.Kill(); err != nil {
-			log.Error("Error killing dockerJobInstance", err)
+		if err := inst.Stop(); err != nil {
+			log.Errorf("Error stopping job %s: %s", inst.Name(), err)
 		}
 	}
 	s.runningJobs = map[string]JobInstance{}

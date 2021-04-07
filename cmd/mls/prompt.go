@@ -20,6 +20,8 @@ func completer(in prompt.Document) []prompt.Suggest {
 		{Text: "del", Description: "[key] — delete a value from the store"},
 		{Text: "query-prefix", Description: "[key-prefix] — query keys from the store"},
 		{Text: "restart", Description: "restart application"},
+		{Text: "trigger", Description: "[eventName] [evenData] — trigger an event"},
+		{Text: "invoke", Description: "[functionName] [evenData] — invoke a function"},
 		{Text: "exit", Description: "Exit"},
 	}
 	w := in.GetWordBeforeCursor()
@@ -53,7 +55,7 @@ func executor(cmd string) {
 			fmt.Println("You should specify an app name")
 			return
 		}
-		if _, err := promptContext.client.Get(blocks[1]); err != nil {
+		if _, err := promptContext.client.GetAppCode(blocks[1]); err != nil {
 			fmt.Println("App does not exist")
 			return
 		}
@@ -127,10 +129,44 @@ func executor(cmd string) {
 			fmt.Println("Please select an app first with 'use appname'")
 			return
 		}
-		if err := promptContext.client.Restart(promptContext.appName); err != nil {
+		if err := promptContext.client.RestartApp(promptContext.appName); err != nil {
 			fmt.Printf("Failed to restart: %s\n", err)
 		} else {
 			fmt.Println("Done.")
+		}
+	case "trigger":
+		if promptContext.appName == "" {
+			fmt.Println("Please select an app first with 'use appname'")
+			return
+		}
+		eventName := blocks[1]
+		valJson := strings.Join(blocks[2:], " ")
+		var obj interface{}
+		if err := json.Unmarshal([]byte(valJson), &obj); err != nil {
+			fmt.Printf("Could not parse value as JSON (%s): %s\n", err, valJson)
+			return
+		}
+		if err := promptContext.client.TriggerEvent(promptContext.appName, eventName, obj); err != nil {
+			fmt.Printf("Failed to trigger event: %s\n", err)
+		} else {
+			fmt.Println("Done.")
+		}
+	case "invoke":
+		if promptContext.appName == "" {
+			fmt.Println("Please select an app first with 'use appname'")
+			return
+		}
+		functionName := blocks[1]
+		valJson := strings.Join(blocks[2:], " ")
+		var obj interface{}
+		if err := json.Unmarshal([]byte(valJson), &obj); err != nil {
+			fmt.Printf("Could not parse value as JSON (%s): %s\n", err, valJson)
+			return
+		}
+		if result, err := promptContext.client.InvokeFunction(promptContext.appName, functionName, obj); err != nil {
+			fmt.Printf("Failed to invoke function: %s\n", err)
+		} else {
+			fmt.Println(util.MustJsonString(result))
 		}
 	}
 }
@@ -150,7 +186,7 @@ func livePrefix() (string, bool) {
 	return promptContext.appName + "> ", true
 }
 
-func runPrompt(client *client.MatterlessClient) {
+func runConsole(client *client.MatterlessClient) {
 	promptContext.client = client
 	allApps, err := client.ListApps()
 	if err != nil {

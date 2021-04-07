@@ -43,10 +43,7 @@ var runnerTypes = map[string]runnerConfig{
 	},
 }
 
-func wrapScript(runnerConfig runnerConfig, configMap map[string]interface{}, code string) string {
-	if configMap == nil {
-		configMap = map[string]interface{}{}
-	}
+func wrapScript(runnerConfig runnerConfig, configMap interface{}, code string) string {
 	data := struct {
 		Code       string
 		ConfigJSON string
@@ -186,7 +183,7 @@ func main() {
 		os.Exit(0)
 	})
 
-	log.Info("Function runtime booted.")
+	log.Info("Function runtime booted as ", os.Args[1])
 	log.Fatal(http.ListenAndServe(":8081", nil))
 
 }

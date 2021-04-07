@@ -6,6 +6,7 @@ import (
 	"expvar"
 	"fmt"
 	"github.com/gorilla/mux"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
@@ -13,6 +14,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/util"
 	"net/http"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -25,8 +27,8 @@ type APIGateway struct {
 	rootRouter *mux.Router
 	wg         *sync.WaitGroup
 
-	functionInvokeFunc FunctionInvokeFunc
-	container          *Container
+	container *Container
+	config    *config.Config
 }
 
 func init() {
@@ -35,7 +37,7 @@ func init() {
 	}))
 }
 
-func NewAPIGateway(config *config.Config, container *Container, functionInvokeFunc FunctionInvokeFunc) *APIGateway {
+func NewAPIGateway(config *config.Config, container *Container) *APIGateway {
 	r := mux.NewRouter()
 
 	srv := &http.Server{
@@ -46,12 +48,12 @@ func NewAPIGateway(config *config.Config, container *Container, functionInvokeFu
 	}
 
 	ag := &APIGateway{
-		bindPort:           config.APIBindPort,
-		container:          container,
-		server:             srv,
-		rootRouter:         r,
-		wg:                 &sync.WaitGroup{},
-		functionInvokeFunc: functionInvokeFunc,
+		bindPort:   config.APIBindPort,
+		container:  container,
+		server:     srv,
+		config:     config,
+		rootRouter: r,
+		wg:         &sync.WaitGroup{},
 	}
 
 	ag.buildRouter(config)
@@ -88,13 +90,20 @@ func (ag *APIGateway) Stop() {
 	ag.wg.Wait()
 }
 
+type APIGatewayResponse struct {
+	Headers map[string]string `json:"headers"`
+	Status  int
+	Body    interface{}
+}
+
 func (ag *APIGateway) buildRouter(config *config.Config) {
 	ag.rootRouter.Handle("/info", expvar.Handler())
 
 	// Expose internal API routes
-	ag.exposeAdminAPI(config)
+	ag.exposeAdminAPI()
 	ag.exposeStoreAPI()
 	ag.exposeEventAPI()
+	ag.exposeFunctionAPI()
 
 	// Handle custom API endpoints
 	ag.rootRouter.HandleFunc("/{appName}/{path:.*}", func(writer http.ResponseWriter, request *http.Request) {
@@ -106,7 +115,7 @@ func (ag *APIGateway) buildRouter(config *config.Config) {
 		vars := mux.Vars(request)
 		appName := vars["appName"]
 		path := vars["path"]
-		evt, err := ag.buildEvent(path, request)
+		evt, err := ag.buildHTTPEvent(path, request)
 		if err != nil {
 			reportHTTPError(err)
 			return
@@ -116,61 +125,49 @@ func (ag *APIGateway) buildRouter(config *config.Config) {
 			http.NotFound(writer, request)
 			return
 		}
-		// TODO: Remove hardcoded timeout
-		response, err := app.EventBus().Request(fmt.Sprintf("http:%s:/%s", request.Method, path), evt, 10*time.Second)
+
+		// Perform Request via eventbus
+		response, err := app.EventBus().Request(fmt.Sprintf("http:%s:/%s", request.Method, path), evt, app.config.HTTPGatewayResponseTimeout)
 		if err != nil {
 			reportHTTPError(err)
 			return
 		}
 
-		if apiResponse, ok := response.(map[string]interface{}); ok {
-			if headers, ok := apiResponse["headers"]; ok {
-				if headerMap, ok := headers.(map[string]interface{}); ok {
-					for name, value := range headerMap {
-						if strVal, ok := value.(string); ok {
-							writer.Header().Set(name, strVal)
-						} else {
-							reportHTTPError(fmt.Errorf("Header '%s' is not a string", name))
-							return
-						}
-					}
-				} else {
-					reportHTTPError(errors.New("'headers' is not an object"))
-					return
-				}
-			}
-			responseStatus := http.StatusOK
-			if val, ok := apiResponse["status"]; ok {
-				if numberVal, ok := val.(float64); ok {
-					responseStatus = int(numberVal)
-				} else {
-					reportHTTPError(errors.New("'status' is not a number"))
-					return
-				}
-			}
-			if bodyVal, ok := apiResponse["body"]; ok {
-				switch body := bodyVal.(type) {
-				case string:
-					writer.WriteHeader(responseStatus)
-					writer.Write([]byte(body))
-				default:
-					writer.Header().Set("content-type", "application/json")
-					writer.WriteHeader(responseStatus)
-					writer.Write([]byte(util.MustJsonString(body)))
-				}
-			} else {
-				reportHTTPError(errors.New("No 'body' specified"))
-				return
-			}
-		} else {
+		// Decode response and send back
+		var apiGResponse APIGatewayResponse
+
+		// Decode map structure into struct
+		if err := mapstructure.Decode(response, &apiGResponse); err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(writer, "Error: Did not get back an object")
+			fmt.Fprintf(writer, "Error: Did not get back an properly structured object")
 			return
+		}
+
+		// Headers
+		for name, value := range apiGResponse.Headers {
+			writer.Header().Set(name, value)
+		}
+
+		// Status code
+		responseStatus := http.StatusOK
+		if apiGResponse.Status != 0 {
+			responseStatus = apiGResponse.Status
+		}
+
+		// Body
+		switch body := apiGResponse.Body.(type) {
+		case string:
+			writer.WriteHeader(responseStatus)
+			writer.Write([]byte(body))
+		default:
+			writer.Header().Set("content-type", "application/json")
+			writer.WriteHeader(responseStatus)
+			writer.Write([]byte(util.MustJsonString(body)))
 		}
 	})
 }
 
-func (ag *APIGateway) buildEvent(path string, request *http.Request) (map[string]interface{}, error) {
+func (ag *APIGateway) buildHTTPEvent(path string, request *http.Request) (map[string]interface{}, error) {
 	evt := map[string]interface{}{
 		"path":           fmt.Sprintf("/%s", path),
 		"method":         request.Method,
@@ -191,4 +188,52 @@ func (ag *APIGateway) buildEvent(path string, request *http.Request) (map[string
 		evt["json_Body"] = jsonBody
 	}
 	return evt, nil
+}
+
+func (ag *APIGateway) authAdmin(w http.ResponseWriter, r *http.Request) bool {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, "ROOT: No authorization provided")
+		return false
+	}
+	authHeaderParts := strings.Split(authHeader, " ")
+	if len(authHeaderParts) != 2 || len(authHeaderParts) == 2 && authHeaderParts[0] != "bearer" {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "ROOT2: No authorization provided: %+v", authHeaderParts)
+		return false
+	}
+	token := authHeaderParts[1]
+	if token != ag.config.AdminToken {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, "Wrong token")
+		return false
+	}
+	return true
+}
+
+func (ag *APIGateway) authApp(w http.ResponseWriter, r *http.Request, app *Application) bool {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, "No authorization provided")
+		log.Infof("Error authenticating with event API")
+		return false
+	}
+	authHeaderParts := strings.Split(authHeader, " ")
+	if len(authHeaderParts) != 2 || len(authHeaderParts) == 2 && authHeaderParts[0] != "bearer" {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, "No authorization provided")
+		log.Infof("Error authenticating with event API")
+		return false
+	}
+	token := authHeaderParts[1]
+
+	if token != app.apiToken && token != ag.container.config.AdminToken {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, "Wrong token")
+		return false
+	}
+
+	return true
 }

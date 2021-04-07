@@ -13,76 +13,100 @@ import (
 	"time"
 )
 
-func main() {
-	log.SetLevel(log.DebugLevel)
-
-	runWatch := false
-	runConfig := config.FromEnv()
-	var cmdRun = &cobra.Command{
+func runCommand() *cobra.Command {
+	watch := false
+	cfg := config.NewConfig()
+	var cmd = &cobra.Command{
 		Use:   "run [file1.md] ...",
-		Short: "Run Matterless and run listed apps",
+		Short: "Run matterless in ad-hoc mode for specified markdown definition files",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			runConfig.PersistApps = false
-			container := runServer(runConfig)
-			log.Info("Init", container.Config())
-			apiURL := fmt.Sprintf("http://localhost:%d", runConfig.APIBindPort)
-			mlsClient := client.NewMatterlessClient(apiURL, container.Config().AdminToken)
-			mlsClient.Deploy(args, runWatch)
-			runPrompt(mlsClient)
-			container.Close()
+			// Don't save application files
+			cfg.PersistApps = false
+
+			container := runServer(cfg)
+			defer container.Close()
+
+			apiURL := fmt.Sprintf("http://localhost:%d", cfg.APIBindPort)
+			mlsClient := client.NewMatterlessClient(apiURL, cfg.AdminToken)
+			if err := mlsClient.DeployAppFiles(args, watch); err != nil {
+				fmt.Printf("Failed to deploy: %s\n", err)
+				return
+			}
+
+			runConsole(mlsClient)
 		},
 	}
-	cmdRun.Flags().BoolVarP(&runWatch, "watch", "w", false, "watch apps for changes and reload")
-	cmdRun.Flags().IntVarP(&runConfig.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
-	cmdRun.Flags().StringVarP(&runConfig.AdminToken, "token", "t", "", "Admin API token")
-	cmdRun.Flags().StringVar(&runConfig.DataDir, "data", "./mls-data", "Path to keep Matterless state")
+	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "watch apps for changes and reload")
+	cmd.Flags().IntVarP(&cfg.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
+	cmd.Flags().StringVarP(&cfg.AdminToken, "token", "t", "", "Admin API token")
+	cmd.Flags().StringVar(&cfg.DataDir, "data", "./mls-data", "Path to keep Matterless state")
 
+	return cmd
+}
+
+func deployCommand() *cobra.Command {
 	var (
-		deployWatch bool
-		deployURL   string
-		deployToken string
+		watch      bool
+		url        string
+		adminToken string
 	)
 	var cmdDeploy = &cobra.Command{
 		Use:   "deploy [file1.md] ..",
-		Short: "Deploy applications to a server",
+		Short: "DeployApp apps to a matterless server",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			if deployURL == "" {
+			if url == "" {
 				fmt.Println("Did not provide Matterless URL to connect to via --url")
 				os.Exit(1)
 			}
-			if deployToken == "" {
+			if adminToken == "" {
 				fmt.Println("Did not provide Matterless admin token via --token")
 				os.Exit(1)
 			}
-			mlsClient := client.NewMatterlessClient(deployURL, deployToken)
-			mlsClient.Deploy(args, deployWatch)
+
+			mlsClient := client.NewMatterlessClient(url, adminToken)
+			if err := mlsClient.DeployAppFiles(args, watch); err != nil {
+				fmt.Printf("Failed to deploy: %s\n", err)
+				return
+			}
+
+			runConsole(mlsClient)
 		},
 	}
 
-	cmdDeploy.Flags().BoolVarP(&deployWatch, "watch", "w", false, "watch apps for changes and redeploy")
-	cmdDeploy.Flags().StringVar(&deployURL, "url", "", "URL or Matterless server to deploy to")
-	cmdDeploy.Flags().StringVarP(&deployToken, "token", "t", "", "Root token for Matterless server")
+	cmdDeploy.Flags().BoolVarP(&watch, "watch", "w", false, "watch apps for changes and redeploy")
+	cmdDeploy.Flags().StringVar(&url, "url", "", "URL or Matterless server to deploy to")
+	cmdDeploy.Flags().StringVarP(&adminToken, "token", "t", "", "Root token for Matterless server")
 
-	serverConfig := config.FromEnv()
+	return cmdDeploy
+}
 
-	var rootCmd = &cobra.Command{
+func rootCommand() *cobra.Command {
+	cfg := config.NewConfig()
+
+	var cmd = &cobra.Command{
 		Use:   "mls",
-		Short: "Matterless is friction-free serverless",
+		Short: "Run Matterless server",
 		Run: func(cmd *cobra.Command, args []string) {
-			serverConfig.PersistApps = true
-			runServer(serverConfig)
+			cfg.PersistApps = true
+			runServer(cfg)
 			busyLoop()
 		},
 	}
-	rootCmd.Flags().IntVarP(&serverConfig.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
-	rootCmd.Flags().StringVarP(&serverConfig.AdminToken, "token", "t", "", "Root API token")
-	rootCmd.Flags().StringVar(&serverConfig.DataDir, "data", "./mls-data", "location to keep Matterless state")
+	cmd.Flags().IntVarP(&cfg.APIBindPort, "port", "p", 8222, "Port to listen to")
+	cmd.Flags().StringVarP(&cfg.AdminToken, "token", "t", "", "Admin API token")
+	cmd.Flags().StringVar(&cfg.DataDir, "data", "./mls-data", "location to keep Matterless state")
 
-	rootCmd.AddCommand(cmdRun, cmdDeploy)
-	rootCmd.Execute()
+	return cmd
+}
 
+func main() {
+	log.SetLevel(log.DebugLevel)
+
+	cmd := rootCommand()
+	cmd.AddCommand(runCommand(), deployCommand())
+	cmd.Execute()
 }
 
 func runServer(cfg *config.Config) *application.Container {
@@ -90,18 +114,18 @@ func runServer(cfg *config.Config) *application.Container {
 	if err != nil {
 		log.Fatal("Could not start app container", err)
 	}
+
+	// Subscribe to all logs and write to stdout
 	appContainer.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		if le, ok := eventData.(application.LogEntry); ok {
-			if le.LogEntry.Instance == nil {
-				return
-			}
 
-			log.Infof("[App: %s | Function: %s] %s", le.AppName, le.LogEntry.Instance.Name(), le.LogEntry.Message)
+			log.Infof("[App: %s | Function: %s] %s", le.AppName, le.LogEntry.FunctionName, le.LogEntry.Message)
 		} else {
 			log.Error("Received log event that's not an application.LogEntry ", eventData)
 		}
 	})
 
+	// Load previously deployed apps from disk
 	if cfg.PersistApps {
 		if err := appContainer.LoadAppsFromDisk(); err != nil {
 			log.Errorf("Could not load apps from disk: %s", err)

@@ -11,9 +11,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/store"
 	"github.com/zefhemel/matterless/pkg/util"
-	"gopkg.in/yaml.v3"
 	"os"
-	"time"
 )
 
 type Application struct {
@@ -23,15 +21,15 @@ type Application struct {
 	code        string
 
 	// Runtime
+	config             *config.Config
 	sandbox            *sandbox.Sandbox
 	eventBus           eventbus.EventBus
 	eventSubscriptions []eventSubscription
+	appDataPath        string
 
 	// API
-	apiToken    string
-	dataStore   store.Store
-	config      *config.Config
-	appDataPath string
+	apiToken  string
+	dataStore store.Store
 }
 
 type eventSubscription struct {
@@ -52,7 +50,7 @@ func NewApplication(cfg *config.Config, appName string) (*Application, error) {
 
 	apiToken := util.TokenGenerator()
 
-	sb, err := sandbox.NewSandbox(cfg, fmt.Sprintf("http://%s:%d/%s", "%s", cfg.APIBindPort, appName), apiToken, eventBus, 1*time.Minute, 5*time.Minute)
+	sb, err := sandbox.NewSandbox(cfg, fmt.Sprintf("http://%s:%d/%s", "%s", cfg.APIBindPort, appName), apiToken, eventBus)
 	if err != nil {
 		return nil, errors.Wrap(err, "sandbox init")
 	}
@@ -63,8 +61,7 @@ func NewApplication(cfg *config.Config, appName string) (*Application, error) {
 		eventBus:    eventBus,
 		dataStore:   dataStore,
 		apiToken:    apiToken,
-		// TODO: Make this configurable
-		sandbox: sb,
+		sandbox:     sb,
 	}
 
 	return app, nil
@@ -87,7 +84,7 @@ func (app *Application) LoadFromDisk() error {
 
 // Only for testing
 func NewMockApplication(config *config.Config, appName string) *Application {
-	sb, err := sandbox.NewSandbox(config, fmt.Sprintf("http://localhost/%s", appName), "1234", eventbus.NewLocalEventBus(), 1*time.Minute, 5*time.Minute)
+	sb, err := sandbox.NewSandbox(config, fmt.Sprintf("http://localhost/%s", appName), "1234", eventbus.NewLocalEventBus())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -98,35 +95,26 @@ func NewMockApplication(config *config.Config, appName string) *Application {
 		dataStore:          &store.MockStore{},
 		eventBus:           eventbus.NewLocalEventBus(),
 		eventSubscriptions: []eventSubscription{},
+		config:             config,
 	}
 }
 
-func (app *Application) InvokeFunction(name definition.FunctionID, event interface{}) interface{} {
+func (app *Application) InvokeFunction(name definition.FunctionID, event interface{}) (interface{}, error) {
 	functionDef := app.definitions.Functions[name]
-	log.Debug("Now triggering event to ", name)
-	// TODO: Remove hardcoded values
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	log.Debug("Now invoking function ", name)
+
+	ctx, cancel := context.WithTimeout(context.Background(), app.config.FunctionRunTimeout)
 	defer cancel()
+
 	functionInstance, err := app.sandbox.Function(ctx, string(name), functionDef.Config, functionDef.Code)
 	if err != nil {
-		app.EventBus().Publish(fmt.Sprintf("logs:%s", name), sandbox.LogEntry{
-			Instance: functionInstance,
-			Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
-		})
-		return nil
+		return nil, errors.Wrap(err, "function init")
 	}
 	result, err := functionInstance.Invoke(ctx, event)
 	if err != nil {
-		app.EventBus().Publish(fmt.Sprintf("logs:%s", name), sandbox.LogEntry{
-			Instance: functionInstance,
-			Message:  fmt.Sprintf("[%s Error] %s", name, err.Error()),
-		})
+		return nil, errors.Wrap(err, "function invoke")
 	}
-	return result
-}
-
-func (app *Application) CurrentCode() string {
-	return app.code
+	return result, nil
 }
 
 func (app *Application) Eval(code string) error {
@@ -140,12 +128,14 @@ func (app *Application) Eval(code string) error {
 	if err := defs.InlineImports(fmt.Sprintf("%s/%s/.importcache", app.config.DataDir, app.appName)); err != nil {
 		return err
 	}
-	if err := defs.Desugar(); err != nil {
+	if err := defs.ExpandMacros(); err != nil {
 		return err
 	}
 
 	app.definitions = defs
-	app.InterpolateStoreValues()
+	app.interpolateStoreValues()
+
+	//fmt.Println(defs.Markdown())
 
 	app.reset()
 
@@ -156,7 +146,13 @@ func (app *Application) Eval(code string) error {
 			eventPattern: eventName,
 			subscriptionFunc: func(eventName string, eventData interface{}) {
 				for _, funcToInvoke := range funcsToInvoke {
-					app.InvokeFunction(funcToInvoke, eventData)
+					_, err := app.InvokeFunction(funcToInvoke, eventData)
+					if err != nil {
+						app.EventBus().Publish(fmt.Sprintf("logs:%s", funcToInvoke), sandbox.LogEntry{
+							FunctionName: string(funcToInvoke),
+							Message:      fmt.Sprintf("[%s Error] %s", funcToInvoke, err.Error()),
+						})
+					}
 				}
 			},
 		}
@@ -165,15 +161,15 @@ func (app *Application) Eval(code string) error {
 	}
 
 	log.Info("Starting jobs...")
-	timeOutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
 	for name, def := range defs.Jobs {
-		ji, err := app.sandbox.Job(timeOutCtx, string(name), def.Config, def.Code)
+		timeOutCtx, cancel := context.WithTimeout(context.Background(), app.config.JobInitTimeout)
+		job, err := app.sandbox.Job(timeOutCtx, string(name), def.Config, def.Code)
 		if err != nil {
+			cancel()
 			return errors.Wrap(err, "init job")
 		}
-		if err := ji.Start(timeOutCtx); err != nil {
-			return errors.Wrap(err, "init job")
+		if err := job.Start(); err != nil {
+			return errors.Wrap(err, "start job")
 		}
 	}
 
@@ -211,41 +207,4 @@ func (app *Application) Definitions() *definition.Definitions {
 
 func (app *Application) EventBus() eventbus.EventBus {
 	return app.eventBus
-}
-
-// Normalize replaces environment variables with their values
-func (app *Application) InterpolateStoreValues() {
-	defs := app.definitions
-
-	logCallback := func(message string) {
-		log.Errorf("[%s] %s", app.appName, message)
-	}
-
-	for _, def := range defs.Jobs {
-		for k, v := range def.Config.Init {
-			yamlBuf, _ := yaml.Marshal(v)
-
-			interPolatedYaml := interPolateStoreValues(app.dataStore, string(yamlBuf), logCallback)
-			var val interface{}
-			yaml.Unmarshal([]byte(interPolatedYaml), &val)
-			def.Config.Init[k] = val
-		}
-	}
-	for _, def := range defs.Functions {
-		for k, v := range def.Config.Init {
-			yamlBuf, _ := yaml.Marshal(v)
-			interPolatedYaml := interPolateStoreValues(app.dataStore, string(yamlBuf), logCallback)
-			var val interface{}
-			yaml.Unmarshal([]byte(interPolatedYaml), &val)
-			def.Config.Init[k] = val
-		}
-	}
-
-	for _, def := range defs.CustomDef {
-		yamlBuf, _ := yaml.Marshal(def.Input)
-		interPolatedYaml := interPolateStoreValues(app.dataStore, string(yamlBuf), logCallback)
-		var val interface{}
-		yaml.Unmarshal([]byte(interPolatedYaml), &val)
-		def.Input = val
-	}
 }

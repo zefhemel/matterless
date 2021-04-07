@@ -5,7 +5,6 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
-	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/util"
@@ -19,17 +18,17 @@ type LogEntry struct {
 }
 
 type Container struct {
+	config     *config.Config
 	eventBus   eventbus.EventBus
 	apps       map[string]*Application
 	apiGateway *APIGateway
-	config     *config.Config
 }
 
 func NewContainer(config *config.Config) (*Container, error) {
 	appMap := map[string]*Application{}
 	c := &Container{
-		apps:     appMap,
 		config:   config,
+		apps:     appMap,
 		eventBus: eventbus.NewLocalEventBus(),
 	}
 
@@ -38,6 +37,7 @@ func NewContainer(config *config.Config) (*Container, error) {
 	}
 
 	if config.AdminToken == "" {
+		// Generate a new token
 		tokenFilePath := fmt.Sprintf("%s/root.token", config.DataDir)
 		if buf, err := os.ReadFile(tokenFilePath); err != nil {
 			config.AdminToken = util.TokenGenerator()
@@ -49,9 +49,7 @@ func NewContainer(config *config.Config) (*Container, error) {
 		}
 	}
 
-	c.apiGateway = NewAPIGateway(config, c, func(appName string, name definition.FunctionID, event interface{}) interface{} {
-		return appMap[appName].InvokeFunction(name, event)
-	})
+	c.apiGateway = NewAPIGateway(config, c)
 	if err := c.apiGateway.Start(); err != nil {
 		return nil, err
 	}
@@ -65,7 +63,9 @@ func (c *Container) EventBus() eventbus.EventBus {
 
 func (c *Container) Close() {
 	for _, app := range c.apps {
-		app.Close()
+		if err := app.Close(); err != nil {
+			log.Errorf("Failed to cleanly shut down application %s: %s", app.appName, err)
+		}
 	}
 	c.apiGateway.Stop()
 }
@@ -76,10 +76,7 @@ func (c *Container) Register(name string, app *Application) {
 	// Listen to sandbox log events, republish on parent eventbus
 	app.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		if le, ok := eventData.(sandbox.LogEntry); ok {
-			if le.Instance == nil {
-				return
-			}
-			c.EventBus().Publish(fmt.Sprintf("logs:%s:%s", name, le.Instance.Name()), LogEntry{
+			c.EventBus().Publish(fmt.Sprintf("logs:%s:%s", name, le.FunctionName), LogEntry{
 				AppName:  name,
 				LogEntry: le,
 			})
@@ -93,9 +90,11 @@ func (c *Container) Get(name string) *Application {
 	return c.apps[name]
 }
 
-func (c *Container) UnRegister(name string) {
+func (c *Container) Deregister(name string) {
 	if app, ok := c.apps[name]; ok {
-		app.Close()
+		if err := app.Close(); err != nil {
+			log.Errorf("Failed to cleanly stop app %s: %s", name, err)
+		}
 		delete(c.apps, name)
 	}
 }
@@ -125,10 +124,6 @@ fileLoop:
 		}
 	}
 	return nil
-}
-
-func (c *Container) Config() *config.Config {
-	return c.config
 }
 
 func (c *Container) List() []string {

@@ -167,7 +167,7 @@ func (q *LocalQueue) Ack(id MessageID) error {
 		return errors.Wrap(err, "put inflight")
 	}
 
-	// Delete message from store
+	// DeleteApp message from store
 	if err := q.store.Delete(fmt.Sprintf("queue:%s:%s", q.name, id)); err != nil {
 		return errors.Wrap(err, "delete message")
 	}

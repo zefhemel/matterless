@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestNewHTTPServer(t *testing.T) {
 	cfg := &config.Config{
-		APIBindPort: 8123,
-		DataDir:     os.TempDir(),
+		APIBindPort:                8123,
+		DataDir:                    os.TempDir(),
+		HTTPGatewayResponseTimeout: 2 * time.Second,
+		FunctionRunTimeout:         10 * time.Second,
 	}
 	c, err := application.NewContainer(cfg)
 	assert.NoError(t, err)
@@ -41,6 +44,7 @@ func TestNewHTTPServer(t *testing.T) {
 	resp, err := http.Get("http://127.0.0.1:8123/test/ping")
 	assert.NoError(t, err)
 	buf, err := io.ReadAll(resp.Body)
+
 	assert.NoError(t, err)
 	assert.Equal(t, "pong", string(buf))
 	assert.Equal(t, "Test", resp.Header.Get("TestHeader"))

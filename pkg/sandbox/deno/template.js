@@ -2,10 +2,10 @@
 
 var _init, _start, _run, _stop, _handle;
 (function() {
-    var config = {{.ConfigJSON}};
+    var initData = {{.InitData}};
     // Initialization
     try {
-        _init = init.bind(null, config);
+        _init = init.bind(null, initData);
     } catch (e) {
         _init = () => {
         };

@@ -10,6 +10,8 @@ import (
 )
 
 type FunctionID string
+type MacroID string
+
 type FunctionInvokeFunc func(name FunctionID, event interface{}) interface{}
 
 //go:embed template/summary.template
@@ -19,35 +21,33 @@ var summaryTemplate string
 var rerenderTemplate string
 
 type Definitions struct {
-	Imports   []string
-	Functions map[FunctionID]*FunctionDef
-	Jobs      map[FunctionID]*JobDef
-	Events    map[string][]FunctionID
-	Macros    map[MacroID]*MacroDef
-	CustomDef map[string]*CustomDef
+	Imports        []string
+	Functions      map[FunctionID]*FunctionDef
+	Jobs           map[FunctionID]*JobDef
+	Events         map[string][]FunctionID
+	Macros         map[MacroID]*MacroDef
+	MacroInstances map[string]*MacroInstanceDef
 }
 
 type FunctionConfig struct {
-	Init        map[string]interface{} `yaml:"init"`
-	Runtime     string                 `yaml:"runtime"`
-	DockerImage string                 `yaml:"docker_image"`
+	Init        interface{} `yaml:"init"`
+	Runtime     string      `yaml:"runtime"`
+	DockerImage string      `yaml:"docker_image"`
 }
 
 type FunctionDef struct {
 	Name     string
-	Config   FunctionConfig
+	Config   *FunctionConfig
 	Language string
 	Code     string
 }
 
 type JobDef struct {
 	Name     string
-	Config   FunctionConfig
+	Config   *FunctionConfig
 	Language string
 	Code     string
 }
-
-type MacroID string
 
 type MacroDef struct {
 	Config       MacroConfig
@@ -58,14 +58,9 @@ type MacroConfig struct {
 	InputSchema map[string]interface{} `yaml:"input_schema"`
 }
 
-type CustomDef struct {
+type MacroInstanceDef struct {
 	Macro MacroID
 	Input interface{}
-}
-
-func (defs *Definitions) FunctionExists(id FunctionID) bool {
-	_, found := defs.Functions[id]
-	return found
 }
 
 var CodeGenFuncs = template.FuncMap{
