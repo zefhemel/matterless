@@ -1,282 +1,304 @@
-# Matterless: Put Serverless on your server
-Serverless has brought a novel style of programming to the world with a number of cool properties:
+# Matterless: put serverless on your server
+_Serverless_ enables you to build applications that automatically scale with demand, and your wallet. Within seconds, serverless application can scale from handling 0 requests per day to thousands of requests per second. This is the power of the cloud at its best.
 
-1. Applications are modeled as a composition of high-level services glued together via events, queues and functions.
-2. Abstraction from _where_ and _how_ your code is run, scaling automatically on demand.
-3. Low friction: building something production ready is easy.
+But what if all you want is check open pull requests on your Github repo at 9am every morning, and send a reminder message on your team’s chat channel? What if you want to create a chat bot that adds a “high five” reaction to any message containing the phrase “high five”? What if all you want to do is blink your smart lights whenever your backup drive runs out of disk space? What if you’re too lazy to create an AWS, Azure or GCP account or scared to connect it to your credit card? What if you have a Raspberry Pi sitting in your closet that’s not doing anything useful? What if you prefer to be in full control of your code, infrastructure and data? What if you’re up for something _different_?
+
+_Matterless_ may be for you.
+
+Matterless brings the powerful serverless programming model to your own server, laptop or even Raspberry Pi. It is simple to use, fast to deploy, and just... fun:
+
+1. Matterless is distributed as a **single binary** with no required dependencies (although to use docker as a runtime, you will need… docker).
+2. Matterless requires **zero configuration**  to run (although it does give you options).
+3. Matterless is **light-weight**: it runs fine on a Raspberry Pi. There's no fancy container orchestration, kubernetes or firecrackers involved.
+4. Matterless enables **extremely rapid iteration**: Matterless applications tend to (re)deploy within seconds. A common mode of develoment is to have Matterless watch for file changes and reload on every file save.
+
+Matterless is not attempting to be a replacement for AWS, Azure or GCP. If you need to scale from 0 to thousands of requests per second, Matterless likely won't cut it.
+Matterless' sweetspot is in building scratch-your-own-itch micro applications you may have a need for, but wouldn't require scalability the full cloud provides.
+
+Nevertheless, its programming model is very serverless-esque:
+
+* Use Matterless **functions** to respond to events.
+* Use Matterless **events** to glue different parts of your application together.
+* Use the Matterless **store API** (a simple key-value store) to store persistent application data.
+* (Coming soon) Use Matterless **queues** to schedule work to be performed asynchronously.
+
+In addition, to enable extending Matterless in Matterless (it’s [Matterless all the way down](https://en.wikipedia.org/wiki/Turtles_all_the_way_down)), Matterless adds:
+
+* Matterless **jobs** to write code that runs constantly in the background and connects with external systems, generally exposing anything interesting inside your application as events (e.g. via a (web)socket connection, or polling).
+* A **macro system** based on [Go template](https://golang.org/pkg/text/template/) syntax to create new, higher-level definition types (we’ll get to that).
+
+Under the hood, Matterless relies on the following technologies:
+
+1. Matterless is written in [Go](https://golang.org/).
+2. Matterless' default runtime is [Deno](https://deno.land). Deno runs JavaScript and Typescript code in a secure sandbox. Therefore functions and jobs don't have access to the local file system and cannot spawn local processes. And don't worry, you don't need to have Deno installed, it will be downloaded automatically for you on first launch.
+
+Sounds interesting? You would be correct. You have good judgement.
 
 ## What is a Matterless application
-A Matterless application consists of a number of _definitions_ written in Markdown. Currently the following _definition types_ are supported:
+A Matterless application consists of declarative _definitions_ written in a _matterless definition_ file. One matterless definition file defines one application, although you can import other files via URLs. Naturally, matterless definition files use the `.md` file extension. You may think: hey, but that’s already used by Markdown! Conveniently, Matterless' application format **is** markdown with specific semantics, so that all works out well — and it looks great when rendered on Github (and ultimately it's all about what code looks like on Github).
 
-Logic:
-* `Function`: for defining functions (snippets of code that are run when certain events occur, similar to AWS lambda functions)
-* `Module`: a convenient way to write reusable code once that is importable in all functions in this application
-* `Environment`:  defines environment variables available to all functions in the application.
-  
-Event sources:
-* `MattermostClient`: an event source connecting to a Mattermost instance (based on an access token), triggering functions based on specified events.
-* `SlashCommand`: an event source defining a slash command (e.g. `/my-command`), triggering a function when run.
-* `Bot`: an event source defining a Mattermost bot account, triggering functions based on specified events. Conceptually this is a `MattermostClient` wrapped in API calls that create the bot and managed tokens automatically.
-* `Cron`: an event source triggering functions at a specified schedule.
-* `API`: enables to connect functions to a HTTP server run by Matterlesss, that can be called by external systems to trigger logic.
+In principle, arbitrary Markdown is allowed in a `.md` file and Matterless will accept it. Documenting your application this way is encouraged. It looks like [literate programming](https://en.wikipedia.org/wiki/Literate_programming) is finally coming to fruition (you’re welcome, Donald).
 
-Matterless applications are written in markdown, following certain conventions. Markdown is used because it actually fits quite well, and it renders nicely in a Mattermost post.
+However, when you use headers (`#` nested at any level) and the first word of the header starts with a lowercase letter (which is a big no in regular writing anyway, capitalize your headers, people!), Matterless interprets it as a Matterless definition.
+
+Matterless currently supports the following **core primitive definition types**:
+
+* `function` (or `func` if you're lazy): for defining short-running functions that can be triggered e.g. when certain events occur.
+* `job`: for defining long-running background processes that for instance connect to external systems, and trigger events as a result.
+* `events`: for mapping events to functions to be triggered. There are certain built-in events that will automically trigger under certain conditions (e.g. when writing to the data store, or when certain URLs are called on Matterless’s HTTP Gateway).
+* `macro`: for defining new abstractions that map to a combination of existing matterless definitions.
+* `imports`: for importing externally defined (addressed via URLs) matterless definitions into your application (often used to import macros).
+* Custom definition types previously defined using `macro`s.
+
+## Matterless APIs
+Inside of `function` and `job` code (which in the future will be able to use multiple runtimes, but use Deno for now), you have access to a few [Matterless APIs](https://github.com/zefhemel/matterless/blob/master/pkg/sandbox/deno/matterless.ts):
+
+* `store`: a simple key-value store with operations to:
+    * `store.put(key, value)` a specific value for a key.
+    * `store.get(key)` to fetch the value for a specific key.
+    * `store.del(key)` to delete a key from the database.
+    * `store.queryPrefix(prefix)` to fetch all keys and their values prefixed with `prefix`.
+* `events`: to publish events and respond to them (in an RPC setup):
+    * `events.publish(eventName, eventData)` to publish a custom event (that can be listened to via a `event` definition in your definition file).
+    * `events.respond(toEvent, eventData)` to respond to a specific event (currently only used to respond to HTTP request events).
+* `functions`: invoke other functions by name (rarely needed, but supported)
+   * `functions.invoke(functionName, eventData)` invoke function `functionName` with `eventData`.
+
+But any arbitrary deno libraries can be imported as well.
+
+## Matterless 101
 
 Here is "Hello world" in Matterless:
 
------
-    # Function: HelloWorld
-    ```javascript
+----
+    # function HelloWorld
+	```javascript
     function handle(event) {
         console.log("Hello world!");
     }
     ```
------
+---- -
 
-For the remainder of this README these definitions will be inlined as Markdown, so they're easier to read. A horizontal rule will be used to make clear where the application code starts and ends.
+Save this to `hello.md` and run it as follows:
 
-This application defines a single Matterless function called `HelloWorld` written in JavaScript. Functions are the core building blocks used to build matterless applications. The function needs to be called `handle` and take one argument (the event). The function can be synchronous or asynchronous (`async function` or return a promise), and may return a value. Optionally, you can also define an `init` function, which will be invoked in case of a cold start once (e.g. to establish DB connections, cache data etc).
-
------
-## Function: HelloFunction
-```javascript
-function init() {
-    console.log("Initing...");
-}
-
-function handle(event) {
-    if(isWarmupEvent(event)) return;
-    console.log("Hello world!");
-}
+```shell
+$ mls run hello.md
 ```
------
 
-The general structure for a Mattermost definition is a header (at any level, e.g. `#`, `##` or `###`) prefixed with a _definition type_, a colon (`:`) and a name, then a braced code block typically using YAML or JavaScript dependent on the definition type. You can put arbitrary other Markdown text, markup, links, lists etc. around these — they will be ignored, making this also a good environment for [literate programming](https://en.wikipedia.org/wiki/Literate_programming). In fact... this very README.md is a valid Mattermost application :mindblown: (albeit not a very useful one).
+This will do shockingly little, because nothing is invoking this function yet. However, Matterless comes with a simple console we can use to manually invoke this function (if you don't see the `>` prompt hit Enter first). First we need to switch to the `hello` application:
 
+```
+> use hello
+```
+
+Then, we can invoke our function with an empty object:
+
+```
+hello> invoke HelloWorld {}
+```
+
+This will print something along the lines of:
+
+```
+INFO[0015] [App: hello | Function: HelloWorld] Starting deno function runtime. 
+INFO[0016] [App: hello | Function: HelloWorld] Hello world! 
+```
+
+Success!
+
+For the remainder of this README Matterless definitions will be inlined as Markdown, so they're easier to read. A horizontal rule will be used to make clear where the application code starts and ends.
+
+Let's look at the function definition type and other support definition types more closely.
 
 # Matterless Definition Types
 These are the _definition types_ currently supported and how to use them.
 
-## Function: MyFunction
-Currently the only language supported is JavaScript, which is run using node.js (in ES6 with modules mode) that is run in a docker container. The function that will be invoked needs to be called `handle` and take a single argument: `event`, which will receive event data (depending on how the function will be triggered) and may or may not return a result.
+## function MyFunction
+As of this writing, JavaScript is the primary supported language. More runtimes (based on docker) will be added in the future.
 
-While technically in most cases a node.js process instance with your function code inside it will be reused (it's not relaunched for every invocation), you should assume a stateless environment. While technically you have full access to all node.js APIS and the entire docker file system (yes, you could probably run a bitcoin miner in there), your function may be killed at any time along with all its in-memory and disk state. In fact, in the current implementation will indeed happen after a brief amount of time of inactivity.
+The JavaScript function that will be invoked needs to be called `handle` and take a single argument: `event`, which will receive event data (depending on how the function will be triggered) and may or may not return a result.
 
-Here is an example function that uses various Matterless APIs:
-* The `Mattermost` API, which is essentially just the JavaScript [MatterMost client](https://github.com/mattermost/mattermost-redux/blob/master/src/client/client4.ts) with some niceties added (like caching versions of some calls).
-* The `Store` API, which is a [super simple key-value store](https://github.com/zefhemel/matterless/blob/master/runners/docker/node_modules/matterless/index.mjs) you can use to keep some state (currently implemented using LevelDB). State is stored on the Matterless server-side, and therefore persistent (but not shared between applications).
+While technically in most cases a Deno process instance with your function code inside it will be reused (it's not relaunched for every invocation), you should assume a stateless environment. While technically you have full access to all Deno APIs, your function may be killed at any time along with all its in-memory and disk state. In fact, in the current implementation will indeed happen after a brief amount of time of inactivity.
 
-In addition, a few other npm modules are included in the runtime environment, you can [see the list and versions here](https://github.com/zefhemel/matterless/blob/master/runners/docker/package.json).
+A function definition may contain an optional configuration YAML block:
 
-Here is a function that demonstrates some of the APIs:
+```yaml
+init:
+   name: Donald Knuth
+runtime: deno
+```
+
+The values put into `init` (which usually would be an object, but it could be an YAML array as well) will be passed to the `init` JavaScript function upon cold start:
+
 ```javascript
-import {Store, Mattermost} from "matterless";
+function init(config) {
+    console.log(`Hello there, I'm initing for ${config.name}`);
+}
 
-// Instantiates a new store API client
-let store = new Store();
-// Connect to the mattermost API authenticated as the bot account (defined later)
-let client = new Mattermost(process.env.MYBOT_URL, process.env.MYBOT_TOKEN);
+function handle(event) {
+    console.log("I was just run with", event);
+}
+```
 
-async function handle(event) {
-    if(isWarmupEvent(event)) return;
-    
-    let post = JSON.parse(event.data.post);
+When first invoked, this will log something along the lines of:
 
-    // Lookup channel
-    let channel = await client.getChannelCached(post.channel_id);
-    // Ignore posts sent by myself
-    let botUser = await client.getMeCached();
-    if(post.user_id === botUser.id) return;
+    INFO[0017] [App: README | Function: MyFunction] Hello there, I'm initing for Donald Knuth
+    INFO[0017] [App: README | Function: MyFunction] I was just run with {}
 
-    let counter = (await store.get("silly-counter")) || 0;
-    await store.put("silly-counter", ++counter);
-    await client.createPost({
-        channel_id: post.channel_id,
-        root_id: post.id,
-        parent_id: post.id,
-        message: `I am ${botUser.username} and the counter is ${counter}. Also: ${reusableFunction()}`
+Subsequent invocations will skip the initialization.
+
+## job StarGazerPoll
+Jobs are much like `function`s, except they boot up immediately upon the application start and keep running during the lifetime of the application. Like `function`s, jobs support an optional YAML configuration block:
+
+```yaml
+init:
+   repo: zefhemel/matterless
+   pollInterval: 60
+   event: starschanged
+```
+
+Rather than implementing the `handle` JavaScript function, a job implements `start` and (optionally) `stop`.
+
+In this example we're going to poll the Github API every 60 seconds to see if the number of stars on the matterless repository has changed and publishing a `starschanged` event when it does. Note that this example uses various core Matterless APIs: `store` and `events` to track state between runs. Theoretically a global variable could be used, but this value would be lost between restarts of the app:
+
+```javascript
+import {store, events} from "./matterless.ts";
+
+let config;
+
+function init(cfg) {
+    console.log("Inited with", cfg);
+    config = cfg;
+}
+
+function start() {
+    setInterval(async () => {
+        // Pull old star count from the store (or set to 0 if no value)
+        let oldStarCount = (await store.get("stars")) || 0;
+        
+        // Talk to Github API to fetch new value
+        let result = await fetch(`https://api.github.com/repos/${config.repo}`);
+        let json = await result.json();
+        let newCount = json.stargazers_count;
+        
+        // It changed!
+        if(newCount !== oldStarCount) {
+            // Publish event
+            await events.publish(config.event, {
+                stars: newCount
+            });
+            // Store new value in store
+            await store.put("stars", newCount);
+        } else {
+            console.log("No change :-(");
+        }
+    }, config.pollInterval * 1000);
+}
+
+function stop() {
+    console.log("Shutting down stargazer poller");
+}
+```
+
+## events
+Using events mappings we define which events should invoke which functions. Multiple functions can be invoked in response to a single event, therefore we specify them as a list:
+
+```yaml
+starschanged:
+  - StarGazeReporter
+"http:GET:/myAPI":
+  - MyHTTPAPI
+```
+
+There are a few built-in events. One example is the `http:GET:/myAPI` event, which 
+
+## function MyHTTPAPI
+```javascript
+import {events} from "./matterless.ts";
+
+function handle(req) {
+    events.respond(req, {
+        status: 200,
+        body: "Hello there!"
     });
 }
 ```
 
-As mentioned, right now functions run are run in docker containers locally, in the future there may be other sandboxes implemented, such one based on AWS lambda, or Kubernetes.
-
-## Module: my-module
-It is likely to happen that you'll want to share some code between multiple functions. To do this, you can use the Module. In effect this will create a mini node module you can import (in this case via `import "my-module"` in your functions). 
-
-```javascript
-export function reusableFunction() {
-    return "yo";
-}
-```
-
-### MattermostClient: MyMattermostClient
-The MattermostClient event source can connect to any Mattermost instance you can authenticate with using a token. It then starts to listen to specific or all (websocket) events. Use `all` as a catch-all (mostly useful for debugging and exploration). You can connect multiple functions to a single event, therefore you specify them as a list in YAML.
-
-When defining a MattermostClient, two new environment variables will be defined (accessible in node.js via `process.env`): `MYMATTERMOSTCLIENT_URL` (in this case, always all-caps) and `MYMATTERMOSTCLIENT_TOKEN` containing the URL and token, respecitively, which can be used to authenticate as this user and e.g. reply to a post in case of a `posted` event.
-
-```yaml
-url: http://localhost:8065
-token: abc1234
-events:
-  all:
-  - HelloFunction
-  posted:
-  - HelloFunction
-```
-
-### Bot: MyBot
-A bot uses Matterless' admin account (see the _Running Matterless_ section below) to automatically create or update a bot with a specific username. It will also manage tokens for you.
-
-In a sense a Bot is the same as `MattermostClient`, but it manages the tokens for you (and always connects to the main configured Mattermost instance). The same `MYBOT_URL` and `MYBOT_TOKEN` environment variables will be exposed as for MattermostClient.
-
-```yaml
-username: my-bot
-team_names:
-  - Test
-events:
-  posted:
-    - MyFunction
-```
-
-### SlashCommand: MySlashCommand
-A slash command defines... a new slash command. In the case below a `/my-command` command. When a user triggers it, it will invoke the `MyCommand` func.
-```yaml
-trigger: my-command
-auto_complete: true
-auto_complete_desc: My awesome command
-auto_complete_hint: who
-function: MyCommandFunc
-team_name: Dev
-```
-
-#### Function: MyCommandFunc
-When triggered by a SlashCommand, our function's event contains all the top-level keys documented [in the Mattermost documentation](https://docs.mattermost.com/developer/slash-commands.html#custom-slash-command) under item (8), so e.g. `channel_id`, `text`, `token` etc. The function's return value is also in the same format as documented.
+## function StarGazeReporter
 ```javascript
 function handle(event) {
-    return {
-        text: "Hey, " + event.text
-    };
+    console.log("Number of stars changed to", event.stars);
 }
 ```
 
-## Cron
-Crons can be used to schedule regularly recurring tasks. The `schedule` is written in a regular crontab format. Check [this reference for all options available](https://pkg.go.dev/github.com/robfig/cron?utm_source=godoc#hdr-CRON_Expression_Format).
+## macro httpApi
 ```yaml
-- schedule: "0 * * * * *"
-  function: HelloFunction
+input_schema:
+  type: object
+  properties:
+    path:
+      type: string
+    method:
+      type: string
+    function:
+      type: string
+  required:
+    - path
+    - method
+    - function
 ```
 
-## API
-For certain use cases it will be required to expose an HTTP endpoint that either Mattermost can call, or that is called externally. For this, you can use an API.
+And the template:
+
+    ## events
+    ```yaml
+    "http:{{$input.method}}:{{$input.path}}":
+    - {{$input.function}}
+    ```
+
+
+And the instantiation
+
+## httpApi MyAPI
 ```yaml
-- path: /hello
-  function: HelloWorldHTTP
-  methods:
-    - GET
-    - POST
+path: /anotherAPI
+method: GET
+function: MyHTTPAPI
 ```
 
-Whenever you submit your application to serverless (either via the bot or command line) it will tell you at what URLs your endpoints are exposed.
 
-### Function: HelloWorldHTTP
-The `event` data you will receive for an HTTP event is [as follows](https://github.com/zefhemel/matterless/blob/master/pkg/definition/http.go):
-* `path`: the fully path for the request
-* `method`: the request method (e.g. `POST` or `GET`)
-* `headers`: a map with header -> value mappings
-* `form_values`: if the content-type of the request is for a form, this will contain a map of parsed values
-* `request_params`: contains a map of request parameters passed via the URL
-* `json_body`: will contain a parsed JSON body when the content-type is `application/json`
 
-A function is supposed to return a HTTP response object with:
-
-* `status`: HTTP status code
-* `headers`:  a map of headers
-* `body`: can be either a string, or a JSON object
-
-```javascript
-function handle(event) {
-    return {
-        status: 200,
-        headers: {
-            "Content-type": "text/plain"
-        },
-        body: "Hello world!"
-    }
-}
-```
 # Installation
 Requirements:
 * Go 1.16 or newer
-* Docker
-* A Mattermost install where you have access to an admin account (or at least an _personal access token_ for one)
 
-Tested on Mac (Apple Sillicon) and Linux (intel), although other platforms should work as well.
+Tested on Mac (Apple Silicon) and Linux (AMD64), although other platforms should work as well.
 
 **Warning:** This is still early stage software, I recommend you only use it with development or testing instances of Mattermost, not production ones.
 
-Make sure you have a personal access token for an admin account. Matterless will use this to create the matterless bot, and later to have permission to create all the resources required to run matterless apps. If you don't have one, create one via: `Account settings > Security > Personal Access Token` If you don't have this option, you need to enable "Enable Personal Access Tokens" under "Integration Management" in the Console.
-
-To install matterless:
+To install Matterless:
 
 ```shell
 $ go get github.com/zefhemel/matterless/...
-$ go install github.com/zefhemel/matterless/cmd/{mls,mls-bot}@latest
-```
+$ go install github.com/zefhemel/matterless/cmd/mls@latest
+````
 
-This will install the binaries in your `$GOPATH/bin`. Then, create a directory to keep matterless state data (configuration and data):
-
-```shell
-$ mkdir mls
-$ cd mls
-```
-
-In this folder create a `.env` file (or, alternatively set these as environment variables if you prefer):
-
-```
-mattermost_url=https://your.matterless.site.com
-admin_token=my-admin-token
-team_name=your-team-name
-api_bind_port=8222
-api_url=http://server.running.matterless.com:8222
-leveldb_databases_path=data
-```
-
-If you run everything locally, these are likely accurate values:
-```
-mattermost_url=http://localhost:8065
-admin_token=my-admin-token
-team_name=your-team-name
-api_bind_port=8222
-api_url=http://localhost:8222
-leveldb_databases_path=data
-```
-
-**Important:** Matterless will expose a (plain) HTTP server, binding to the configured port (`api_bind_port`). The use case is to provide various callback URLs e.g. for slash commands and accessing Matterless APIs like the store API. In a default Mattermost configuration _this will not work out of the box_, because no untrusted calls are allowed from Mattermost to HTTP urls. There are two ways to solve this:
-
-1. For development: add your matterless hostname (e.g. `localhost`) to "Allow untrusted internal connections to" in the Console (under Environment > Developer).
-2. For production: put a HTTPS proxy on top of this port, and point `api_url` to the resulting `https://` URL.
+This will install the binaries in your `$GOPATH/bin`.
 
 # Running Matterless
-Matterless has two modes of operation:
+Matterless has three modes of operation:
 
-1. As a bot (`mls-bot`) that users can send matterless application definitions to that are subqequently deployed on the instance. The application is reloaded when the post containing the definition is edited, and unloaded when the post is deleted. Logs appear in dedicated channels per function.
-2. As a command-line tool (`mls`) pointing at a markdown file containing a matterless application and operates it. Changes to the markdown file are hot reloaded for quick iteration. All logs are sent to CLI console.
-
-
-To run it as a bot:
-```shell
-$ mls-bot
-```
-
-You should now get a bunch of output in the console, and be pinged on Mattermost about the creation of the `matterless` bot! To test if it works, send it a "ping" message (it should attach a ping-pong reaction). Then to build your first app, copy and paste the example at the top this README.
-
-Alternatively, copy & paste your code into a file and run it via `mls`:
-
-```shell
-mls my-app.md
-```
-
-This will hot-reload whenever you make changes to `my-app.md`.
+1. All-in-one mode via `mls run`, this will run both the server and client in a single process. This is useful for development, especially with the `-w` option that watches the files you point to for changes:
+    ```shell
+   $ mls run -w myapp.md 
+   ```
+2. Server mode by simply running `mls` optionally with arguments like `-p` to bind to a specific port (defaults to `8222`), `--data` to select the data directory (default: `./mls-data`) and `--token` to use a specific admin token (generates one by default):
+    ```shell
+    $ mls --data /var/data/mls 
+    ```
+3. Client/deploy mode to deploy code to a remote (or local) matterless server:
+    ```shell
+    $ mls deploy --url http://mypi:8222 --token mysecrettoken -w myapp.md
+    ```
 
 Enjoy!

@@ -139,11 +139,6 @@ func Parse(code string) (*Definitions, error) {
 		case "import", "imports":
 			decls.Imports = append(decls.Imports, listItems...)
 		default: // May be a custom one, let's try
-			log.Info("HEre", currentDeclarationType, currentDeclarationName, "body ", currentBody)
-			if currentBody == "" {
-				// Not a macro instantiation
-				return nil
-			}
 			var inputs interface{}
 			err := yaml.Unmarshal([]byte(currentBody), &inputs)
 			if err != nil {
