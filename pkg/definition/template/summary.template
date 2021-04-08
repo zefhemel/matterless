@@ -1,12 +1,12 @@
 {{ $root := . }}
 {{if .Events}}
-## Events
+## events
 {{ range $key, $fns := .Events }}
 - `{{ $key }}` listened to by{{ range $fns }} `{{.}}`{{end}}{{ end }}
 {{ end }}
-## Functions
+## functions
 {{ range $key, $env := .Functions }}
 - `{{ $key }}` {{ end }}
-## Jobs
+## jobs
 {{ range $key, $env := .Jobs }}
 - `{{ $key }}` {{ end }}

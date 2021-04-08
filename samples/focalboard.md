@@ -1,4 +1,11 @@
-# Job: FocalBoardListener
+# Focalboard
+Super elementary focalboard integration example. Requires the following store variables to be set:
+
+* `config:focalboard.url`
+* `config:focalboard.token`
+
+
+# job FocalBoardListener
 ```yaml
 init:
   url: ${config:focalboard.url}
@@ -51,13 +58,13 @@ function stop() {
 }
 ```
 
-# Events
+# events
 ```
 "focalboard:update":
 - MyFocalFunction
 ```
 
-# Function: MyFocalFunction
+# function MyFocalFunction
 ```javascript
 function handle(event) {
     console.log("Received event", event);

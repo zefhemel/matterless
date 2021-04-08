@@ -1,6 +1,6 @@
 {{ $root := . }}
 {{range $name, $def := .Functions}}
-## Function: {{$name}}
+## function {{$name}}
 {{if or $def.Config.Init $def.Config.Runtime -}}
 ```yaml
 {{yaml $def.Config -}}
@@ -11,7 +11,7 @@
 ```
 {{end}}
 {{range $name, $def := .Jobs}}
-## Job: {{$name}}
+## job {{$name}}
 {{if or $def.Config.Init $def.Config.Runtime -}}
 ```yaml
 {{yaml $def.Config -}}
@@ -22,7 +22,7 @@
 ```
 {{end}}
 {{range $name, $def := .Macros}}
-## Macro: {{$name}}
+## macro {{$name}}
 ```yaml
 {{yaml $def.Config -}}
 ```
@@ -31,7 +31,7 @@ Template:
     {{prefixLines "    " .TemplateCode}}
 {{end}}
 {{- if .Events -}}
-## Events
+## events
 ```yaml
 {{yaml .Events -}}
 ```

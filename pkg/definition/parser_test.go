@@ -14,7 +14,7 @@ import (
 
 func TestParser(t *testing.T) {
 	decls, err := definition.Parse(strings.ReplaceAll(`
-# Function: TestFunction1
+# function TestFunction1
 
 |||
 function handle(event) {
@@ -22,7 +22,7 @@ function handle(event) {
 }
 |||
 
-# Function TestFunction2
+# function TestFunction2
 
 |||javascript
 function handle(event) {
@@ -31,13 +31,14 @@ function handle(event) {
 |||
 `, "|||", "```"))
 	assert.NoError(t, err)
+	log.Infof("Here: %+v", decls)
 	assert.Equal(t, "TestFunction1", decls.Functions["TestFunction1"].Name)
 	assert.Equal(t, "TestFunction2", decls.Functions["TestFunction2"].Name)
 	assert.Equal(t, "javascript", decls.Functions["TestFunction2"].Language)
 }
 
 func TestFunctionParserParameterBlock(t *testing.T) {
-	defs, err := definition.Parse(strings.ReplaceAll(`# Function: MyFunc
+	defs, err := definition.Parse(strings.ReplaceAll(`# function MyFunc
 |||
 init:
   arg1: Zef
@@ -62,7 +63,7 @@ function handle() {
 }
 
 func TestFunctionParserParameterBlockFail(t *testing.T) {
-	_, err := definition.Parse(strings.ReplaceAll(`# Function: MyFunc
+	_, err := definition.Parse(strings.ReplaceAll(`# function MyFunc
 |||
 randomStuff
 |||
@@ -78,7 +79,7 @@ function handle() {
 }
 
 func TestFunctionParser(t *testing.T) {
-	defs, err := definition.Parse(strings.ReplaceAll(`# Function: MyFunc
+	defs, err := definition.Parse(strings.ReplaceAll(`# function MyFunc
 |||javascript
 function handle() {
 
@@ -92,7 +93,7 @@ function handle() {
 }
 
 func TestJobParserParameterBlock(t *testing.T) {
-	defs, err := definition.Parse(strings.ReplaceAll(`# Job: MyJob
+	defs, err := definition.Parse(strings.ReplaceAll(`# job MyJob
 |||
 init:
   arg1: Zef
@@ -117,7 +118,7 @@ function handle() {
 }
 
 func TestJobParser(t *testing.T) {
-	defs, err := definition.Parse(strings.ReplaceAll(`# Job: MyJob
+	defs, err := definition.Parse(strings.ReplaceAll(`# job MyJob
 |||javascript
 function run() {
 
@@ -131,7 +132,7 @@ function run() {
 }
 
 func TestTemplateParser(t *testing.T) {
-	defs, err := definition.Parse(strings.ReplaceAll(`# Macro: HelloJob
+	defs, err := definition.Parse(strings.ReplaceAll(`# macro helloJob
 |||
 input_schema:
    type: object
@@ -140,7 +141,7 @@ input_schema:
          type: string
 |||
 
-	# Job: {{$name}}
+	# job {{$name}}
 
     |||
     init:
@@ -155,17 +156,17 @@ input_schema:
     }
     |||
 
-# HelloJob: TheJob
+# helloJob TheJob
 |||
 name: Zef
 |||
 `, "|||", "```"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(defs.Macros))
-	assert.Contains(t, defs.Macros["HelloJob"].TemplateCode, "Job")
+	assert.Contains(t, defs.Macros["helloJob"].TemplateCode, "job")
 
 	assert.Equal(t, 1, len(defs.MacroInstances))
-	assert.Equal(t, definition.MacroID("HelloJob"), defs.MacroInstances["TheJob"].Macro)
+	assert.Equal(t, definition.MacroID("helloJob"), defs.MacroInstances["TheJob"].Macro)
 	assert.Equal(t, "Zef", defs.MacroInstances["TheJob"].Input.(map[string]interface{})["name"])
 
 	assert.NoError(t, defs.ExpandMacros())
@@ -173,7 +174,7 @@ name: Zef
 
 func TestTemplateParserNonExisting(t *testing.T) {
 	defs, err := definition.Parse(strings.ReplaceAll(`
-# HelloJob: TheJob
+# helloJob TheJob
 |||
 name: Zef
 |||
@@ -185,10 +186,10 @@ name: Zef
 
 func TestImportParsing(t *testing.T) {
 	defs, err := definition.Parse(strings.ReplaceAll(`
-# Import
+# import
 * http://bla.com
 
-# Import
+# import
 - http://bla2.com
 
 `, "|||", "```"))
@@ -200,7 +201,7 @@ func TestImportParsing(t *testing.T) {
 
 func TestMergeJobs(t *testing.T) {
 	defs1, err := definition.Parse(strings.ReplaceAll(`
-# Job: MyCron
+# job MyCron
 |||
 init:
 - schedule: "* * * * * *"
@@ -216,7 +217,7 @@ function handle() {
 	assert.NoError(t, err)
 
 	defs2, err := definition.Parse(strings.ReplaceAll(`
-# Job: MyCron
+# job MyCron
 |||
 init:
 - schedule: "*/2 * * * * *"
@@ -236,7 +237,7 @@ function handle() {
 
 	// validate with nested slice
 	defs1, err = definition.Parse(strings.ReplaceAll(`
-# Job: MyCron
+# job MyCron
 |||
 init:
    bla1:
@@ -253,7 +254,7 @@ function handle() {
 	assert.NoError(t, err)
 
 	defs2, err = definition.Parse(strings.ReplaceAll(`
-# Job: MyCron
+# job MyCron
 |||
 init:
    bla2:

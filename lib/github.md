@@ -1,4 +1,4 @@
-# Function: PollGithubRepoEvents
+# function PollGithubRepoEvents
 [List of github event types](https://docs.github.com/en/developers/webhooks-and-events/github-event-types)
 
 ```yaml
@@ -56,7 +56,7 @@ async function handle() {
 }
 ```
 
-# Events
+# events
 ```yaml
 "mm-server:PushEvent":
   - NewInterestingEvent
@@ -64,7 +64,7 @@ async function handle() {
 #  - NewInterestingEvent
 ```
 
-# Function: NewInterestingEvent
+# function NewInterestingEvent
 
 ```javascript
 function handle(event) {

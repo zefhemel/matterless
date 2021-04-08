@@ -1,4 +1,4 @@
-# Macro: MattermostListener
+# macro mattermostListener
 Implements a mattermost event listener, authenticating to a specific `url` using a `token` listening to `events` and triggering subscribed functions appropriately.
 
 ```yaml
@@ -26,7 +26,7 @@ input_schema:
 This is the macro:
 
 
-    # Job: {{$name}}
+    # job {{$name}}
     ```yaml
     init:
         name: "{{$name}}"
@@ -88,7 +88,7 @@ This is the macro:
     }
     ```
 
-    # Events
+    # events
     ```yaml
     {{range $eventName, $fns := $input.events}}
     "{{$name}}:{{$eventName}}":
@@ -96,7 +96,7 @@ This is the macro:
     {{end}}
     ```
 
-# Documentation: Mattermost client
+# Bonus: Mattermost client
 
 You can connect to Mattermost as follows:
 

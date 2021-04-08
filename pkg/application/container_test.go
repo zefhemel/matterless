@@ -33,19 +33,19 @@ func TestEventHTTP(t *testing.T) {
 	a.NoError(err)
 	container.Register("test", app)
 	a.NoError(app.Eval(strings.ReplaceAll(`
-# Events
+# events
 |||yaml
 "http:GET:/hello":
 - MyHTTPFunc
 |||
 
 
-# Function: MyHTTPFunc
+# function MyHTTPFunc
 |||javascript
-import {respondToEvent} from "./matterless.ts";
+import {events} from "./matterless.ts";
 
 async function handle(event) {
-    await respondToEvent(event, {
+    await events.respond(event, {
         status: 200,
         body: "OK"
     });

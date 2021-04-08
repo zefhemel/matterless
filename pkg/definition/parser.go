@@ -37,7 +37,7 @@ func validateObj(schemaName string, obj interface{}) error {
 	return yamlschema.ValidateObjects(yamlSchema, obj)
 }
 
-var headerRegex = regexp.MustCompile("\\s*([\\w\\.]+)\\:?\\s*(.*)")
+var headerRegex = regexp.MustCompile("^\\s*([a-z][\\w\\.]+)\\s*(.*)")
 
 // Parse uses the GoldMark Markdown parser to parse definitions
 func Parse(code string) (*Definitions, error) {
@@ -63,7 +63,9 @@ func Parse(code string) (*Definitions, error) {
 	)
 	processDefinition := func() error {
 		switch currentDeclarationType {
-		case "Function":
+		case "":
+			// Skipping
+		case "function", "func":
 			funcDef := &FunctionDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
@@ -81,7 +83,7 @@ func Parse(code string) (*Definitions, error) {
 				funcDef.Code = currentBody
 			}
 			decls.Functions[FunctionID(currentDeclarationName)] = funcDef
-		case "Job":
+		case "job":
 			jobDef := &JobDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
@@ -99,7 +101,7 @@ func Parse(code string) (*Definitions, error) {
 				jobDef.Code = currentBody
 			}
 			decls.Jobs[FunctionID(currentDeclarationName)] = jobDef
-		case "Events":
+		case "events":
 			var def map[string][]FunctionID
 			if err := validate("schema/events.schema.json", currentBody); err != nil {
 				return fmt.Errorf("Events: %s", err)
@@ -117,7 +119,7 @@ func Parse(code string) (*Definitions, error) {
 					decls.Events[eventName] = newFns
 				}
 			}
-		case "Macro":
+		case "macro":
 			var config MacroConfig
 			err := yaml.Unmarshal([]byte(currentBody), &config)
 			if err != nil {
@@ -127,16 +129,17 @@ func Parse(code string) (*Definitions, error) {
 			//if err := validateObj("schema/schema.schema.json", config.InputSchema); err != nil {
 			//	return fmt.Errorf("Macros %s: %s", currentDeclarationName, err)
 			//}
+			if strings.ToLower(currentDeclarationName[0:1]) != currentDeclarationName[0:1] {
+				return errors.New("All macros should start with a lower-case letter")
+			}
 			decls.Macros[MacroID(currentDeclarationName)] = &MacroDef{
 				Config:       config,
 				TemplateCode: currentCodeBlock,
 			}
-		case "Import":
+		case "import", "imports":
 			decls.Imports = append(decls.Imports, listItems...)
-		case "Documentation", "Manual":
-			// Ignore documentation and manual blocks
-
 		default: // May be a custom one, let's try
+			log.Info("HEre", currentDeclarationType, currentDeclarationName, "body ", currentBody)
 			if currentBody == "" {
 				// Not a macro instantiation
 				return nil
@@ -167,8 +170,14 @@ func Parse(code string) (*Definitions, error) {
 			listItems = []string{}
 			// Process next
 			parts := headerRegex.FindStringSubmatch(string(v.Text(codeBytes)))
-			currentDeclarationType = parts[1]
-			currentDeclarationName = parts[2]
+			if parts == nil || len(parts) == 0 {
+				// Ignore, not a Matterless definition
+				currentDeclarationType = ""
+				currentDeclarationName = ""
+			} else {
+				currentDeclarationType = parts[1]
+				currentDeclarationName = parts[2]
+			}
 		case *ast.FencedCodeBlock:
 			currentLanguage = string(v.Language(codeBytes))
 			allCode := make([]string, 0, 10)

@@ -1,4 +1,7 @@
-# Macro: Cron
+# Cron
+This Matterless definition file defines a `cron` macro. 
+
+# macro cron
 Implements a simple cronjob scheduler.
 
 ```yaml
