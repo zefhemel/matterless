@@ -35,11 +35,17 @@ Under the hood, Matterless relies on the following technologies:
 Sounds interesting? You would be correct. You have good judgement.
 
 ## What is a Matterless application
-A Matterless application consists of declarative _definitions_ written in a _matterless definition_ file. One matterless definition file defines one application, although you can import other files via URLs. Naturally, matterless definition files use the `.md` file extension. You may think: hey, but that’s already used by Markdown! Conveniently, Matterless' application format **is** markdown with specific semantics, so that all works out well — and it looks great when rendered on Github (and ultimately it's all about what code looks like on Github).
+A Matterless application consists of declarative _definitions_ written in a _matterless definition_ file. One matterless definition file defines one application, although you can import other files via URLs. Naturally, matterless definition files use the `.md` file extension. You may think: "Hey, but that’s already used by Markdown!" Conveniently, Matterless' application format **is** markdown with specific semantics, so that all works out well — and it looks great when rendered on Github (and ultimately it's all about what code looks like on Github).
 
 In principle, arbitrary Markdown is allowed in a `.md` file and Matterless will accept it. Documenting your application this way is encouraged. It looks like [literate programming](https://en.wikipedia.org/wiki/Literate_programming) is finally coming to fruition (you’re welcome, Donald).
 
-However, when you use headers (`#` nested at any level) and the first word of the header starts with a lowercase letter (which is a big no in regular writing anyway, capitalize your headers, people!), Matterless interprets it as a Matterless definition.
+However, when you use headers (`#` nested at any level) _and_ the first word of the header starts with a lowercase letter (which is a big no in regular writing anyway, capitalize your headers, people!), Matterless interprets it as a Matterless definition.
+
+So. This is the point in the README where it is revealed that the README.md file you're reading right now, is in fact a valid and even somewhat useful Mattermost application! Try it out with `mls run README.md`!
+
+I'll wait until you put together your head, which has just been blown.
+
+## Back to the primitives
 
 Matterless currently supports the following **core primitive definition types**:
 
