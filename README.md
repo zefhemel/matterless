@@ -54,9 +54,9 @@ In principle, arbitrary Markdown is allowed in a `.md` file and Matterless will 
 
 However, when you use headers (`#` nested at any level) _and_ the first word of the header starts with a lowercase letter (which is a big no in regular writing anyway, capitalize your headers, people!), Matterless interprets it as a Matterless definition.
 
-So. This is the point in the README where it is revealed that the README.md file you're reading right now, is in fact a valid and even somewhat useful Mattermost application! Try it out with `mls run README.md`!
+So. This is the point in the README where it is revealed that the README.md file you're reading right now, is in fact a valid and even somewhat useful Matterless application! Try it out with `mls run README.md`!
 
-I'll wait until you put together your head, which has just been blown.
+I'll wait until you put together your mind, which has just been blown.
 
 ## Back to the primitives
 
@@ -97,7 +97,7 @@ Here is "Hello world" in Matterless:
         console.log("Hello world!");
     }
     ```
----- -
+----
 
 Save this to `hello.md` and run it as follows:
 
