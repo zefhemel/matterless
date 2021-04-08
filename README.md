@@ -1,11 +1,23 @@
-# Matterless: put serverless on your server
-_Serverless_ enables you to build applications that automatically scale with demand, and your wallet. Within seconds, serverless application can scale from handling 0 requests per day to thousands of requests per second. This is the power of the cloud at its best.
+# Matterless: putting serverless on your server
+[Serverless](https://en.wikipedia.org/wiki/Serverless_computing) is a generally agreed poorly named concept (but it's too late now) that enables you to build applications that automatically scale with demand. And your wallet. Within seconds, serverless application can scale from handling 0 requests per day to thousands of requests per second. This is the power of the cloud at its best.
 
-But what if all you want is check open pull requests on your Github repo at 9am every morning, and send a reminder message on your team’s chat channel? What if you want to create a chat bot that adds a “high five” reaction to any message containing the phrase “high five”? What if all you want to do is blink your smart lights whenever your backup drive runs out of disk space? What if you’re too lazy to create an AWS, Azure or GCP account or scared to connect it to your credit card? What if you have a Raspberry Pi sitting in your closet that’s not doing anything useful? What if you prefer to be in full control of your code, infrastructure and data? What if you’re up for something _different_?
+But, **what if** all you want is check open pull requests on your Github repo at 9am every morning, and send a reminder message on your team’s chat channel?
 
-_Matterless_ may be for you.
+**What if** you want to create a chat bot that adds a “high five” reaction to any message containing the phrase “high five”?
 
-Matterless brings the powerful serverless programming model to your own server, laptop or even Raspberry Pi. It is simple to use, fast to deploy, and just... fun:
+**What if** all you want to do is blink your smart lights whenever your backup drive runs out of disk space?
+
+**What if** you’re too lazy to create an AWS, Azure or GCP account or scared to connect it to your credit card?
+
+**What if** you have a Raspberry Pi sitting in your closet that’s not doing anything useful, or you were looking for a quasi-valid reason to buy one? 
+
+**What if** you prefer to be in full control of your code, infrastructure and data?
+
+_Matterless_ may just be what you've been waiting for all this time. Could it be? (Spoiler alert: yes it is.)
+
+Matterless brings the powerful serverless programming model to your own server, laptop or even Raspberry Pi. It is simple to use, fast to deploy, and... let's just call a spade a spade, it's _awesome_.
+
+Why?
 
 1. Matterless is distributed as a **single binary** with no required dependencies (although to use docker as a runtime, you will need… docker).
 2. Matterless requires **zero configuration**  to run (although it does give you options).
@@ -13,9 +25,9 @@ Matterless brings the powerful serverless programming model to your own server, 
 4. Matterless enables **extremely rapid iteration**: Matterless applications tend to (re)deploy within seconds. A common mode of develoment is to have Matterless watch for file changes and reload on every file save.
 
 Matterless is not attempting to be a replacement for AWS, Azure or GCP. If you need to scale from 0 to thousands of requests per second, Matterless likely won't cut it.
-Matterless' sweetspot is in building scratch-your-own-itch micro applications you may have a need for, but wouldn't require scalability the full cloud provides.
+Matterless' sweetspot is in building scratch-your-own-itch micro applications you may have a need for, but wouldn't require the extreme scalability the full cloud provides.
 
-Nevertheless, its programming model is very serverless-esque:
+Nevertheless, its programming model is very serverless-esque, because you...
 
 * Use Matterless **functions** to respond to events.
 * Use Matterless **events** to glue different parts of your application together.
@@ -24,13 +36,14 @@ Nevertheless, its programming model is very serverless-esque:
 
 In addition, to enable extending Matterless in Matterless (it’s [Matterless all the way down](https://en.wikipedia.org/wiki/Turtles_all_the_way_down)), Matterless adds:
 
-* Matterless **jobs** to write code that runs constantly in the background and connects with external systems, generally exposing anything interesting inside your application as events (e.g. via a (web)socket connection, or polling).
+* Matterless **jobs** to write code that runs continuously in the background and connects with external systems, generally exposing anything interesting inside your application as events (e.g. via a (web)socket connection, or polling).
 * A **macro system** based on [Go template](https://golang.org/pkg/text/template/) syntax to create new, higher-level definition types (we’ll get to that).
 
 Under the hood, Matterless relies on the following technologies:
 
 1. Matterless is written in [Go](https://golang.org/).
-2. Matterless' default runtime is [Deno](https://deno.land). Deno runs JavaScript and Typescript code in a secure sandbox. Therefore functions and jobs don't have access to the local file system and cannot spawn local processes. And don't worry, you don't need to have Deno installed, it will be downloaded automatically for you on first launch.
+2. Its data store uses LevelDB (in fact [its Go implementation](https://github.com/syndtr/goleveldb)) under the hood. 
+3. Matterless' default runtime is [Deno](https://deno.land). Deno runs JavaScript and Typescript code in a secure sandbox. Therefore, functions and jobs don't have access to the local file system and cannot spawn local processes. And don't worry, you don't need to have Deno installed, it will be downloaded automatically for you on first launch. In the future other runtimes will be supported.
 
 Sounds interesting? You would be correct. You have good judgement.
 
@@ -54,12 +67,13 @@ Matterless currently supports the following **core primitive definition types**:
 * `events`: for mapping events to functions to be triggered. There are certain built-in events that will automically trigger under certain conditions (e.g. when writing to the data store, or when certain URLs are called on Matterless’s HTTP Gateway).
 * `macro`: for defining new abstractions that map to a combination of existing matterless definitions.
 * `imports`: for importing externally defined (addressed via URLs) matterless definitions into your application (often used to import macros).
-* Custom definition types previously defined using `macro`s.
+
+In addition, defined macros can of course be instantiated.
 
 ## Matterless APIs
 Inside of `function` and `job` code (which in the future will be able to use multiple runtimes, but use Deno for now), you have access to a few [Matterless APIs](https://github.com/zefhemel/matterless/blob/master/pkg/sandbox/deno/matterless.ts):
 
-* `store`: a simple key-value store with operations to:
+* `store`: a simple key-value store with the following operations:
     * `store.put(key, value)` a specific value for a key.
     * `store.get(key)` to fetch the value for a specific key.
     * `store.del(key)` to delete a key from the database.
@@ -112,7 +126,7 @@ INFO[0016] [App: hello | Function: HelloWorld] Hello world!
 
 Success!
 
-For the remainder of this README Matterless definitions will be inlined as Markdown, so they're easier to read. A horizontal rule will be used to make clear where the application code starts and ends.
+For the remainder of this README Matterless definitions will be inlined as Markdown, so they're easier to read.
 
 Let's look at the function definition type and other support definition types more closely.
 
@@ -216,7 +230,16 @@ starschanged:
   - MyHTTPAPI
 ```
 
-There are a few built-in events. One example is the `http:GET:/myAPI` event, which 
+## function StarGazeReporter
+```javascript
+function handle(event) {
+    console.log("Number of stars changed to", event.stars);
+}
+```
+
+There are a few built-in events. One example is the `http:GET:/myAPI` event, which will be invoked when requesting `http://yourmatterlessserver:8222/appname/myAPI` in our case now: `http://localhost:8222/README/myAPI` try it!
+
+Here is the function definition that handles this event:
 
 ## function MyHTTPAPI
 ```javascript
@@ -230,14 +253,25 @@ function handle(req) {
 }
 ```
 
-## function StarGazeReporter
-```javascript
-function handle(event) {
-    console.log("Number of stars changed to", event.stars);
-}
-```
+This uses the `events.respond` call, which effectively pulls a special event-response name from the request event, and publishes the response on it. In your response object you can specify:
+
+* `status`: a HTTP status code
+* `headers`: an object with headers (e.g. `{"Content-type": "application/json"}`)
+* `body`: either as a string or as an object, in which case it will be JSON encoded
+
+The `req` event here will contain request data:
+
+* `path`: the URL path
+* `method`: the HTTP request method
+* `headers`: an object with headers
+* `request_params`: containing an object with request parameters (e.g. `?name=bla` would result in `{name: "bla"}`)
+* `form_values`:when posted as `application/x-www-form-urlencoded`
+* `json_body`: when posted as `application/json`
+
 
 ## macro httpApi
+And finally, Mattreless supports macros!
+
 ```yaml
 input_schema:
   type: object

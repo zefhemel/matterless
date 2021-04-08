@@ -185,7 +185,7 @@ func (ag *APIGateway) buildHTTPEvent(path string, request *http.Request) (map[st
 		if err := decoder.Decode(&jsonBody); err != nil {
 			return nil, errors.Wrap(err, "parsing json body")
 		}
-		evt["json_Body"] = jsonBody
+		evt["json_body"] = jsonBody
 	}
 	return evt, nil
 }
