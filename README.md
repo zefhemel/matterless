@@ -1,17 +1,9 @@
-# Matterless
-Matterless is a tool to quickly and iteratively develop and run Mattermost "applications": extensions of Mattermost that may include bots, slash commands and other types of integrations. When run in "bot mode", users can manage
-Matterless applications as direct messages to the `@matterless` bot, which will immediately parse, validate and
-activate them. Generally this happens in a matter of seconds, allowing for a **very rapid code and run cycle**.
+# Matterless: Put Serverless on your server
+Serverless has brought a novel style of programming to the world with a number of cool properties:
 
-![](https://raw.githubusercontent.com/zefhemel/matterless/master/screenshots/matterless-bot-success.png)
-
-Matterless can also be run in CLI-mode, in which case it is pointed at an application file (which you can edit in your favorite IDE) that will be hot-reloaded whenever it has been updated.
-
-Conceptually Matterless is inspired by _serverless_ (hence the name), where applications are built using many off-the-shelf services and components glued together by lambda functions that respond to events.
-
-**Note:** Matterless is early stage of development, please only use it for development and testing purposes. The APIs here may be changed at any time.
-
-There is a [video demo of a somewhat earlier version available here](https://cln.sh/gnC8Md). To have a look at some simple example applications, check out the [samples](https://github.com/zefhemel/matterless/tree/master/samples) folder.
+1. Applications are modeled as a composition of high-level services glued together via events, queues and functions.
+2. Abstraction from _where_ and _how_ your code is run, scaling automatically on demand.
+3. Low friction: building something production ready is easy.
 
 ## What is a Matterless application
 A Matterless application consists of a number of _definitions_ written in Markdown. Currently the following _definition types_ are supported:

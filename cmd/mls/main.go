@@ -105,7 +105,7 @@ func main() {
 	log.SetLevel(log.DebugLevel)
 
 	cmd := rootCommand()
-	cmd.AddCommand(runCommand(), deployCommand(), prerenderCommand())
+	cmd.AddCommand(runCommand(), deployCommand(), ppCommand())
 	cmd.Execute()
 }
 

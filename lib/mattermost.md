@@ -39,8 +39,10 @@ This is the macro:
     ```
     
     ```javascript
-    import {publishEvent} from "./matterless.ts";
-    
+    import {events} from "./matterless.ts";
+
+    let socket;
+ 
     function init(config) {
         console.log("Starting mattermost client with config", config);
         if(!config.token || !config.url) {
@@ -49,7 +51,7 @@ This is the macro:
         }
         return new Promise((resolve, reject) => {
             const url = `${config.url}/api/v4/websocket`.replaceAll("https://", "wss://").replaceAll("http://", "ws://");
-            const socket = new WebSocket(url);
+            socket = new WebSocket(url);
             socket.addEventListener('open', e => {
                 socket.send(JSON.stringify({
                         "seq": 1,
@@ -72,15 +74,17 @@ This is the macro:
                 }
                 console.log('Message from server ', parsedEvent);
                 if(config.events.indexOf(parsedEvent.event) !== -1) {
-                    publishEvent(`${config.name}:${parsedEvent.event}`, parsedEvent);
+                    events.publish(`${config.name}:${parsedEvent.event}`, parsedEvent);
                 }
             });
         });
     }
-    
+
     function stop() {
-        console.log("Shutting down mattermost client");
-        wsClient.close();
+       console.log("Shutting down Mattermost client");
+       if(socket) {
+          socket.close();
+       }
     }
     ```
 
@@ -91,3 +95,59 @@ This is the macro:
     {{range $fns}}  - {{.}}{{end}} 
     {{end}}
     ```
+
+# Documentation: Mattermost client
+
+You can connect to Mattermost as follows:
+
+```javascript
+class Mattermost {
+    constructor(url, token) {
+        this.url = `${url}/api/v4`;
+        this.token = token;
+    }
+
+    async performFetch(path, method, body) {
+        let result = await fetch(`${this.url}${path}`, {
+            method: method,
+            headers: {
+                'Authorization': `bearer ${this.token}`
+            },
+            body: body ? JSON.stringify(body) : undefined
+        });
+        return result.json();
+    }
+
+    async getMe() {
+        return this.performFetch("/users/me", "GET");
+    }
+
+    async getUserTeams(userId) {
+        return this.performFetch(`/users/${userId}/teams`, "GET");
+    }
+
+    async getPrivateChannels(teamId) {
+        return this.performFetch(`/teams/${teamId}/channels/private`, "GET");
+    }
+
+    async getChannelByName(teamId, name) {
+        return this.performFetch(`/teams/${teamId}/channels/name/${name}`, "GET")
+    }
+
+    async createChannel(channel) {
+        return this.performFetch("/channels", "POST", channel);
+    }
+    
+    async createPost(post) {
+        return this.performFetch("/posts", "POST", post);
+    }
+
+    async updatePost(post) {
+        return this.performFetch(`/posts/${post.id}`, "PUT", post);
+    }
+
+    async deletePost(post)  {
+        return this.performFetch(`/posts/${post.id}`, "DELETE");
+    }
+}
+```

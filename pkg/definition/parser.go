@@ -133,9 +133,12 @@ func Parse(code string) (*Definitions, error) {
 			}
 		case "Import":
 			decls.Imports = append(decls.Imports, listItems...)
+		case "Documentation", "Manual":
+			// Ignore documentation and manual blocks
+
 		default: // May be a custom one, let's try
 			if currentBody == "" {
-				// Not a template instatiation
+				// Not a macro instantiation
 				return nil
 			}
 			var inputs interface{}

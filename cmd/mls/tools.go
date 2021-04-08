@@ -9,14 +9,14 @@ import (
 	"strings"
 )
 
-func prerenderCommand() *cobra.Command {
+func ppCommand() *cobra.Command {
 	var (
 		dataDir string
 		watch   bool
 	)
 	var cmd = &cobra.Command{
-		Use:   "prerender file.md",
-		Short: "Prerenders (includes all imports, expands macros) for a file",
+		Use:   "pp file.md",
+		Short: "Preprocesses (includes all imports, expands macros) for a file",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			path := args[0]
@@ -51,7 +51,7 @@ func prerenderFile(path string, dataDir string) {
 	if err := defs.ExpandMacros(); err != nil {
 		log.Fatal(err)
 	}
-	outPath := strings.Replace(path, ".md", ".rendered.md", 1)
+	outPath := strings.Replace(path, ".md", ".pp.md", 1)
 	if err := os.WriteFile(outPath, []byte(defs.Markdown()), 0600); err != nil {
 		log.Fatal(err)
 	}
