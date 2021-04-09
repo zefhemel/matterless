@@ -96,58 +96,105 @@ This is the macro:
     {{end}}
     ```
 
-# Bonus: Mattermost client
+# macro mattermostBot
+```yaml
+input_schema:
+  type: object
+  properties:
+    url:
+      type: string
+    admin_token:
+      type: string
+    username:
+      type: string
+    display_name:
+      type: string
+    description:
+      type: string
+    teams:
+      type: array
+      items:
+        type: string
+    events:
+      type: object
+      propertyNames:
+        pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
+      additionalProperties:
+        type: array
+        items:
+          type: string
+  additionalProperties: false
+  required:
+    - url
+    - token
+```
 
-You can connect to Mattermost as follows:
+Template:
 
-```javascript
-class Mattermost {
-    constructor(url, token) {
-        this.url = `${url}/api/v4`;
-        this.token = token;
-    }
+    # mattermostListener {{$name}}
+    ```yaml
+    url: {{yaml $input.url}}
+    token: ${config:{{$name}}.token}
+    events:
+      {{yaml $input.events | prefixLines "  " }}
+    ```
 
-    async performFetch(path, method, body) {
-        let result = await fetch(`${this.url}${path}`, {
-            method: method,
-            headers: {
-                'Authorization': `bearer ${this.token}`
-            },
-            body: body ? JSON.stringify(body) : undefined
-        });
-        return result.json();
-    }
-
-    async getMe() {
-        return this.performFetch("/users/me", "GET");
-    }
-
-    async getUserTeams(userId) {
-        return this.performFetch(`/users/${userId}/teams`, "GET");
-    }
-
-    async getPrivateChannels(teamId) {
-        return this.performFetch(`/teams/${teamId}/channels/private`, "GET");
-    }
-
-    async getChannelByName(teamId, name) {
-        return this.performFetch(`/teams/${teamId}/channels/name/${name}`, "GET")
-    }
-
-    async createChannel(channel) {
-        return this.performFetch("/channels", "POST", channel);
+    # events
+    ```yaml
+    init:
+      - {{$name}}BotCreate
+    ```
+    
+    # function {{$name}}BotCreate
+    ```yaml
+    init:
+      url: {{yaml $input.url}}
+      admin_token: {{yaml $input.admin_token}}
+      username: {{yaml $input.username}}
+      display_name: {{yaml $input.display_name}}
+      description: {{yaml $input.description}}
+      teams:
+      {{range $input.teams}}
+      - {{.}}
+      {{- end}}
+      bot_token_config: "config:{{$name}}.token"
+    ```
+    
+    ```javascript
+    import {store} from "./matterless.ts";
+    import {Mattermost} from "https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost_client.js";
+    
+    let client;
+    let config;
+    
+    function init(cfg) {
+        config = cfg;
+        client = new Mattermost(config.url, config.admin_token);
     }
     
-    async createPost(post) {
-        return this.performFetch("/posts", "POST", post);
+    async function handle() {
+        if(await store.get(config.bot_token_config)) {
+            // Bot token config already configured, done!
+            console.log("Bot token already present, skipping.");
+            return;
+        }
+        let user;
+        try {
+            user = await client.getUserByUsername(config.username);
+            console.log("Existing user", user);
+        } catch(e) {
+            user = await client.createBot({
+                username: config.username,
+                display_name: config.display_name,
+                description: config.description
+            });
+            user.id = user.bot_user_id;
+        }
+        // User exists, let's create a token
+        let token = await client.createUserAccessToken(user.id, "Matterless generated token");
+        await Promise.all(config.teams.map(async (teamName) => {
+            return client.addUserToTeam(user.id, (await client.getTeamByName(teamName)).id);
+        }));
+        await store.put(config.bot_token_config, token.token);
     }
-
-    async updatePost(post) {
-        return this.performFetch(`/posts/${post.id}`, "PUT", post);
-    }
-
-    async deletePost(post)  {
-        return this.performFetch(`/posts/${post.id}`, "DELETE");
-    }
-}
-```
+    ```

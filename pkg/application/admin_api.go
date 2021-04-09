@@ -77,7 +77,7 @@ func (ag *APIGateway) exposeAdminAPI() {
 		fmt.Fprint(w, "OK")
 	}).Methods("DELETE")
 
-	ag.rootRouter.HandleFunc("/{app}/_restart", func(w http.ResponseWriter, r *http.Request) {
+	ag.rootRouter.HandleFunc("/{app}/_defs", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
 		appName := vars["app"]
@@ -89,11 +89,7 @@ func (ag *APIGateway) exposeAdminAPI() {
 			http.NotFound(w, r)
 			return
 		}
-		if err := app.Eval(app.code); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "Error: %s", err)
-			return
-		}
-		fmt.Fprint(w, "OK")
-	}).Methods("POST")
+		fmt.Fprint(w, util.MustJsonString(app.Definitions()))
+	}).Methods("GET")
+
 }

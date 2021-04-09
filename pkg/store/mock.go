@@ -4,7 +4,7 @@ type MockStore struct {
 }
 
 func (m MockStore) Put(key string, val interface{}) error {
-	panic("implement me")
+	return nil
 }
 
 func (m MockStore) Get(key string) (interface{}, error) {
@@ -12,7 +12,7 @@ func (m MockStore) Get(key string) (interface{}, error) {
 }
 
 func (m MockStore) Delete(key string) error {
-	panic("implement me")
+	return nil
 }
 
 func (m MockStore) QueryRange(startKey string, endKey string) ([]QueryResult, error) {

@@ -193,12 +193,24 @@ func (s *Sandbox) cleanupJob() {
 	}
 }
 
+func (s *Sandbox) Eject(funcName string) error {
+	inst, ok := s.runningFunctions[funcName]
+	if !ok {
+		return fmt.Errorf("No such function: %s", funcName)
+	}
+	if err := inst.Kill(); err != nil {
+		return err
+	}
+	delete(s.runningFunctions, funcName)
+	return nil
+}
+
 func (s *Sandbox) Flush() {
 	// Kill all running function instances
 	log.Infof("Stopping %d running functions...", len(s.runningFunctions))
-	for _, inst := range s.runningFunctions {
-		if err := inst.Kill(); err != nil {
-			log.Errorf("Error killing function instance %s: %s", inst.Name(), err)
+	for fnName := range s.runningFunctions {
+		if err := s.Eject(fnName); err != nil {
+			log.Errorf("Could not stop %s: %s", fnName, err)
 		}
 	}
 	s.runningFunctions = map[string]FunctionInstance{}

@@ -6,6 +6,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net/http"
@@ -81,6 +82,31 @@ func (client *MatterlessClient) GetAppCode(appName string) (string, error) {
 	}
 	resp.Body.Close()
 	return string(bodyData), nil
+}
+
+func (client *MatterlessClient) GetDefinitions(appName string) (*definition.Definitions, error) {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s/_defs", client.URL, appName), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "request failed")
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", client.Token))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "request failed")
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP Error: %s", resp.Status)
+	}
+
+	var defs definition.Definitions
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(&defs); err != nil {
+		return nil, errors.Wrap(err, "decode definitions")
+	}
+	return &defs, nil
 }
 
 func (client *MatterlessClient) ListApps() ([]string, error) {

@@ -104,6 +104,7 @@ func (ag *APIGateway) buildRouter(config *config.Config) {
 	ag.exposeStoreAPI()
 	ag.exposeEventAPI()
 	ag.exposeFunctionAPI()
+	ag.exposeApplicationAPI()
 
 	// Handle custom API endpoints
 	ag.rootRouter.HandleFunc("/{appName}/{path:.*}", func(writer http.ResponseWriter, request *http.Request) {

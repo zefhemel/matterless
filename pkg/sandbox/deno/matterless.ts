@@ -90,8 +90,21 @@ const functions = {
     }
 };
 
+async function restartApp() {
+    let result = await fetch(`${Deno.env.get("API_URL")}/_restart`, {
+        method: "POST",
+        headers: {
+            'Authorization': `bearer ${Deno.env.get("API_TOKEN")}`
+        },
+    })
+    if(result.status != 200) {
+        throw new Error(`HTTP request not ok: ${await result.text()}`);
+    }
+}
+
 export {
     store,
     events,
-    functions
+    functions,
+    restartApp
 }

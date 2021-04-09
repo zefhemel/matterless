@@ -19,30 +19,49 @@ The application registers a new `@db-bot` bot you can talk to, these are the com
 That's all!
 
 
+# import
+* file:lib/mattermost.md
 
-## Bot: DatabaseBot
+## mattermostBot DatabaseBot
 Defines the bot, here it is hardcoded to join the "Dev" team, please update that value to your particularly team you want to enable it for.
 ```yaml
-team_names:
-  - Office
+teams:
+  - Matterless
 username: db-bot
 display_name: Database bot
 description: My database bot
+url: ${config:url}
+admin_token: ${config:admin_token}
 events:
   posted:
     - HandleCommand
   post_edited:
     - HandleCommand
 ```
-----
-## Function: HandleCommand
+
+## function HandleCommand
 Implements the actual logic for the commands.
 
-```javascript
-import {Store, Mattermost} from "matterless";
-import YAML from "yaml";
+```yaml
+init:
+  url: ${config:url}
+  token: ${config:DatabaseBot.token}
+```
 
-let client = new Mattermost(process.env.DATABASEBOT_URL, process.env.DATABASEBOT_TOKEN);
+```javascript
+import {store} from "./matterless.ts";
+import YAML from "https://cdn.skypack.dev/yaml";
+import {Mattermost} from "https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost_client.js";
+
+let client;
+
+function init(cfg) {
+    if(!cfg.url || !cfg.token) {
+        console.error("URL and token not initialized yet");
+        return;
+    }
+    client = new Mattermost(cfg.url, cfg.token);
+}
 
 function jsonToMDTable(jsonArray) {
     let headers = {};
@@ -69,7 +88,10 @@ function jsonToMDTable(jsonArray) {
 
 
 async function handle(event) {
-    let store = new Store();
+    console.log("Got event", event);
+    if(!client) {
+        console.log("Not inited yet");
+    }
     let post = JSON.parse(event.data.post);
     let me = await client.getMeCached();
     

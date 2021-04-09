@@ -39,14 +39,16 @@ type eventSubscription struct {
 
 func NewApplication(cfg *config.Config, appName string) (*Application, error) {
 	appDataPath := fmt.Sprintf("%s/%s", cfg.DataDir, util.SafeFilename(appName))
+	eventBus := eventbus.NewLocalEventBus()
+
 	if err := os.MkdirAll(appDataPath, 0700); err != nil {
 		return nil, errors.Wrap(err, "create data dir")
 	}
-	dataStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/store", appDataPath))
+	levelDBStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/store", appDataPath))
 	if err != nil {
 		return nil, errors.Wrap(err, "create data store dir")
 	}
-	eventBus := eventbus.NewLocalEventBus()
+	dataStore := store.NewEventedStore(levelDBStore, eventBus)
 
 	apiToken := util.TokenGenerator()
 
@@ -180,6 +182,7 @@ func (app *Application) Eval(code string) error {
 	}
 
 	log.Info("Ready to go.")
+	app.eventBus.Publish("init", struct{}{})
 	return nil
 }
 

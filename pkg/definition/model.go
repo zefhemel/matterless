@@ -21,46 +21,46 @@ var summaryTemplate string
 var rerenderTemplate string
 
 type Definitions struct {
-	Imports        []string
-	Functions      map[FunctionID]*FunctionDef
-	Jobs           map[FunctionID]*JobDef
-	Events         map[string][]FunctionID
-	Macros         map[MacroID]*MacroDef
-	MacroInstances map[string]*MacroInstanceDef
+	Imports        []string                     `json:"imports,omitempty"`
+	Functions      map[FunctionID]*FunctionDef  `json:"functions"`
+	Jobs           map[FunctionID]*JobDef       `json:"jobs"`
+	Events         map[string][]FunctionID      `json:"events"`
+	Macros         map[MacroID]*MacroDef        `json:"macros"`
+	MacroInstances map[string]*MacroInstanceDef `json:"macro_instances,omitempty"`
 }
 
 type FunctionConfig struct {
-	Init        interface{} `yaml:"init,omitempty"`
-	Runtime     string      `yaml:"runtime,omitempty"`
-	DockerImage string      `yaml:"docker_image,omitempty"`
+	Init        interface{} `yaml:"init" json:"init,omitempty"`
+	Runtime     string      `yaml:"runtime" json:"runtime,omitempty"`
+	DockerImage string      `yaml:"docker_image" json:"docker_image,omitempty"`
 }
 
 type FunctionDef struct {
-	Name     string
-	Config   *FunctionConfig
-	Language string
-	Code     string
+	Name     string          `json:"name"`
+	Config   *FunctionConfig `json:"config,omitempty"`
+	Language string          `json:"language,omitempty"`
+	Code     string          `json:"code,omitempty"`
 }
 
 type JobDef struct {
-	Name     string
-	Config   *FunctionConfig
-	Language string
-	Code     string
+	Name     string          `json:"name"`
+	Config   *FunctionConfig `json:"config,omitempty"`
+	Language string          `json:"language,omitempty"`
+	Code     string          `json:"code,omitempty"`
 }
 
 type MacroDef struct {
-	Config       MacroConfig
-	TemplateCode string
+	Config       MacroConfig `json:"config"`
+	TemplateCode string      `json:"template_code"`
 }
 
 type MacroConfig struct {
-	InputSchema map[string]interface{} `yaml:"input_schema"`
+	InputSchema map[string]interface{} `yaml:"input_schema" json:"input_schema"`
 }
 
 type MacroInstanceDef struct {
-	Macro MacroID
-	Input interface{}
+	Macro MacroID     `json:"macro"`
+	Input interface{} `json:"input"`
 }
 
 var CodeGenFuncs = template.FuncMap{

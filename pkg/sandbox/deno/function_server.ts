@@ -23,6 +23,12 @@ Promise.resolve(init()).then(async () => {
                         headers: headers,
                         body: JSON.stringify(result || {})
                     });
+                }).catch(e => {
+                    request.respond({
+                        status: 500,
+                        headers: headers,
+                        body: jsonError(e)
+                    });
                 })
             } catch(e) {
                 request.respond({

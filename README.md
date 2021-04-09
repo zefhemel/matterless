@@ -237,11 +237,19 @@ function handle(event) {
 }
 ```
 
-There are a few built-in events. One example is the `http:GET:/myAPI` event, which will be invoked when requesting `http://yourmatterlessserver:8222/appname/myAPI` in our case now: `http://localhost:8222/README/myAPI` try it!
+## System events
 
-Here is the function definition that handles this event:
+### HTTP Events
+Matterless always spins up a HTTP server. This server serves multiple purposes:
+1. It allows a Matterless client to talk to a Matterless server, e.g. to deploy new applications, update them, delete them.
+2. It exposes built-in APIs to Matterless applications, such as for the data store, events and function invocation.
+3. Matterless applications can expose  custom HTTP endpoints, e.g. to be called by outside systems such as webhooks. 
 
-## function MyHTTPAPI
+This section is how to achieve that last one: create your own custom HTTP endpoints for your matterless application.
+
+All you need to do is listen to an event of a certain pattern, e.g. `http:GET:/myAPI`, which will be invoked when requesting, in this case: `http://localhost:8222/README/myAPI`. The pattern being: `$yourmatterlessserver/$appname/path`. HTTP events are named following the pattern `http:$method:$path`. The function that is triggered needs to respond to the event using the `events.respond` API as demonstrated bellow:
+
+#### function MyHTTPAPI
 ```javascript
 import {events} from "./matterless.ts";
 
@@ -267,6 +275,22 @@ The `req` event here will contain request data:
 * `request_params`: containing an object with request parameters (e.g. `?name=bla` would result in `{name: "bla"}`)
 * `form_values`:when posted as `application/x-www-form-urlencoded`
 * `json_body`: when posted as `application/json`
+
+### Store events
+Whenever a key is *put* or *deleted* from the store, an event is triggered with the pattern `store:put:$key` and `store:del:$key` containing the `key` and `new_value` (in case of puts) as data in the event. You can subscribe to specific updates to keys, or use the wildcard `*` notation to be notified of all changes to keys matching a certain pattern (in this case when any change is made to a key starting with `config:`):
+
+#### events
+```yaml
+"store:put:config:*":
+- ConfigChanged
+```
+
+#### function ConfigChanged
+```javascript
+function handle(event) {
+    console.log(`Config key ${event.key} was changed to "${event.new_value}"!`);
+}
+```
 
 
 ## macro httpApi

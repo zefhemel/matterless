@@ -177,10 +177,6 @@ waitLoop:
 }
 
 func (inst *denoFunctionInstance) Kill() error {
-	// Don't Kill until current run is over, if any
-	inst.runLock.Lock()
-	inst.runLock.Unlock()
-
 	if err := inst.cmd.Process.Kill(); err != nil {
 		log.Errorf("Error killing deno instance: %s", err)
 	}
@@ -191,6 +187,10 @@ func (inst *denoFunctionInstance) Kill() error {
 	}
 
 	return nil
+}
+
+type InvocationError struct {
+	err error
 }
 
 func (inst *denoFunctionInstance) Invoke(ctx context.Context, event interface{}) (interface{}, error) {
@@ -206,7 +206,7 @@ func (inst *denoFunctionInstance) Invoke(ctx context.Context, event interface{})
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
+		return nil, errors.Wrap(err, "function http request")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

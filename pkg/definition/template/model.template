@@ -21,6 +21,12 @@
 {{$def.Code -}}
 ```
 {{end}}
+{{- if .Events -}}
+## events
+```yaml
+{{yaml .Events -}}
+```
+{{- end -}}
 {{range $name, $def := .Macros}}
 ## macro {{$name}}
 ```yaml
@@ -30,9 +36,3 @@ Template:
 
     {{prefixLines "    " .TemplateCode}}
 {{end}}
-{{- if .Events -}}
-## events
-```yaml
-{{yaml .Events -}}
-```
-{{- end -}}

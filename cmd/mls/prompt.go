@@ -6,9 +6,11 @@ import (
 	"github.com/c-bata/go-prompt"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/client"
+	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
 	"os"
 	"strings"
+	"time"
 )
 
 func completer(in prompt.Document) []prompt.Suggest {
@@ -35,6 +37,26 @@ func completer(in prompt.Document) []prompt.Suggest {
 		}
 		return prompt.FilterHasPrefix(appNameSuggestions, w, false)
 	}
+	if strings.HasPrefix(in.Text, "invoke ") && promptContext.defs != nil {
+		functionNameSuggestions := make([]prompt.Suggest, 0)
+		for fnName, _ := range promptContext.defs.Functions {
+			functionNameSuggestions = append(functionNameSuggestions, prompt.Suggest{
+				Text:        string(fnName),
+				Description: "",
+			})
+		}
+		return prompt.FilterHasPrefix(functionNameSuggestions, w, false)
+	}
+	if strings.HasPrefix(in.Text, "trigger ") && promptContext.defs != nil {
+		eventNameSuggestions := make([]prompt.Suggest, 0)
+		for fnName, _ := range promptContext.defs.Events {
+			eventNameSuggestions = append(eventNameSuggestions, prompt.Suggest{
+				Text:        fnName,
+				Description: "",
+			})
+		}
+		return prompt.FilterHasPrefix(eventNameSuggestions, w, false)
+	}
 	if w == "" {
 		return []prompt.Suggest{}
 	}
@@ -60,6 +82,7 @@ func executor(cmd string) {
 			return
 		}
 		promptContext.appName = blocks[1]
+		fetchMetadata()
 	case "list":
 		appNames, err := promptContext.client.ListApps()
 		if err != nil {
@@ -158,6 +181,9 @@ func executor(cmd string) {
 		}
 		functionName := blocks[1]
 		valJson := strings.Join(blocks[2:], " ")
+		if valJson == "" {
+			valJson = "{}"
+		}
 		var obj interface{}
 		if err := json.Unmarshal([]byte(valJson), &obj); err != nil {
 			fmt.Printf("Could not parse value as JSON (%s): %s\n", err, valJson)
@@ -175,6 +201,7 @@ type PromptContext struct {
 	appName     string
 	client      *client.MatterlessClient
 	allAppNames []string
+	defs        *definition.Definitions
 }
 
 var promptContext = &PromptContext{}
@@ -188,11 +215,7 @@ func livePrefix() (string, bool) {
 
 func runConsole(client *client.MatterlessClient) {
 	promptContext.client = client
-	allApps, err := client.ListApps()
-	if err != nil {
-		log.Fatal(err)
-	}
-	promptContext.allAppNames = allApps
+	go metaDataFetcher()
 	p := prompt.New(
 		executor,
 		completer,
@@ -201,4 +224,29 @@ func runConsole(client *client.MatterlessClient) {
 		prompt.OptionTitle("mls"),
 	)
 	p.Run()
+}
+
+// Fetches meta data (app names, definitions) regularly for auto complete
+func metaDataFetcher() {
+	for {
+		fetchMetadata()
+		time.Sleep(10 * time.Second)
+	}
+}
+
+func fetchMetadata() {
+	allApps, err := promptContext.client.ListApps()
+	if err != nil {
+		log.Errorf("Could not fetch apps: %s", err)
+	} else {
+		promptContext.allAppNames = allApps
+	}
+	if promptContext.appName != "" {
+		defs, err := promptContext.client.GetDefinitions(promptContext.appName)
+		if err != nil {
+			log.Errorf("Could not fetch meta data for %s: %s", promptContext.appName, err)
+		} else {
+			promptContext.defs = defs
+		}
+	}
 }
