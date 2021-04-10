@@ -1,37 +1,21 @@
-# Import
+# import
 * file:lib/mattermost.md
-* file:lib/cron.md
 
-Or URL: https://raw.githubusercontent.com/zefhemel/matterless/reset/lib/mattermost.md
-
-# MattermostListener: MyClient
+# mattermostBot AwesomeBot2
 ```yaml
-url: ${config:url}
-token: ${config:token}
+url: https://zef.cloud.mattermost.com
+admin_token: ${config:admin_token}
+username: awesome-bot2
+teams:
+  - main
 events:
-  hello:
-    - MyCustomFunc
-  posted:
-    - MyCustomFunc
+  posted: 
+    - DebugEvent
 ```
 
-# Function: MyCustomFunc
+# function DebugEvent
 ```javascript
-import {invokeFunction} from "./matterless.ts";
-
-async function handle(event) {
-    console.log("Got custom event", event);
-    return {
-        secretMessag: "Yo" + await invokeFunction("MyAuxFunction")
-    };
+function handle(event) {
+    console.log("Got mattermost event", event);
 }
 ```
-
-# Function: MyAuxFunction
-
-```javascript
-function handle() {
-    return {number: 22};
-}
-```
-

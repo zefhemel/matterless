@@ -1,5 +1,6 @@
-# Application Database Bot
+# Data store bot
 This example uses the Mattermost store API to implement a CLI-style database application.
+
 The Matterless store API is a simple key-value store, so operations are limited, but this adds a few niceties.
 
 The application registers a new `@db-bot` bot you can talk to, these are the commands supported:
@@ -23,11 +24,12 @@ To configure this DB bot you need to set the following configuration variables i
 
 * `config:url`: URL to your Mattermost installation
 * `config:admin_token`: Personal access token for an admin user, enabling this app to create the necessary "db-bot" bot.
+* `config:team`: Name of the team for the bot to join
 
 That's it!
 
 # import
-* file:lib/mattermost.md
+* https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost.md
 
 ## mattermostBot DatabaseBot
 Defines the bot, here it is hardcoded to join the "Dev" team, please update that value to your particularly team you want to enable it for.
@@ -36,7 +38,7 @@ username: db-bot
 display_name: Database bot
 description: My database bot
 teams:
-  - Matterless
+  - ${config:team}
 url: ${config:url}
 admin_token: ${config:admin_token}
 events:

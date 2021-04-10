@@ -166,7 +166,7 @@ Template:
     ```
     
     ```javascript
-    import {store} from "./matterless.ts";
+    import {store, restartApp} from "./matterless.ts";
     import {Mattermost} from "https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost_client.js";
     
     let client;
@@ -193,7 +193,7 @@ Template:
                 display_name: config.display_name,
                 description: config.description
             });
-            user.id = user.bot_user_id;
+            user.id = user.user_id;
         }
         // User exists, let's create a token
         let token = await client.createUserAccessToken(user.id, "Matterless generated token");
@@ -201,5 +201,6 @@ Template:
             return client.addUserToTeam(user.id, (await client.getTeamByName(teamName)).id);
         }));
         await store.put(config.bot_token_config, token.token);
+        restartApp();
     }
     ```
