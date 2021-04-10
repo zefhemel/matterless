@@ -222,7 +222,7 @@ Using events mappings we define which events should invoke which functions. Mult
 ```yaml
 starschanged:
   - StarGazeReporter
-"http:GET:/myAPI":
+http:GET:/myAPI:
   - MyHTTPAPI
 ```
 
@@ -277,7 +277,7 @@ Whenever a key is *put* or *deleted* from the store, an event is triggered with 
 
 #### events
 ```yaml
-"store:put:config:*":
+store:put:config:*:
 - ConfigChanged
 ```
 
@@ -287,6 +287,15 @@ function handle(event) {
     console.log(`Config key ${event.key} was changed to "${event.new_value}"!`);
 }
 ```
+
+Try it to see that this works via the mls console:
+
+	README> put config:myRandomConfig "Matterless is cool"
+
+Which should log something along the lines of
+
+	INFO[0014] [App: README | Function: ConfigChanged] Starting deno function runtime. 
+	INFO[0014] [App: README | Function: ConfigChanged] Config key config:myRandomConfig was changed to "Matterless is cool"! 
 
 
 ## macro httpApi
@@ -340,6 +349,8 @@ function: MyHTTPAPI
 ```
 
 Now, simply visit http://localhost:8222/README/anotherAPI to see that it works!
+
+Need more? Have a look at the [samples](https://github.com/zefhemel/matterless/tree/master/samples) and the start of a Matterless [standard library](https://github.com/zefhemel/matterless/tree/master/lib) of macros.
 
 # Installing Matterless
 Requirements:
