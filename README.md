@@ -105,13 +105,9 @@ Save this to `hello.md` and run it as follows:
 $ mls run hello.md
 ```
 
-This will do shockingly little, because nothing is invoking this function yet. However, Matterless comes with a simple console we can use to manually invoke this function (if you don't see the `>` prompt hit Enter first). First we need to switch to the `hello` application:
+This will do shockingly little, because nothing is invoking this function yet. However, Matterless comes with a simple console we can use to manually invoke this function (if you don't see the `hello>` prompt hit Enter first).
 
-```
-> use hello
-```
-
-Then, we can invoke our function with an empty object:
+We can manually invoke our function with an empty event as follows:
 
 ```
 hello> invoke HelloWorld {}
@@ -294,7 +290,13 @@ function handle(event) {
 
 
 ## macro httpApi
-And finally, Mattreless supports macros!
+What makes Matterless really powerful is the ability to add new definition types using Matterless itself.
+
+The idea is simple, yet powerful. You define a macro, and define its inputs (the YAML attributes that need to be passed to instantiate it) using YAML schema (which is really JSON schema encoded in YAML). 
+
+Let me explain this with a simple example. Let's say you don't like the event notation to create HTTP endpoints, and would like to introduce a specialized "httpApi" definition type that is nicer to read and write. We can achieve this as follows.
+
+First we define the input schema:
 
 ```yaml
 input_schema:
@@ -312,7 +314,15 @@ input_schema:
     - function
 ```
 
-And the template:
+This specifies the `httpApi` macro takes three required properties:
+
+* `path` (the URL path to match), a string
+* `method` (the HTTP method), also a string
+* `function` the Matterless function to trigger when the endpoint is called.
+
+Then, we define a template to translate this using the [Go template syntax](https://golang.org/pkg/text/template/). Inside this template we can use two special variables: `$name` which will contain the name of the template definition (e.g. when we create `httpApi MyAPI` then `$name` will contain `MyAPI`), and `$input` which will contain all input properties.
+
+Here is the template:
 
     ## events
     ```yaml
@@ -320,8 +330,7 @@ And the template:
     - {{$input.function}}
     ```
 
-
-And the instantiation
+That's all, now we can use it:
 
 ## httpApi MyAPI
 ```yaml
@@ -330,17 +339,13 @@ method: GET
 function: MyHTTPAPI
 ```
 
+Now, simply visit http://localhost:8222/README/anotherAPI to see that it works!
 
-
-# Installation
+# Installing Matterless
 Requirements:
 * Go 1.16 or newer
 
 Tested on Mac (Apple Silicon) and Linux (AMD64), although other platforms should work as well.
-
-**Warning:** This is still early stage software, I recommend you only use it with development or testing instances of Mattermost, not production ones.
-
-To install Matterless:
 
 ```shell
 $ go get github.com/zefhemel/matterless/...
@@ -356,6 +361,7 @@ Matterless has three modes of operation:
     ```shell
    $ mls run -w myapp.md 
    ```
+   It will also immediately kick you into the Matterless console, which allows you to manually trigger events, invoke functions and perform various store operations.
 2. Server mode by simply running `mls` optionally with arguments like `-p` to bind to a specific port (defaults to `8222`), `--data` to select the data directory (default: `./mls-data`) and `--token` to use a specific admin token (generates one by default):
     ```shell
     $ mls --data /var/data/mls 
