@@ -18,6 +18,13 @@ The application registers a new `@db-bot` bot you can talk to, these are the com
 
 That's all!
 
+## Configuration
+To configure this DB bot you need to set the following configuration variables in the store:
+
+* `config:url`: URL to your Mattermost installation
+* `config:admin_token`: Personal access token for an admin user, enabling this app to create the necessary "db-bot" bot.
+
+That's it!
 
 # import
 * file:lib/mattermost.md
@@ -25,11 +32,11 @@ That's all!
 ## mattermostBot DatabaseBot
 Defines the bot, here it is hardcoded to join the "Dev" team, please update that value to your particularly team you want to enable it for.
 ```yaml
-teams:
-  - Matterless
 username: db-bot
 display_name: Database bot
 description: My database bot
+teams:
+  - Matterless
 url: ${config:url}
 admin_token: ${config:admin_token}
 events:

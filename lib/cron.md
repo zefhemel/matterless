@@ -1,5 +1,12 @@
 # Cron
-This Matterless definition file defines a `cron` macro. 
+This Matterless definition file defines a `cron` macro. You can define multiple crons in one go, example use:
+
+    # cron MyCron
+    ```
+    SomeMeaningfullName:
+      schedule: "* * * * * *"
+      function: EverySecond
+    ```
 
 # macro cron
 Implements a simple cronjob scheduler.

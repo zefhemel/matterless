@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/util"
+	"github.com/zefhemel/yamlschema"
 	"io"
 	"net/http"
 	"os"
@@ -18,16 +19,21 @@ import (
 func (defs *Definitions) ExpandMacros() error {
 	for len(defs.MacroInstances) > 0 {
 		for name, def := range defs.MacroInstances {
-			tmpl, ok := defs.Macros[def.Macro]
+			macro, ok := defs.Macros[def.Macro]
 			if !ok {
 				return fmt.Errorf("No such macro: %s", def.Macro)
 			}
+
+			if err := yamlschema.ValidateObjects(macro.Config.InputSchema, def.Input); err != nil {
+				return errors.Wrapf(err, "macro expansion: %s: %s", name, err)
+			}
+
 			t := template.New("template")
 			t.Funcs(CodeGenFuncs)
 			t2, err := t.Parse(fmt.Sprintf(`
 {{- $name := .Name -}}
 {{- $input := .Input -}}
-%s`, tmpl.TemplateCode))
+%s`, macro.TemplateCode))
 			if err != nil {
 				return errors.Wrap(err, "parsing template")
 			}

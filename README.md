@@ -19,7 +19,7 @@ Matterless brings the powerful serverless programming model to your own server, 
 
 Why?
 
-1. Matterless is distributed as a **single binary** with no required dependencies (although to use docker as a runtime, you will need… docker).
+1. Matterless is distributed as a **single binary** with no required dependencies (Matterless relies on [Deno](https://deno.land/) as its main runtime, but will download it on-the-fly).
 2. Matterless requires **zero configuration**  to run (although it does give you options).
 3. Matterless is **light-weight**: it runs fine on a Raspberry Pi. There's no fancy container orchestration, kubernetes or firecrackers involved.
 4. Matterless enables **extremely rapid iteration**: Matterless applications tend to (re)deploy within seconds. A common mode of develoment is to have Matterless watch for file changes and reload on every file save.

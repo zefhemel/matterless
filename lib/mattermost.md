@@ -126,7 +126,9 @@ input_schema:
   additionalProperties: false
   required:
     - url
-    - token
+    - admin_token
+    - username
+    - teams
 ```
 
 Template:

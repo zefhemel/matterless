@@ -1,60 +1,75 @@
-# function PollGithubRepoEvents
+# Github Repository Watcher
 [List of github event types](https://docs.github.com/en/developers/webhooks-and-events/github-event-types)
 
+
+# macro githubRepoWatcher
+
 ```yaml
-init:
-  token: ${config:github.token}
-  repo: mattermost/mattermost-server
-  event_prefix: mm-server
-  events:
-    - PushEvent
-    - PullRequestEvent 
+input_schema:
+  type: object
+  properties:
+    repo:
+      type: string
+    token:
+      type: string
+  required:
+  - repo
+  - token
 ```
 
-```javascript
-import { Octokit } from "https://cdn.skypack.dev/@octokit/rest";
-import { Store, publishEvent } from "./matterless.ts";
+And the template itself:
 
-let octokit, config;
-let store = new Store();
-
-function init(cfg) {
-    octokit = new Octokit({
-        auth: cfg.token
-    });
-    config = cfg;
-}
-
-async function handle() {
-    let [org, repo] = config.repo.split('/');
-    let results = await octokit.rest.activity.listRepoEvents({
-        owner: org,
-        repo: repo,
-        per_page: 100
-    });
+    # function {{$name}}PollGithubEvents
     
-    let lastSeenEvent = await store.get("github:lastSeenEvent"); 
+    ```yaml
+    init:
+      token: ${config:github.token}
+      repo: mattermost/mattermost-server
+      event_prefix: {{$name}}
+    ```
     
-    if(results.status === 200) {
-        let newEvents = 0;
-        for(let event of results.data) {
-            if(event.id === lastSeenEvent) {
-                break;
-            }
-            if(config.events.indexOf(event.type) !== -1) {
+    ```javascript
+    import { Octokit } from "https://cdn.skypack.dev/@octokit/rest";
+    import { Store, publishEvent } from "./matterless.ts";
+    
+    let octokit, config;
+    let store = new Store();
+    
+    function init(cfg) {
+        octokit = new Octokit({
+            auth: cfg.token
+        });
+        config = cfg;
+    }
+    
+    async function handle() {
+        let [org, repo] = config.repo.split('/');
+        let results = await octokit.rest.activity.listRepoEvents({
+            owner: org,
+            repo: repo,
+            per_page: 100
+        });
+        
+        let lastSeenEvent = await store.get("github:lastSeenEvent"); 
+        
+        if(results.status === 200) {
+            let newEvents = 0;
+            for(let event of results.data) {
+                if(event.id === lastSeenEvent) {
+                    break;
+                }
                 await publishEvent(`${config.event_prefix}:${event.type}`, event);
+                newEvents++;
             }
-            newEvents++;
-        }
-        if(results.data.length > 0) {
-            // await store.put("github:lastSeenEvent", results.data[0].id);
-        }
-        return {
-            newEvents
+            if(results.data.length > 0) {
+                await store.put("github:lastSeenEvent", results.data[0].id);
+            }
+            return {
+                newEvents
+            }
         }
     }
-}
-```
+    ```
 
 # events
 ```yaml

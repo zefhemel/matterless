@@ -219,11 +219,11 @@ func (client *MatterlessClient) DeployApp(appName, code string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyData, _ := io.ReadAll(resp.Body)
+		bodyData, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return errors.Wrap(err, "read response body")
 		}
-		return errors.Wrapf(err, "app update error: %s", bodyData)
+		return fmt.Errorf("app update error: %s", bodyData)
 	}
 	return nil
 }
