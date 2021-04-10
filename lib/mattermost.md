@@ -61,9 +61,10 @@ This is the macro:
                         }
                     }
                 ));
-            })
+            });
             socket.addEventListener('message', function (event) {
                 const parsedEvent = JSON.parse(event.data)
+                console.log('Message from server ', parsedEvent);
                 if(parsedEvent.seq_reply === 1) {
                     // Auth response
                     if(parsedEvent.status === "OK") {
@@ -72,10 +73,12 @@ This is the macro:
                         return reject(event);
                     }
                 }
-                console.log('Message from server ', parsedEvent);
                 if(config.events.indexOf(parsedEvent.event) !== -1) {
                     events.publish(`${config.name}:${parsedEvent.event}`, parsedEvent);
                 }
+            });
+            socket.addEventListener('close', function(event) {
+               console.error("Connection closed, authentication failed?");
             });
         });
     }
