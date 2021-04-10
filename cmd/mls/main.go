@@ -34,7 +34,7 @@ func runCommand() *cobra.Command {
 				return
 			}
 
-			runConsole(mlsClient)
+			runConsole(mlsClient, args)
 		},
 	}
 	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "watch apps for changes and reload")
@@ -71,7 +71,7 @@ func deployCommand() *cobra.Command {
 				return
 			}
 
-			runConsole(mlsClient)
+			runConsole(mlsClient, args)
 		},
 	}
 

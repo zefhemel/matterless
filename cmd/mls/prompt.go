@@ -213,8 +213,11 @@ func livePrefix() (string, bool) {
 	return promptContext.appName + "> ", true
 }
 
-func runConsole(client *client.MatterlessClient) {
-	promptContext.client = client
+func runConsole(c *client.MatterlessClient, filePaths []string) {
+	promptContext.client = c
+	if len(filePaths) == 1 {
+		promptContext.appName = client.AppNameFromPath(filePaths[0])
+	}
 	go metaDataFetcher()
 	p := prompt.New(
 		executor,

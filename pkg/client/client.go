@@ -27,7 +27,7 @@ func NewMatterlessClient(url string, token string) *MatterlessClient {
 	}
 }
 
-func appNameFromPath(path string) string {
+func AppNameFromPath(path string) string {
 	return strings.Replace(filepath.Base(path), ".md", "", 1)
 }
 
@@ -42,7 +42,7 @@ func (client *MatterlessClient) DeployAppFiles(files []string, watch bool) error
 		if err != nil {
 			return errors.Wrapf(err, "read file: %s", path)
 		}
-		if err := client.DeployApp(appNameFromPath(path), string(data)); err != nil {
+		if err := client.DeployApp(AppNameFromPath(path), string(data)); err != nil {
 			return errors.Wrap(err, "deploy")
 		}
 		err = watcher.Add(path)
@@ -321,8 +321,8 @@ eventLoop:
 					log.Fatalf("Could not open file %s: %s", path, err)
 					continue eventLoop
 				}
-				if err := client.DeployApp(appNameFromPath(path), string(data)); err != nil {
-					log.Errorf("Could not redeploy app %s: %s", appNameFromPath(path), err)
+				if err := client.DeployApp(AppNameFromPath(path), string(data)); err != nil {
+					log.Errorf("Could not redeploy app %s: %s", AppNameFromPath(path), err)
 				}
 			}
 		case err, ok := <-watcher.Errors:
