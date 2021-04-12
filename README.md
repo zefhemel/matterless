@@ -34,6 +34,8 @@ Nevertheless, its programming model is very serverless-esque, because you...
 * Use the Matterless **store API** (a simple key-value store) to store persistent application data.
 * (Coming soon) Use Matterless **queues** to schedule work to be performed asynchronously.
 
+![Matterless architecture](images/matterless-arch.png)
+
 In addition, to enable extending Matterless in Matterless (it’s [Matterless all the way down](https://en.wikipedia.org/wiki/Turtles_all_the_way_down)), Matterless adds:
 
 * Matterless **jobs** to write code that runs continuously in the background and connects with external systems, generally exposing anything interesting inside your application as events (e.g. via a (web)socket connection, or polling).
