@@ -30,27 +30,26 @@ input_schema:
 
 Template:
 
-    # Job: CronJob
+    # job CronJob
     ```yaml
     init:
       {{yaml $input | prefixLines "  "}}
     ```
     ```javascript
     import {cron} from 'https://deno.land/x/deno_cron@v1.0.0/cron.ts';
-    import {publishEvent} from "./matterless.ts";
+    import {events} from "./matterless.ts";
     
     function init(config) {
-        console.log("Config", config)
         Object.keys(config).forEach(cronName => {
             let cronDef = config[cronName];
             cron(cronDef.schedule, () => {
-                publishEvent(`cron:${cronName}`, {});
+                events.publish(`cron:${cronName}`, {});
             });
         });
     }
     ```
     
-    # Events
+    # events
     ```
     {{range $cronName, $def := $input}}
     "cron:{{$cronName}}":
