@@ -33,6 +33,7 @@ init:
 
 ```javascript
 import {store, events} from "./matterless.ts";
+import {Mattermost} from "https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost_client.js";
 let client, eventName;
 
 const lastSeenStoreKey = "mmwatcher_lastSeenNewest";

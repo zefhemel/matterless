@@ -49,20 +49,21 @@ type FunctionInstance interface {
 
 type JobInstance interface {
 	Name() string
-	Start() error
-	Stop() error
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
 }
 
 type Sandbox struct {
-	config                  *config.Config
-	runningFunctions        map[string]FunctionInstance
-	runningJobs             map[string]JobInstance
-	ticker                  *time.Ticker
-	done                    chan struct{}
-	internalStateUpdateLock sync.RWMutex
-	eventBus                eventbus.EventBus
-	apiURL                  string
-	apiToken                string
+	config             *config.Config
+	runningFunctions   map[string]FunctionInstance
+	runningJobs        map[string]JobInstance
+	ticker             *time.Ticker
+	done               chan struct{}
+	globalFunctionLock sync.Mutex
+	globalJobLock      sync.Mutex
+	eventBus           eventbus.EventBus
+	apiURL             string
+	apiToken           string
 }
 
 // NewSandbox creates a new dockerFunctionInstance of the sandbox
@@ -73,8 +74,8 @@ func NewSandbox(config *config.Config, apiURL string, apiToken string, eventBus 
 		config:           config,
 		runningFunctions: map[string]FunctionInstance{},
 		runningJobs:      map[string]JobInstance{},
-		eventBus:         eventBus,
 		done:             make(chan struct{}),
+		eventBus:         eventBus,
 		apiURL:           apiURL,
 		apiToken:         apiToken,
 	}
@@ -98,9 +99,10 @@ func (s *Sandbox) Function(ctx context.Context, name string, functionConfig *def
 		err  error
 		ok   bool
 	)
-	s.internalStateUpdateLock.RLock()
+	// TODO: Don't limit to one function instantiation at a time
+	s.globalFunctionLock.Lock()
+	defer s.globalFunctionLock.Unlock()
 	inst, ok = s.runningFunctions[name]
-	s.internalStateUpdateLock.RUnlock()
 
 	if !ok {
 		if functionConfig.Runtime == "" {
@@ -117,9 +119,7 @@ func (s *Sandbox) Function(ctx context.Context, name string, functionConfig *def
 		if err != nil {
 			return nil, err
 		}
-		s.internalStateUpdateLock.Lock()
 		s.runningFunctions[name] = inst
-		s.internalStateUpdateLock.Unlock()
 	}
 	return inst, nil
 }
@@ -131,9 +131,9 @@ func (s *Sandbox) Job(ctx context.Context, name string, functionConfig *definiti
 		ok   bool
 	)
 
-	s.internalStateUpdateLock.RLock()
+	s.globalJobLock.Lock()
+	defer s.globalJobLock.Unlock()
 	inst, ok = s.runningJobs[name]
-	s.internalStateUpdateLock.RUnlock()
 	if !ok {
 		if functionConfig.Runtime == "" {
 			functionConfig.Runtime = DefaultRuntime
@@ -149,9 +149,7 @@ func (s *Sandbox) Job(ctx context.Context, name string, functionConfig *definiti
 			return nil, err
 		}
 
-		s.internalStateUpdateLock.Lock()
 		s.runningJobs[name] = inst
-		s.internalStateUpdateLock.Unlock()
 	}
 	return inst, nil
 }
@@ -218,9 +216,12 @@ func (s *Sandbox) Flush() {
 	// Stop all running jobs
 	log.Infof("Stopping %d running jobs...", len(s.runningJobs))
 	for _, inst := range s.runningJobs {
-		if err := inst.Stop(); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), s.config.SandboxJobStopTimeout)
+		if err := inst.Stop(ctx); err != nil {
+			cancel()
 			log.Errorf("Error stopping job %s: %s", inst.Name(), err)
 		}
+		cancel()
 	}
 	s.runningJobs = map[string]JobInstance{}
 }

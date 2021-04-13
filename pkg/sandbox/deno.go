@@ -107,6 +107,8 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 	if runMode == RunModeJob {
 		runModeString = "job"
 	}
+
+	// Create deno project for function
 	denoDir := fmt.Sprintf("%s/.deno/%s-%s", config.DataDir, runModeString, newFunctionHash(name, code))
 	if err := os.MkdirAll(denoDir, 0700); err != nil {
 		return nil, errors.Wrap(err, "create deno dir")
@@ -121,6 +123,7 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 		return nil, errors.Wrap(err, "write JS function file")
 	}
 
+	// Find an available TCP port to bind the function server to
 	listenPort := util.FindFreePort(8000)
 
 	// Run deno as child process with only network and environment variable access
@@ -141,9 +144,14 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 	}
 
 	// Kick off the command in the background
+	// Making it buffered to prevent go-routine leak (we don't care for the result after initial start-up)
+	denoExited := make(chan error, 1)
 	if err := inst.cmd.Start(); err != nil {
 		return nil, errors.Wrap(err, "deno run")
 	}
+	go func() {
+		denoExited <- inst.cmd.Wait()
+	}()
 
 	// Listen to the stderr and log pipes and ship everything to logChannel
 	bufferedStdout := bufio.NewReader(stdoutPipe)
@@ -164,6 +172,8 @@ waitLoop:
 				return nil, ctx.Err()
 			}
 			break waitLoop
+		case err := <-denoExited:
+			return nil, err
 		default:
 		}
 		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", listenPort))
@@ -193,18 +203,24 @@ type InvocationError struct {
 	err error
 }
 
+var ProcessExitedError = errors.New("process exited")
+
 func (inst *denoFunctionInstance) Invoke(ctx context.Context, event interface{}) (interface{}, error) {
+	// Instance can only be used sequentially for now
 	inst.runLock.Lock()
 	defer inst.runLock.Unlock()
 
 	inst.lastInvoked = time.Now()
 
-	httpClient := http.DefaultClient
+	if inst.cmd.ProcessState != nil && inst.cmd.ProcessState.Exited() {
+		return nil, ProcessExitedError
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, inst.serverURL, strings.NewReader(util.MustJsonString(event)))
 	if err != nil {
 		return nil, errors.Wrap(err, "invoke call")
 	}
-	resp, err := httpClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "function http request")
 	}
@@ -237,6 +253,7 @@ func (inst *denoFunctionInstance) Invoke(ctx context.Context, event interface{})
 // ======= Jobs ============
 
 type denoJobInstance struct {
+	// Jobs are mostly functions with only a few differences
 	denoFunctionInstance
 }
 
@@ -259,10 +276,8 @@ func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL strin
 	return inst, nil
 }
 
-func (inst *denoJobInstance) Start() error {
-	startCtx, cancel := context.WithTimeout(context.Background(), inst.config.SandboxJobStartTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(startCtx, http.MethodGet, fmt.Sprintf("%s/start", inst.serverURL), nil)
+func (inst *denoJobInstance) Start(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/start", inst.serverURL), nil)
 	if err != nil {
 		return errors.Wrap(err, "invoke call")
 	}
@@ -279,10 +294,8 @@ func (inst *denoJobInstance) Start() error {
 	return nil
 }
 
-func (inst *denoJobInstance) Stop() error {
-	startCtx, cancel := context.WithTimeout(context.Background(), inst.config.SandboxJobStopTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(startCtx, http.MethodGet, fmt.Sprintf("%s/stop", inst.serverURL), nil)
+func (inst *denoJobInstance) Stop(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/stop", inst.serverURL), nil)
 	if err != nil {
 		return errors.Wrap(err, "stop call")
 	}

@@ -4,6 +4,44 @@ Super elementary focalboard integration example. Requires the following store va
 * `config:focalboard.url`
 * `config:focalboard.token`
 
+Publishes `focalboard:update` event.
+
+# events
+```
+focalboard:create:
+- MyFocaCreateFunction
+focalboard:update:
+- MyFocaUpdateFunction
+focalboard:delete:
+- MyFocalDeleteFunction
+```
+
+# function MyFocaCreateFunction
+```javascript
+function handle(event) {
+    console.log("Card create", event.block);
+}
+```
+
+# function MyFocaUpdateFunction
+```javascript
+function handle(event) {
+    console.log("Card update", event.block);
+}
+```
+
+# function MyFocalDeleteFunction
+```javascript
+function handle(event) {
+    console.log("Card deleted", event.block);
+}
+```
+
+
+
+
+
+
 
 # job FocalBoardListener
 ```yaml
@@ -11,15 +49,16 @@ init:
   url: ${config:focalboard.url}
   token: ${config:focalboard.token}
   workspaceId: "0"
-  event: "focalboard:update"
+  create_event: "focalboard:create"
+  update_event: "focalboard:update"
+  delete_event: "focalboard:delete"
 ```
 
 ```javascript
-import {publishEvent} from "./matterless.ts";
-import { Focalboard } from "https://gist.githubusercontent.com/zefhemel/cdfddf3276524dc2cf18b9d133734e83/raw/81cc9721c20f40e1f04bbc0103797e2e18e9496d/focalboard-deno.js"
+import {events} from "./matterless.ts";
 
 let config;
-let fb;
+let fb, socket;
 
 async function init(cfg) {
     config = cfg;
@@ -30,7 +69,7 @@ async function init(cfg) {
     }
     fb = new Focalboard(config.url, config.token, config.workspaceId);
     const wsUrl = `${config.url}/ws/onchange`.replaceAll("https://", "wss://").replaceAll("http://", "ws://");
-    const socket = new WebSocket(wsUrl);
+    socket = new WebSocket(wsUrl);
     socket.addEventListener('open', e => {
         socket.send(JSON.stringify({
             action: "AUTH",
@@ -47,26 +86,57 @@ async function init(cfg) {
         });
     })
     socket.addEventListener('message', function (event) {
+        // console.log("Got event", event)
         let parsedMessage = JSON.parse(event.data);
-        publishEvent(config.event, parsedMessage);
+        if(parsedMessage.action === 'UPDATE_BLOCK' && parsedMessage.block.deleteAt) {
+            events.publish(config.delete_event, parsedMessage);
+        } else if(parsedMessage.block.updateAt === parsedMessage.block.createAt) {
+            events.publish(config.create_event, parsedMessage);
+        } else {
+            events.publish(config.update_event, parsedMessage);
+        }
     });
+    socket.addEventListener('close', function() {
+        console.error("Connection closed");
+    })
 }
 
 function stop() {
     console.log("Shutting down focalboard listener");
-    // wsClient.close();
+    socket.close();
 }
-```
 
-# events
-```
-"focalboard:update":
-- MyFocalFunction
-```
+export class Focalboard {
+    constructor(url, token, workspaceId) {
+        this.url = url;
+        this.token = token;
+        this.workspaceId = workspaceId;
+    }
 
-# function MyFocalFunction
-```javascript
-function handle(event) {
-    console.log("Received event", event);
+    async allBlocks() {
+        let result = await fetch(`${this.url}/api/v1/workspaces/${this.workspaceId}/blocks?type=board`, {
+            headers: {
+                "accept": "application/json",
+                "authorization": `Bearer ${this.token}`,
+                "x-requested-with": "XMLHttpRequest"
+            },
+            "method": "GET",
+        });
+        return await result.json();
+    }
+
+    async addBlock(blocks) {
+        let result = fetch(`${this.url}/api/v1/workspaces/${this.workspaceId}/blocks`, {
+            "headers": {
+                "accept": "application/json",
+                "authorization": `Bearer ${this.token}`,
+                "content-type": "application/json",
+                "x-requested-with": "XMLHttpRequest"
+            },
+            "body": JSON.stringify(blocks),
+            "method": "POST",
+        });
+        return await result.json();
+    }
 }
 ```

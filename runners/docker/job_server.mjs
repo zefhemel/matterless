@@ -10,6 +10,9 @@ const server = http.createServer((req, res) => {
             // Kick off the run() function asynchronously
             Promise.resolve(run()).catch(e => {
                 console.error(e);
+            }).catch(e => {
+                res.writeHead(500);
+                res.end(jsonError(e));
             });
         }).catch(e => {
             res.writeHead(500);

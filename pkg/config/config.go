@@ -14,7 +14,7 @@ type Config struct {
 
 	FunctionRunTimeout         time.Duration
 	HTTPGatewayResponseTimeout time.Duration
-	JobInitTimeout             time.Duration
+	SanboxJobInitTimeout       time.Duration
 	SandboxCleanupInterval     time.Duration
 	SandboxFunctionKeepAlive   time.Duration
 	SandboxJobStartTimeout     time.Duration
@@ -25,10 +25,10 @@ func NewConfig() *Config {
 	return &Config{
 		FunctionRunTimeout:         1 * time.Minute,
 		HTTPGatewayResponseTimeout: 10 * time.Second,
-		JobInitTimeout:             20 * time.Second,
+		SanboxJobInitTimeout:       10 * time.Second,
+		SandboxJobStartTimeout:     10 * time.Second,
+		SandboxJobStopTimeout:      2 * time.Second,
 		SandboxCleanupInterval:     1 * time.Minute,
 		SandboxFunctionKeepAlive:   2 * time.Minute,
-		SandboxJobStartTimeout:     30 * time.Second,
-		SandboxJobStopTimeout:      2 * time.Second,
 	}
 }

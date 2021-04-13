@@ -249,10 +249,8 @@ func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string
 	return inst, nil
 }
 
-func (inst *dockerJobInstance) Start() error {
-	startCtx, cancel := context.WithTimeout(context.Background(), inst.config.SandboxJobStartTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(startCtx, http.MethodGet, fmt.Sprintf("%s/start", inst.serverURL), nil)
+func (inst *dockerJobInstance) Start(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/start", inst.serverURL), nil)
 	if err != nil {
 		return errors.Wrap(err, "invoke call")
 	}
@@ -269,10 +267,8 @@ func (inst *dockerJobInstance) Start() error {
 	return nil
 }
 
-func (inst *dockerJobInstance) Stop() error {
-	startCtx, cancel := context.WithTimeout(context.Background(), inst.config.SandboxJobStopTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(startCtx, http.MethodGet, fmt.Sprintf("%s/stop", inst.serverURL), nil)
+func (inst *dockerJobInstance) Stop(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/stop", inst.serverURL), nil)
 	if err != nil {
 		return errors.Wrap(err, "stop call")
 	}

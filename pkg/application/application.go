@@ -80,8 +80,6 @@ func (app *Application) LoadFromDisk() error {
 	} else {
 		return err
 	}
-
-	return nil
 }
 
 // Only for testing
@@ -164,15 +162,19 @@ func (app *Application) Eval(code string) error {
 
 	log.Info("Starting jobs...")
 	for name, def := range defs.Jobs {
-		timeOutCtx, cancel := context.WithTimeout(context.Background(), app.config.JobInitTimeout)
-		job, err := app.sandbox.Job(timeOutCtx, string(name), def.Config, def.Code)
+		jobTimeoutCtx, cancel := context.WithTimeout(context.Background(), app.config.SanboxJobInitTimeout)
+		job, err := app.sandbox.Job(jobTimeoutCtx, string(name), def.Config, def.Code)
 		if err != nil {
 			cancel()
 			return errors.Wrap(err, "init job")
 		}
-		if err := job.Start(); err != nil {
+		cancel()
+		jobStartTimeoutCtx, cancel := context.WithTimeout(context.Background(), app.config.SandboxJobStartTimeout)
+		if err := job.Start(jobStartTimeoutCtx); err != nil {
+			cancel()
 			return errors.Wrap(err, "start job")
 		}
+		cancel()
 	}
 
 	if app.config.PersistApps {
