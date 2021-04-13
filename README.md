@@ -1,8 +1,8 @@
-# Matterless: putting serverless on your server
 [![Go Report Card](https://goreportcard.com/badge/github.com/zefhemel/matterless)](https://goreportcard.com/report/github.com/zefhemel/matterless)
-![LOC](https://img.shields.io/tokei/lines/github/zefhemel/matterless
+![LOC](https://img.shields.io/tokei/lines/github/zefhemel/matterless)
+[![Coverage](https://img.shields.io/codecov/c/github/zefhemel/matterless/master.svg)](https://app.codecov.io/gh/zefhemel/matterless)
 
-)
+# Matterless: putting serverless on your server
 [Serverless](https://en.wikipedia.org/wiki/Serverless_computing) is a generally agreed poorly named concept (but it's too late now) that enables you to build applications that automatically scale with demand. And your wallet. Within seconds, serverless application can scale from handling 0 requests per day to thousands of requests per second. This is the power of the cloud at its best.
 
 But, **what if** all you want is check open pull requests on your Github repo at 9am every morning, and send a reminder message on your team’s chat channel?
