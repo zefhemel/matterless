@@ -29,6 +29,6 @@ jobs:
       run: make test-short
 
     - name: Run coverage
-      run: go test -coverprofile=coverage.txt -covermode=atomic ./pkg/...
+      run: go test -short -coverprofile=coverage.txt -covermode=atomic ./pkg/...
     - name: Upload coverage to Codecov
       run: bash <(curl -s https://codecov.io/bash)
