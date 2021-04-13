@@ -36,6 +36,8 @@ Nevertheless, its programming model is very serverless-esque, because you...
 
 ![Matterless architecture](images/matterless-arch.png)
 
+[ExcaliDraw](https://excalidraw.com/#json=4902067223134208,3wzTFbbenppiu7dMeagypw)
+
 In addition, to enable extending Matterless in Matterless (it’s [Matterless all the way down](https://en.wikipedia.org/wiki/Turtles_all_the_way_down)), Matterless adds:
 
 * Matterless **jobs** to write code that runs continuously in the background and connects with external systems, generally exposing anything interesting inside your application as events (e.g. via a (web)socket connection, or polling).

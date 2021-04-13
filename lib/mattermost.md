@@ -1,5 +1,18 @@
-# macro mattermostListener
-Implements a mattermost event listener, authenticating to a specific `url` using a `token` listening to `events` and triggering subscribed functions appropriately.
+# Mattermost macro library
+
+Implements the following potentially useful Mattermost macros:
+
+* `mattermostListener`
+* `mattermostBot`
+* `mattermostInstanceWatcher`
+
+Check each macro for more documentation.
+
+# import
+* https://raw.githubusercontent.com/zefhemel/matterless/master/lib/cron.md
+
+## macro mattermostListener
+Implements a few mattermost event listener, authenticating to a specific `url` using a `token` listening to `events` and triggering subscribed functions appropriately.
 
 ```yaml
 input_schema:
@@ -209,5 +222,80 @@ Template:
         }));
         await store.put(config.bot_token_config, token.token);
         restartApp();
+    }
+    ```
+
+# macro mattermostInstanceWatcher
+```yaml
+input_schema:
+  type: object
+  properties:
+    url:
+      type: string
+    events:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          type: string
+```
+
+    # cron {{$name}}Cron
+    ```yaml
+    {{$name}}Cron:
+        schedule: "0 * * * * *"
+        function: "{{$name}}CheckUpgrade"
+    ```
+
+    # events
+    ```yaml
+    {{range $eventName, $fns := $input.events}}
+    "{{$name}}:{{$eventName}}":
+    {{range $fns}}  - {{.}}{{end}} 
+    {{end}}
+    ```
+
+    ## function {{$name}}CheckUpgrade
+    ```yaml
+    init:
+      url: {{yaml $input.url}}
+      ns: {{$name}}
+    ```
+    
+    ```javascript
+    import {store, events} from "./matterless.ts";
+    let config;
+    
+    function init(cfg) {
+        config = cfg;
+    }
+    
+    async function handle() {
+        let result = await fetch(`${config.url}/api/v4/config/client?format=old`);
+        let json = await result.json();
+        let featureFlags = {};
+        for(const [key, value] of Object.entries(json)) {
+            if(key.indexOf("FeatureFlag") === 0) {
+                const flagName = key.substring("FeatureFlag".length);
+                let previousValue = await store.get(`${config.ns}:flag:${flagName}`);
+                if(previousValue !== json[key]) {
+                    await events.publish(`${config.ns}:flag:${flagName}`, {
+                        flag: flagName,
+                        oldValue: previousValue,
+                        newValue: value
+                    });
+                    await store.put(`${config.ns}:flag:${flagName}`, value);
+                }
+            }
+        }
+        let oldVersion = (await store.get(`${config.ns}:version`)) || "db01f2a91b67e24187294dbe30cca1cf8fc6e494";
+        let version = json.BuildHash;
+        if(oldVersion != version) {
+            await events.publish(`${config.ns}:upgrade`, {
+                oldVersion: oldVersion,
+                newVersion: version
+            });
+            await store.put(`${config.ns}:version`, version);
+        }
     }
     ```
