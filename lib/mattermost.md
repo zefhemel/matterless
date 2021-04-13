@@ -41,45 +41,52 @@ This is the macro:
     ```javascript
     import {events} from "./matterless.ts";
 
-    let socket;
+    let socket, config;
  
-    function init(config) {
-        console.log("Starting mattermost client with config", config);
+    function init(cfg) {
+        console.log("Starting mattermost client");
+        config = cfg;
         if(!config.token || !config.url) {
            console.error("Token and URL not configured yet.");
            return
         }
-        return new Promise((resolve, reject) => {
-            const url = `${config.url}/api/v4/websocket`.replaceAll("https://", "wss://").replaceAll("http://", "ws://");
-            socket = new WebSocket(url);
-            socket.addEventListener('open', e => {
-                socket.send(JSON.stringify({
-                        "seq": 1,
-                        "action": "authentication_challenge",
-                        "data": {
-                            "token": config.token
-                        }
-                    }
-                ));
-            });
-            socket.addEventListener('message', function (event) {
-                const parsedEvent = JSON.parse(event.data)
-                console.log('Message from server ', parsedEvent);
-                if(parsedEvent.seq_reply === 1) {
-                    // Auth response
-                    if(parsedEvent.status === "OK") {
-                        return resolve();
-                    } else {
-                        return reject(event);
+
+        return connect();
+    }
+
+    async function connect() {
+        const url = `${config.url}/api/v4/websocket`.replaceAll("https://", "wss://").replaceAll("http://", "ws://");
+        socket = new WebSocket(url);
+        socket.addEventListener('open', e => {
+            socket.send(JSON.stringify({
+                    "seq": 1,
+                    "action": "authentication_challenge",
+                    "data": {
+                        "token": config.token
                     }
                 }
-                if(config.events.indexOf(parsedEvent.event) !== -1) {
-                    events.publish(`${config.name}:${parsedEvent.event}`, parsedEvent);
+            ));
+        });
+        socket.addEventListener('message', function (event) {
+            const parsedEvent = JSON.parse(event.data)
+            console.log('Message from server ', parsedEvent);
+            if(parsedEvent.seq_reply === 1) {
+                // Auth response
+                if(parsedEvent.status === "OK") {
+                    console.log("Authenticated.");
+                } else {
+                    console.error("Could not authenticate", parsedEvent);
                 }
-            });
-            socket.addEventListener('close', function(event) {
-               console.error("Connection closed, authentication failed?");
-            });
+            }
+            if(config.events.indexOf(parsedEvent.event) !== -1) {
+                events.publish(`${config.name}:${parsedEvent.event}`, parsedEvent);
+            }
+        });
+        socket.addEventListener('close', function(event) {
+            console.error("Connection closed, authentication failed? Reconnecting in 1s...");
+            setTimeout(() => {
+                connect();
+            }, 1000);
         });
     }
 
