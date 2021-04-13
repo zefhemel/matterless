@@ -113,7 +113,7 @@ console.log("Starting");
 	}, code)
 	assert.NoError(t, err)
 
-	err = jobInstance.Start()
+	err = jobInstance.Start(context.Background())
 	assert.NoError(t, err)
 	time.Sleep(2 * time.Second)
 	// Some iteration logs should have been written
