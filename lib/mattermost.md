@@ -155,7 +155,7 @@ Template:
     # mattermostListener {{$name}}
     ```yaml
     url: {{yaml $input.url}}
-    token: ${config:{{$name}}.token}
+    token: ${{{$name}}.token}
     events:
       {{yaml $input.events | prefixLines "  " }}
     ```
@@ -178,7 +178,7 @@ Template:
       {{range $input.teams}}
       - {{.}}
       {{- end}}
-      bot_token_config: "config:{{$name}}.token"
+      bot_token_config: "{{$name}}.token"
     ```
     
     ```javascript

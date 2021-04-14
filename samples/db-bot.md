@@ -54,7 +54,7 @@ Implements the actual logic for the commands.
 ```yaml
 init:
   url: ${config:url}
-  token: ${config:DatabaseBot.token}
+  token: ${DatabaseBot.token}
 ```
 
 ```javascript
