@@ -11,7 +11,7 @@ The application registers a new `@db-bot` bot you can talk to, these are the com
   
       put zef
       name: Zef Hemel
-      spouse: Justyna
+      country: PL
 * `get [key]` — looks up the entry with key `key`
 * `del [key]` — deletes entry with key `key` 
 * `pput [key] [prop] [yaml-data]` — Sets one particular property of the entry, e.g. `pput zef name Zef Hemel Jr.`
@@ -32,7 +32,7 @@ That's it!
 * https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost.md
 
 ## mattermostBot DatabaseBot
-Defines the bot, here it is hardcoded to join the "Dev" team, please update that value to your particularly team you want to enable it for.
+Defines the bot using the `mattermostBot` macro.
 ```yaml
 username: db-bot
 display_name: Database bot
@@ -49,7 +49,7 @@ events:
 ```
 
 ## function HandleCommand
-Implements the actual logic for the commands.
+Implements the actual logic for the commands invoked whenever the bot is sent a message in a direct channel.
 
 ```yaml
 init:
@@ -72,6 +72,7 @@ function init(cfg) {
     client = new Mattermost(cfg.url, cfg.token);
 }
 
+// Nicely format an array of JSON objects as a Markdown table
 function jsonToMDTable(jsonArray) {
     let headers = {};
     for(const [key, val] of jsonArray) {
@@ -95,7 +96,7 @@ function jsonToMDTable(jsonArray) {
     return lines.join("\n");
 }
 
-
+// Main event handler
 async function handle(event) {
     console.log("Got event", event);
     if(!client) {
