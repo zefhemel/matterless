@@ -1,5 +1,5 @@
 # Matterless: putting serverless on your server
-[Serverless](https://en.wikipedia.org/wiki/Serverless_computing) is a generally agreed poorly named concept (but it's too late now) that enables you to build applications that automatically scale with demand. And your wallet. Within seconds, serverless application can scale from handling 0 requests per day to thousands of requests per second. This is the power of the cloud at its best.
+[Serverless computing](https://en.wikipedia.org/wiki/Serverless_computing) enables you to build applications that automatically scale with demand, and your wallet. Within seconds, serverless application can scale from handling 0 requests per day to thousands of requests per second. This is the power of the cloud at its best.
 
 But, **what if** all you want is check open pull requests on your Github repo at 9am every morning, and send a reminder message on your team’s chat channel?
 
@@ -13,21 +13,20 @@ But, **what if** all you want is check open pull requests on your Github repo at
 
 **What if** you prefer to be in full control of your code, infrastructure and data?
 
-_Matterless_ may just be what you've been waiting for all this time. Could it be? (Spoiler alert: yes it is.)
+_Matterless_ may just be what you've been waiting for all this time.
 
-Matterless brings the powerful serverless programming model to your own server, laptop or even Raspberry Pi. It is simple to use, fast to deploy, and... let's just call a spade a spade, it's _awesome_.
+Matterless brings the serverless programming model to your own server, laptop or even Raspberry Pi. It is simple to use, fast to deploy, and... let's just call a spade a spade, it's _awesome_.
 
 Why?
 
 1. Matterless is distributed as a **single binary** with no required dependencies (Matterless relies on [Deno](https://deno.land/) as its main runtime, but will download it on-the-fly).
 2. Matterless requires **zero configuration**  to run (although it does give you options).
-3. Matterless is **light-weight**: it runs fine on a Raspberry Pi. There's no fancy container orchestration, kubernetes or firecrackers involved.
-4. Matterless enables **extremely rapid iteration**: Matterless applications tend to (re)deploy within seconds. A common mode of develoment is to have Matterless watch for file changes and reload on every file save.
+3. Matterless is **light-weight**: it runs fine on a Raspberry Pi. There's no fancy container orchestration, Kubernetes or firecrackers involved.
+4. Matterless enables **extremely rapid iteration**: Matterless applications tend to (re)deploy within a second or two. A common mode of development is to have Matterless watch for file changes and reload on every file save.
 
-Matterless is not attempting to be a replacement for AWS, Azure or GCP. If you need to scale from 0 to thousands of requests per second, Matterless likely won't cut it.
-Matterless' sweetspot is in building scratch-your-own-itch micro applications you may have a need for, but wouldn't require the extreme scalability the full cloud provides.
+Matterless is not attempting to be a replacement for AWS, Azure or GCP. If you need to scale from 0 to thousands of requests per second, Matterless likely won't cut it. Matterless' sweet spot is likely in building scratch-your-own-itch micro applications you may have a need for, but wouldn't require the extreme scalability the full cloud provides.
 
-Nevertheless, its programming model is very serverless-esque, because you...
+Nevertheless, its programming model is serverless-esque, because you...
 
 * Use Matterless **functions** to respond to events.
 * Use Matterless **events** to glue different parts of your application together.

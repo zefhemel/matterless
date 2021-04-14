@@ -18,9 +18,6 @@ You should now see something along the lines of
 
 # function HelloWorld
 ```javascript
-function init() {
-    // console.aefae();
-}
 function handle(event) {
     console.log("Hello world!");
 }

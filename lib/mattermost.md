@@ -24,8 +24,6 @@ input_schema:
          type: string
       events:
         type: object
-        propertyNames:
-          pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
         additionalProperties:
           type: array
           items:
@@ -140,8 +138,6 @@ input_schema:
         type: string
     events:
       type: object
-      propertyNames:
-        pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
       additionalProperties:
         type: array
         items:

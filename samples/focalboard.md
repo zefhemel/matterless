@@ -4,29 +4,29 @@ Super elementary focalboard integration example. Requires the following store va
 * `config:focalboard.url`
 * `config:focalboard.token`
 
-Publishes `focalboard:update` event.
+Publishes `focalboard:create`, `focalboard:update` and `focalboard:delete` events.
 
 # events
 ```
 focalboard:create:
-- MyFocaCreateFunction
+- MyFocalCreateFunction
 focalboard:update:
-- MyFocaUpdateFunction
+- MyFocalUpdateFunction
 focalboard:delete:
 - MyFocalDeleteFunction
 ```
 
-# function MyFocaCreateFunction
+# function MyFocalCreateFunction
 ```javascript
 function handle(event) {
-    console.log("Card create", event.block);
+    console.log("Card created", event.block);
 }
 ```
 
-# function MyFocaUpdateFunction
+# function MyFocalUpdateFunction
 ```javascript
 function handle(event) {
-    console.log("Card update", event.block);
+    console.log("Card updated", event.block);
 }
 ```
 
