@@ -62,10 +62,10 @@ func (app *Application) interpolateStoreValues() {
 	}
 
 	for _, def := range defs.MacroInstances {
-		yamlBuf, _ := yaml.Marshal(def.Input)
+		yamlBuf, _ := yaml.Marshal(def.Arguments)
 		interPolatedYaml := interpolateStoreValues(app.dataStore, string(yamlBuf), logCallback)
 		var val interface{}
 		yaml.Unmarshal([]byte(interPolatedYaml), &val)
-		def.Input = val
+		def.Arguments = val
 	}
 }

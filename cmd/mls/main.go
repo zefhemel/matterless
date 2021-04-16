@@ -53,7 +53,7 @@ func deployCommand() *cobra.Command {
 	)
 	var cmdDeploy = &cobra.Command{
 		Use:   "deploy [file1.md] ..",
-		Short: "DeployApp apps to a matterless server",
+		Short: "Deploy apps to a matterless server",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			if url == "" {
@@ -87,7 +87,7 @@ func rootCommand() *cobra.Command {
 
 	var cmd = &cobra.Command{
 		Use:   "mls",
-		Short: "Run Matterless server",
+		Short: "Run Matterless in server mode",
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg.PersistApps = true
 			runServer(cfg)

@@ -132,9 +132,41 @@ function run() {
 }
 
 func TestTemplateParser(t *testing.T) {
-	defs, err := definition.Parse(strings.ReplaceAll(`# macro helloJob
+	defs, err := definition.Parse(strings.ReplaceAll(`# macro helloJobNoSchema
+
+	# job {{$name}}
+
+    |||
+    init:
+       name: {{$arg.name_arg}}
+    |||
+
+    |||
+    function init(config) {
+       setInterval(() => {
+           console.log("Hello, ", config.name);
+       }, 1000);
+    }
+    |||
+
+# helloJobNoSchema TheJob
 |||
-input_schema:
+name_arg: Zef
+|||
+`, "|||", "```"))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(defs.Macros))
+	assert.Contains(t, defs.Macros["helloJobNoSchema"].TemplateCode, "job")
+
+	assert.Equal(t, 1, len(defs.MacroInstances))
+	assert.Equal(t, definition.MacroID("helloJobNoSchema"), defs.MacroInstances["TheJob"].Macro)
+	assert.Equal(t, "Zef", defs.MacroInstances["TheJob"].Arguments.(map[string]interface{})["name_arg"])
+
+	assert.NoError(t, defs.ExpandMacros())
+
+	defs, err = definition.Parse(strings.ReplaceAll(`# macro helloJob
+|||
+schema:
    type: object
    properties:
       name:
@@ -145,7 +177,7 @@ input_schema:
 
     |||
     init:
-       name: {{$input.name}}
+       name: {{$arg.name}}
     |||
 
     |||
@@ -167,7 +199,7 @@ name: Zef
 
 	assert.Equal(t, 1, len(defs.MacroInstances))
 	assert.Equal(t, definition.MacroID("helloJob"), defs.MacroInstances["TheJob"].Macro)
-	assert.Equal(t, "Zef", defs.MacroInstances["TheJob"].Input.(map[string]interface{})["name"])
+	assert.Equal(t, "Zef", defs.MacroInstances["TheJob"].Arguments.(map[string]interface{})["name"])
 
 	assert.NoError(t, defs.ExpandMacros())
 }

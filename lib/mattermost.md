@@ -15,7 +15,7 @@ Check each macro for more documentation.
 Implements a few mattermost event listener, authenticating to a specific `url` using a `token` listening to `events` and triggering subscribed functions appropriately.
 
 ```yaml
-input_schema:
+schema:
    type: object
    properties:
       url:
@@ -41,10 +41,10 @@ This is the macro:
     ```yaml
     init:
         name: "{{$name}}"
-        token: "{{$input.token}}"
-        url: "{{$input.url}}"
+        token: "{{$arg.token}}"
+        url: "{{$arg.url}}"
         events:
-        {{range $eventName, $v := $input.events}}
+        {{range $eventName, $v := $arg.events}}
         - {{$eventName}}
         {{end}}
     ```
@@ -111,7 +111,7 @@ This is the macro:
 
     # events
     ```yaml
-    {{range $eventName, $fns := $input.events}}
+    {{range $eventName, $fns := $arg.events}}
     "{{$name}}:{{$eventName}}":
     {{range $fns}}  - {{.}}{{end}} 
     {{end}}
@@ -119,7 +119,7 @@ This is the macro:
 
 # macro mattermostBot
 ```yaml
-input_schema:
+schema:
   type: object
   properties:
     url:
@@ -154,10 +154,10 @@ Template:
 
     # mattermostListener {{$name}}
     ```yaml
-    url: {{yaml $input.url}}
+    url: {{yaml $arg.url}}
     token: ${token:{{$name}}}
     events:
-      {{yaml $input.events | prefixLines "  " }}
+      {{yaml $arg.events | prefixLines "  " }}
     ```
 
     # events
@@ -169,13 +169,13 @@ Template:
     # function {{$name}}BotCreate
     ```yaml
     init:
-      url: {{yaml $input.url}}
-      admin_token: {{yaml $input.admin_token}}
-      username: {{yaml $input.username}}
-      display_name: {{yaml $input.display_name}}
-      description: {{yaml $input.description}}
+      url: {{yaml $arg.url}}
+      admin_token: {{yaml $arg.admin_token}}
+      username: {{yaml $arg.username}}
+      display_name: {{yaml $arg.display_name}}
+      description: {{yaml $arg.description}}
       teams:
-      {{range $input.teams}}
+      {{range $arg.teams}}
       - {{.}}
       {{- end}}
       bot_token_config: "token:{{$name}}"
@@ -223,7 +223,7 @@ Template:
 
 # macro mattermostInstanceWatcher
 ```yaml
-input_schema:
+schema:
   type: object
   properties:
     url:
@@ -245,7 +245,7 @@ input_schema:
 
     # events
     ```yaml
-    {{range $eventName, $fns := $input.events}}
+    {{range $eventName, $fns := $arg.events}}
     "{{$name}}:{{$eventName}}":
     {{range $fns}}  - {{.}}{{end}} 
     {{end}}
@@ -254,7 +254,7 @@ input_schema:
     ## function {{$name}}CheckUpgrade
     ```yaml
     init:
-      url: {{yaml $input.url}}
+      url: {{yaml $arg.url}}
       ns: {{$name}}
     ```
     

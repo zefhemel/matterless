@@ -304,14 +304,14 @@ Which should log something along the lines of
 ## macro httpApi
 What makes Matterless really powerful is the ability to add new definition types using Matterless itself.
 
-The idea is simple, yet powerful. You define a macro, and define its inputs (the YAML attributes that need to be passed to instantiate it) using YAML schema (which is really JSON schema encoded in YAML). 
+The idea is simple, yet powerful. You define a macro, and define its arguments (the YAML attributes that need to be passed to instantiate it) using YAML schema (which is really JSON schema encoded in YAML). 
 
 Let me explain this with a simple example. Let's say you don't like the event notation to create HTTP endpoints, and would like to introduce a specialized "httpApi" definition type that is nicer to read and write. We can achieve this as follows.
 
-First we define the input schema:
+First we define the argument schema:
 
 ```yaml
-input_schema:
+schema:
   type: object
   properties:
     path:
@@ -332,14 +332,14 @@ This specifies the `httpApi` macro takes three required properties:
 * `method` (the HTTP method), also a string
 * `function` the Matterless function to trigger when the endpoint is called.
 
-Then, we define a template to translate this using the [Go template syntax](https://golang.org/pkg/text/template/). Inside this template we can use two special variables: `$name` which will contain the name of the template definition (e.g. when we create `httpApi MyAPI` then `$name` will contain `MyAPI`), and `$input` which will contain all input properties.
+Then, we define a template to translate this using the [Go template syntax](https://golang.org/pkg/text/template/). Inside this template we can use two special variables: `$name` which will contain the name of the template definition (e.g. when we create `httpApi MyAPI` then `$name` will contain `MyAPI`), and `$arg` which will contain all arguments.
 
 Here is the template:
 
     ## events
     ```yaml
-    "http:{{$input.method}}:{{$input.path}}":
-    - {{$input.function}}
+    "http:{{$arg.method}}:{{$arg.path}}":
+    - {{$arg.function}}
     ```
 
 That's all, now we can use it:

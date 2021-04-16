@@ -121,14 +121,12 @@ func Parse(code string) (*Definitions, error) {
 			}
 		case "macro":
 			var config MacroConfig
-			err := yaml.Unmarshal([]byte(currentBody), &config)
-			if err != nil {
-				return err
+			if len(currentBody) > 0 {
+				err := yaml.Unmarshal([]byte(currentBody), &config)
+				if err != nil {
+					return err
+				}
 			}
-			// TODO: Comment out because it's slooooooooow
-			//if err := validateObj("schema/schema.schema.json", config.InputSchema); err != nil {
-			//	return fmt.Errorf("Macros %s: %s", currentDeclarationName, err)
-			//}
 			if strings.ToLower(currentDeclarationName[0:1]) != currentDeclarationName[0:1] {
 				return errors.New("All macros should start with a lower-case letter")
 			}
@@ -145,8 +143,8 @@ func Parse(code string) (*Definitions, error) {
 				return fmt.Errorf("[%s] %s: Could not parse YAML", currentDeclarationType, currentDeclarationName)
 			}
 			decls.MacroInstances[currentDeclarationName] = &MacroInstanceDef{
-				Macro: MacroID(currentDeclarationType),
-				Input: inputs,
+				Macro:     MacroID(currentDeclarationType),
+				Arguments: inputs,
 			}
 		}
 		return nil

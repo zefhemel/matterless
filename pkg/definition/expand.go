@@ -24,26 +24,28 @@ func (defs *Definitions) ExpandMacros() error {
 				return fmt.Errorf("No such macro: %s", def.Macro)
 			}
 
-			if err := yamlschema.ValidateObjects(macro.Config.InputSchema, def.Input); err != nil {
-				return errors.Wrapf(err, "macro expansion: %s: %s", name, err)
+			if macro.Config.ArgumentsSchema != nil {
+				if err := yamlschema.ValidateObjects(macro.Config.ArgumentsSchema, def.Arguments); err != nil {
+					return errors.Wrapf(err, "macro expansion: %s: %s", name, err)
+				}
 			}
 
 			t := template.New("template")
 			t.Funcs(CodeGenFuncs)
 			t2, err := t.Parse(fmt.Sprintf(`
 {{- $name := .Name -}}
-{{- $input := .Input -}}
+{{- $arg := .Arguments -}}
 %s`, macro.TemplateCode))
 			if err != nil {
 				return errors.Wrap(err, "parsing template")
 			}
 			var out bytes.Buffer
 			if err := t2.Execute(&out, struct {
-				Name  string
-				Input interface{}
+				Name      string
+				Arguments interface{}
 			}{
-				Name:  name,
-				Input: def.Input,
+				Name:      name,
+				Arguments: def.Arguments,
 			}); err != nil {
 				return errors.Wrap(err, "render template")
 			}

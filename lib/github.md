@@ -36,7 +36,7 @@ We need cron, so let's import it
 Listens to events for a specific 
 
 ```yaml
-input_schema:
+schema:
   type: object
   properties:
     repo:
@@ -56,8 +56,8 @@ And the template itself:
     
     ```yaml
     init:
-      token: {{$input.token}}
-      repo: {{$input.repo}}
+      token: {{$arg.token}}
+      repo: {{$arg.repo}}
       event_prefix: {{$name}}
     ```
     
@@ -103,12 +103,12 @@ And the template itself:
     }
     ```
 
-    {{if $input.poll_schedule}}
+    {{if $arg.poll_schedule}}
 
     # cron {{$name}}GithubEventCron
     ```
     {{$name}}GithubCron:
-      schedule: {{yaml $input.poll_schedule}}
+      schedule: {{yaml $arg.poll_schedule}}
       function: {{$name}}PollGithubEvents
     ```
     {{end}}

@@ -55,12 +55,12 @@ type MacroDef struct {
 }
 
 type MacroConfig struct {
-	InputSchema map[string]interface{} `yaml:"input_schema" json:"input_schema"`
+	ArgumentsSchema map[string]interface{} `yaml:"schema" json:"schema"`
 }
 
 type MacroInstanceDef struct {
-	Macro MacroID     `json:"macro"`
-	Input interface{} `json:"input"`
+	Macro     MacroID     `json:"macro"`
+	Arguments interface{} `json:"arguments"`
 }
 
 var CodeGenFuncs = template.FuncMap{

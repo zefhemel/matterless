@@ -12,7 +12,7 @@ This Matterless definition file defines a `cron` macro. You can define multiple 
 Implements a simple cronjob scheduler.
 
 ```yaml
-input_schema:
+schema:
    type: object
    additionalProperties: 
      type: object
@@ -33,7 +33,7 @@ Template:
     # job CronJob
     ```yaml
     init:
-      {{yaml $input | prefixLines "  "}}
+      {{yaml $arg | prefixLines "  "}}
     ```
     ```javascript
     import {cron} from 'https://deno.land/x/deno_cron@v1.0.0/cron.ts';
@@ -51,7 +51,7 @@ Template:
     
     # events
     ```
-    {{range $cronName, $def := $input}}
+    {{range $cronName, $def := $arg}}
     "cron:{{$cronName}}":
     - {{$def.function}}
     {{- end}}

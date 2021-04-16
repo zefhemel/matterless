@@ -30,7 +30,7 @@ function handle() {
 
 # Macro: MyMacro
 |||
-input_schema:
+schema:
   type: object
 |||
 
