@@ -55,8 +55,9 @@ async function handle(event) {
     if(!client) {
         console.log("Not inited yet");
     }
-    let me = await client.getMeCached();
     let post = JSON.parse(event.data.post);
+    
+    let me = await client.getMeCached();
     
     if(post.user_id !== me.id) {
         // Not my post, ignore
@@ -72,8 +73,6 @@ async function handle(event) {
         post.message = censoredMessage;
         await client.updatePost(post);
     }
-    
-    console.log("Censored message", censoredMessage);
 }
 ```
 

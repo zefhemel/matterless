@@ -50,6 +50,15 @@ Under the hood, Matterless relies on the following technologies:
 
 Sounds interesting? You would be correct. You have good judgement.
 
+## Sidebar: For the YouTube generation
+If you're part of the YouTube generation and prefer these concepts to be explained to you in a screencast video with my face in a bubble, there is good news. You can experience this here:
+* [Matterless introduction: what is serverless and matterless, and why put it on your server?](https://www.youtube.com/watch?v=3l91cpGGXGg)
+* [Matterless 101: functions, events, jobs and the event and store APIs](https://www.youtube.com/watch?v=_wq3kqVANFM)
+
+More videos coming soon.
+
+Back to the textual content.
+
 ## What is a Matterless application
 A Matterless application consists of declarative _definitions_ written in a _matterless definition_ file. One matterless definition file defines one application, although you can import other files via URLs. Naturally, matterless definition files use the `.md` file extension. You may think: "Hey, but that’s already used by Markdown!" Conveniently, Matterless' application format **is** markdown with specific semantics, so that all works out well — and it looks great when rendered on Github (and ultimately it's all about what code looks like on Github).
 
