@@ -1,11 +1,12 @@
 # Cron
-This Matterless definition file defines a `cron` macro. You can define multiple crons in one go, example use:
+This Matterless definition file defines a `cron` macro. You can define multiple crons using multiple definitions.
+
+Example use:
 
     # cron MyCron
     ```
-    SomeMeaningfullName:
-      schedule: "* * * * * *"
-      function: EverySecond
+    schedule: "* * * * * *"
+    function: EverySecond
     ```
 
 # macro cron
@@ -14,18 +15,15 @@ Implements a simple cronjob scheduler.
 ```yaml
 schema:
    type: object
-   additionalProperties: 
-     type: object
-     properties:
-        schedule:
-          type: string
-        function:
-          type: string
-     required:
-     - schedule
-     - function
-     additionalProperties: false
-
+   properties:
+      schedule:
+        type: string
+      function:
+        type: string
+   required:
+   - schedule
+   - function
+   additionalProperties: false
 ```
 
 Template:
@@ -33,8 +31,10 @@ Template:
     # job CronJob
     ```yaml
     init:
-      {{yaml $arg | prefixLines "  "}}
+      {{$name}}:
+        {{yaml $arg | prefixLines "    "}}
     ```
+
     ```javascript
     import {cron} from 'https://deno.land/x/deno_cron@v1.0.0/cron.ts';
     import {events} from "./matterless.ts";
@@ -51,8 +51,6 @@ Template:
     
     # events
     ```
-    {{range $cronName, $def := $arg}}
-    "cron:{{$cronName}}":
-    - {{$def.function}}
-    {{- end}}
+    "cron:{{$name}}":
+    - {{$arg.function}}
     ```

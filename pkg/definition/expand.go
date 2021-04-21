@@ -26,7 +26,7 @@ func (defs *Definitions) ExpandMacros() error {
 
 			if macro.Config.ArgumentsSchema != nil {
 				if err := yamlschema.ValidateObjects(macro.Config.ArgumentsSchema, def.Arguments); err != nil {
-					return errors.Wrapf(err, "macro expansion: %s: %s", name, err)
+					return errors.Wrapf(err, "macro expansion: %s", name)
 				}
 			}
 

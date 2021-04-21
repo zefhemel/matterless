@@ -238,9 +238,8 @@ schema:
 
     # cron {{$name}}Cron
     ```yaml
-    {{$name}}Cron:
-        schedule: "0 * * * * *"
-        function: "{{$name}}CheckUpgrade"
+    schedule: "0 * * * * *"
+    function: "{{$name}}CheckUpgrade"
     ```
 
     # events

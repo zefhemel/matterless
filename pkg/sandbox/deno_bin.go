@@ -16,9 +16,9 @@ import (
 // TODO: Add windows versions
 var denoDownloadUrls = map[string]string{
 	"linux-arm64":  "https://matterless-releases.s3.eu-central-1.amazonaws.com/deno-linux-arm64.zip",
-	"linux-amd64":  "https://github.com/denoland/deno/releases/download/v1.8.2/deno-x86_64-unknown-linux-gnu.zip",
-	"darwin-arm64": "https://github.com/denoland/deno/releases/download/v1.8.2/deno-aarch64-apple-darwin.zip",
-	"darwin-amd64": "https://github.com/denoland/deno/releases/download/v1.8.2/deno-x86_64-apple-darwin.zip",
+	"linux-amd64":  "https://github.com/denoland/deno/releases/download/v1.9.0/deno-x86_64-unknown-linux-gnu.zip",
+	"darwin-arm64": "https://github.com/denoland/deno/releases/download/v1.9.0/deno-aarch64-apple-darwin.zip",
+	"darwin-amd64": "https://github.com/denoland/deno/releases/download/v1.9.0/deno-x86_64-apple-darwin.zip",
 }
 
 func denoBinPath(config *config.Config) string {

@@ -107,9 +107,8 @@ And the template itself:
 
     # cron {{$name}}GithubEventCron
     ```
-    {{$name}}GithubCron:
-      schedule: {{yaml $arg.poll_schedule}}
-      function: {{$name}}PollGithubEvents
+    schedule: {{yaml $arg.poll_schedule}}
+    function: {{$name}}PollGithubEvents
     ```
     {{end}}
 

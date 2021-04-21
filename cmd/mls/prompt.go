@@ -20,7 +20,8 @@ func completer(in prompt.Document) []prompt.Suggest {
 		{Text: "put", Description: "[key] [value] — puts a value in the store"},
 		{Text: "get", Description: "[key] — retrieve a value from the store"},
 		{Text: "del", Description: "[key] — delete a value from the store"},
-		{Text: "query-prefix", Description: "[key-prefix] — query keys from the store"},
+		{Text: "query-prefix", Description: "[key-prefix] — query keys from the store, return with values"},
+		{Text: "keys", Description: "[key-prefix] — query keys from the store"},
 		{Text: "restart", Description: "restart application"},
 		{Text: "trigger", Description: "[eventName] [evenData] — trigger an event"},
 		{Text: "invoke", Description: "[functionName] [evenData] — invoke a function"},
@@ -117,6 +118,22 @@ func executor(cmd string) {
 		} else {
 			for _, result := range val {
 				fmt.Printf("- Key: %s Value: %s\n", result[0], util.MustJsonString(result[1]))
+			}
+		}
+	case "keys":
+		if promptContext.appName == "" {
+			fmt.Println("Please select an app first with 'use appname'")
+			return
+		}
+		prefix := ""
+		if len(blocks) == 2 {
+			prefix = blocks[1]
+		}
+		if val, err := promptContext.client.StoreQueryPrefix(promptContext.appName, prefix); err != nil {
+			fmt.Printf("Failed to retrieve from datastore: %s\n", err)
+		} else {
+			for _, result := range val {
+				fmt.Printf("%s\n", result[0])
 			}
 		}
 	case "del":

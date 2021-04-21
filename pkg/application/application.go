@@ -99,8 +99,13 @@ func NewMockApplication(config *config.Config, appName string) *Application {
 	}
 }
 
+var FunctionDoesNotExistError = errors.New("function does not exist")
+
 func (app *Application) InvokeFunction(name definition.FunctionID, event interface{}) (interface{}, error) {
-	functionDef := app.definitions.Functions[name]
+	functionDef, ok := app.definitions.Functions[name]
+	if !ok {
+		return nil, FunctionDoesNotExistError
+	}
 	log.Debug("Now invoking function ", name)
 
 	ctx, cancel := context.WithTimeout(context.Background(), app.config.FunctionRunTimeout)
