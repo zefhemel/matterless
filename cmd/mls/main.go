@@ -119,7 +119,7 @@ func runServer(cfg *config.Config) *application.Container {
 	appContainer.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) {
 		if le, ok := eventData.(application.LogEntry); ok {
 
-			log.Infof("[App: %s | Function: %s] %s", le.AppName, le.LogEntry.FunctionName, le.LogEntry.Message)
+			log.Infof("[%s | %s] %s", le.AppName, le.LogEntry.FunctionName, le.LogEntry.Message)
 		} else {
 			log.Error("Received log event that's not an application.LogEntry ", eventData)
 		}

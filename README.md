@@ -54,6 +54,7 @@ Sounds interesting? You would be correct. You have good judgement.
 If you're part of the YouTube generation and prefer these concepts to be explained to you in a screencast video with my face in a bubble, there is good news. You can experience this here:
 * [Matterless introduction: what is serverless and matterless, and why put it on your server?](https://www.youtube.com/watch?v=3l91cpGGXGg)
 * [Matterless 101: functions, events, jobs and the event and store APIs](https://www.youtube.com/watch?v=_wq3kqVANFM)
+* [Matterless 101: macros](https://www.youtube.com/watch?v=31ZDw1hZ6hU)
 
 More videos coming soon.
 

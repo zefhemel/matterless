@@ -181,6 +181,10 @@ func executor(cmd string) {
 		}
 		eventName := blocks[1]
 		valJson := strings.Join(blocks[2:], " ")
+		if valJson == "" {
+			valJson = "{}"
+		}
+
 		var obj interface{}
 		if err := json.Unmarshal([]byte(valJson), &obj); err != nil {
 			fmt.Printf("Could not parse value as JSON (%s): %s\n", err, valJson)

@@ -41,7 +41,7 @@ const events = {
                 'Content-Type': 'application/json',
                 'Authorization': `bearer ${Deno.env.get("API_TOKEN")}`
             },
-            body: JSON.stringify(eventData)
+            body: JSON.stringify(eventData || {})
         })
         let jsonResult = await result.json();
         if (jsonResult.status === "error") {
