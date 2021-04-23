@@ -13,7 +13,7 @@ const store = {
     },
 
     async queryPrefix(prefix : string) : Promise<[[string, any]]> {
-        return (await store.performOp("query-prefix", prefix)).results;
+        return (await store.performOp("query-prefix", prefix)).results || [];
     },
 
     async performOp(...args : any[]) : Promise<any> {

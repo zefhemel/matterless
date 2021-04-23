@@ -127,6 +127,8 @@ func (ag *APIGateway) buildRouter(config *config.Config) {
 			return
 		}
 
+		log.Debugf("Received HTTP request (%s) %s", request.Method, path)
+
 		// Perform Request via eventbus
 		response, err := app.EventBus().Request(fmt.Sprintf("http:%s:/%s", request.Method, path), evt, app.config.HTTPGatewayResponseTimeout)
 		if err != nil {
