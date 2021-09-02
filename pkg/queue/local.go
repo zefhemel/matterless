@@ -2,13 +2,14 @@ package queue
 
 import (
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/store"
-	"sync"
-	"time"
 )
 
 // Store keys:
@@ -18,7 +19,7 @@ import (
 
 type LocalQueue struct {
 	name            string
-	eventBus        eventbus.EventBus
+	eventBus        *eventbus.LocalEventBus
 	store           store.Store
 	queueLock       sync.Mutex
 	inFlightLock    sync.Mutex
@@ -174,7 +175,7 @@ func (q *LocalQueue) Ack(id MessageID) error {
 	return nil
 }
 
-func (q *LocalQueue) EventBus() eventbus.EventBus {
+func (q *LocalQueue) EventBus() *eventbus.LocalEventBus {
 	return q.eventBus
 }
 

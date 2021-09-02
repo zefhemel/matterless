@@ -1,23 +1,24 @@
 package application_test
 
 import (
-	"github.com/stretchr/testify/assert"
-	"github.com/zefhemel/matterless/pkg/application"
-	"github.com/zefhemel/matterless/pkg/config"
 	"io"
 	"net/http"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/zefhemel/matterless/pkg/application"
+	"github.com/zefhemel/matterless/pkg/config"
 )
 
 func TestNewHTTPServer(t *testing.T) {
-	cfg := &config.Config{
-		APIBindPort:                8123,
-		DataDir:                    os.TempDir(),
-		HTTPGatewayResponseTimeout: 2 * time.Second,
-		FunctionRunTimeout:         10 * time.Second,
-	}
+	cfg := config.NewConfig()
+	cfg.APIBindPort = 8123
+	cfg.DataDir = os.TempDir()
+	cfg.HTTPGatewayResponseTimeout = 2 * time.Second
+	cfg.FunctionRunTimeout = 10 * time.Second
+
 	c, err := application.NewContainer(cfg)
 	assert.NoError(t, err)
 	defer c.Close()

@@ -5,8 +5,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/cluster"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/sandbox"
@@ -19,13 +21,15 @@ type LogEntry struct {
 }
 
 type Container struct {
-	config     *config.Config
-	eventBus   *eventbus.LocalEventBus
-	apps       map[string]*Application
-	apiGateway *APIGateway
+	config      *config.Config
+	eventBus    *eventbus.LocalEventBus
+	clusterConn *nats.Conn
+	apps        map[string]*Application
+	apiGateway  *APIGateway
 }
 
 func NewContainer(config *config.Config) (*Container, error) {
+	var err error
 	appMap := map[string]*Application{}
 	c := &Container{
 		config:   config,
@@ -33,8 +37,14 @@ func NewContainer(config *config.Config) (*Container, error) {
 		eventBus: eventbus.NewLocalEventBus(),
 	}
 
-	if err := os.MkdirAll(config.DataDir, 0700); err != nil {
+	if err = os.MkdirAll(config.DataDir, 0700); err != nil {
 		return nil, errors.Wrap(err, "create data dir")
+	}
+
+	c.clusterConn, err = cluster.ConnectOrBoot(config.NatsUrl)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "create container nats")
 	}
 
 	if config.AdminToken == "" {
