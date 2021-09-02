@@ -5,6 +5,12 @@ import (
 	"encoding/json"
 	"expvar"
 	"fmt"
+	"net/http"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/gorilla/mux"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -12,11 +18,6 @@ import (
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
-	"net/http"
-	"runtime"
-	"strings"
-	"sync"
-	"time"
 )
 
 type FunctionInvokeFunc func(appName string, name definition.FunctionID, event interface{}) interface{}

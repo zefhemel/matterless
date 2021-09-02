@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 	"fmt"
+	"os"
+
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
@@ -11,7 +13,6 @@ import (
 	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/store"
 	"github.com/zefhemel/matterless/pkg/util"
-	"os"
 )
 
 type Application struct {
