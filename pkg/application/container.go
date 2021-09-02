@@ -2,14 +2,15 @@ package application
 
 import (
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/util"
-	"os"
-	"strings"
 )
 
 type LogEntry struct {
@@ -19,7 +20,7 @@ type LogEntry struct {
 
 type Container struct {
 	config     *config.Config
-	eventBus   eventbus.EventBus
+	eventBus   *eventbus.LocalEventBus
 	apps       map[string]*Application
 	apiGateway *APIGateway
 }
@@ -57,7 +58,7 @@ func NewContainer(config *config.Config) (*Container, error) {
 	return c, nil
 }
 
-func (c *Container) EventBus() eventbus.EventBus {
+func (c *Container) EventBus() *eventbus.LocalEventBus {
 	return c.eventBus
 }
 

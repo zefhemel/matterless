@@ -31,7 +31,7 @@ type Queue interface {
 	Receive() (*Message, error)
 	Ack(id MessageID) error
 	// exposes "message" event
-	EventBus() eventbus.EventBus
+	EventBus() *eventbus.LocalEventBus
 
 	Stats() (Stats, error)
 

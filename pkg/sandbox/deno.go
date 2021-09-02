@@ -8,12 +8,6 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/config"
-	"github.com/zefhemel/matterless/pkg/definition"
-	"github.com/zefhemel/matterless/pkg/eventbus"
-	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net"
 	"net/http"
@@ -23,6 +17,13 @@ import (
 	"sync"
 	"text/template"
 	"time"
+
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/config"
+	"github.com/zefhemel/matterless/pkg/definition"
+	"github.com/zefhemel/matterless/pkg/eventbus"
+	"github.com/zefhemel/matterless/pkg/util"
 )
 
 // ======= Function ============
@@ -97,7 +98,7 @@ func newFunctionHash(name string, code string) functionHash {
 	return functionHash(fmt.Sprintf("%x", bs))
 }
 
-func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode RunMode, name string, eventBus eventbus.EventBus, functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
+func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode RunMode, name string, eventBus *eventbus.LocalEventBus, functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
 	inst := &denoFunctionInstance{
 		name:   name,
 		config: config,
@@ -263,7 +264,7 @@ func (inst *denoJobInstance) Name() string {
 	return inst.name
 }
 
-func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, eventBus eventbus.EventBus, functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
+func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, eventBus *eventbus.LocalEventBus, functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
 	inst := &denoJobInstance{}
 
 	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, apiToken, RunModeJob, name, eventBus, functionConfig, code)

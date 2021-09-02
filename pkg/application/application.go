@@ -24,7 +24,7 @@ type Application struct {
 	// Runtime
 	config             *config.Config
 	sandbox            *sandbox.Sandbox
-	eventBus           eventbus.EventBus
+	eventBus           *eventbus.LocalEventBus
 	eventSubscriptions []eventSubscription
 	appDataPath        string
 
@@ -216,6 +216,6 @@ func (app *Application) Definitions() *definition.Definitions {
 	return app.definitions
 }
 
-func (app *Application) EventBus() eventbus.EventBus {
+func (app *Application) EventBus() *eventbus.LocalEventBus {
 	return app.eventBus
 }

@@ -3,13 +3,14 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/eventbus"
-	"sync"
-	"time"
 )
 
 type LogEntry struct {
@@ -24,14 +25,14 @@ const (
 	RunModeJob      RunMode = iota
 )
 
-type RuntimeFunctionInstantiator func(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode RunMode, name string, eventBus eventbus.EventBus, functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error)
+type RuntimeFunctionInstantiator func(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode RunMode, name string, eventBus *eventbus.LocalEventBus, functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error)
 
 var runtimeFunctionInstantiators = map[string]RuntimeFunctionInstantiator{
 	"deno": newDenoFunctionInstance,
 	"node": newDockerFunctionInstance,
 }
 
-type RuntimeJobInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, eventBus eventbus.EventBus, functionConfig *definition.FunctionConfig, code string) (JobInstance, error)
+type RuntimeJobInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, eventBus *eventbus.LocalEventBus, functionConfig *definition.FunctionConfig, code string) (JobInstance, error)
 
 var runtimeJobInstantiators = map[string]RuntimeJobInstantiator{
 	"deno": newDenoJobInstance,
@@ -61,7 +62,7 @@ type Sandbox struct {
 	done               chan struct{}
 	globalFunctionLock sync.Mutex
 	globalJobLock      sync.Mutex
-	eventBus           eventbus.EventBus
+	eventBus           *eventbus.LocalEventBus
 	apiURL             string
 	apiToken           string
 }
@@ -69,7 +70,7 @@ type Sandbox struct {
 // NewSandbox creates a new dockerFunctionInstance of the sandbox
 // Note: It is essential to listen to the .Logs() event channel (probably in a for loop in go routine) as soon as possible
 // after instantiation.
-func NewSandbox(config *config.Config, apiURL string, apiToken string, eventBus eventbus.EventBus) (*Sandbox, error) {
+func NewSandbox(config *config.Config, apiURL string, apiToken string, eventBus *eventbus.LocalEventBus) (*Sandbox, error) {
 	sb := &Sandbox{
 		config:           config,
 		runningFunctions: map[string]FunctionInstance{},

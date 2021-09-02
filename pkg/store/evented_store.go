@@ -2,17 +2,18 @@ package store
 
 import (
 	"fmt"
+
 	"github.com/zefhemel/matterless/pkg/eventbus"
 )
 
 type EventedStore struct {
 	wrappedStore Store
-	eventBus     eventbus.EventBus
+	eventBus     *eventbus.LocalEventBus
 }
 
 var _ Store = &EventedStore{}
 
-func NewEventedStore(wrappedStore Store, eventBus eventbus.EventBus) *EventedStore {
+func NewEventedStore(wrappedStore Store, eventBus *eventbus.LocalEventBus) *EventedStore {
 	return &EventedStore{
 		wrappedStore: wrappedStore,
 		eventBus:     eventBus,

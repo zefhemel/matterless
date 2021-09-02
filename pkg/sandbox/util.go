@@ -3,12 +3,13 @@ package sandbox
 import (
 	"bufio"
 	"fmt"
+	"io"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/eventbus"
-	"io"
 )
 
-func pipeLogStreamToEventBus(functionName string, bufferedReader *bufio.Reader, eventBus eventbus.EventBus) {
+func pipeLogStreamToEventBus(functionName string, bufferedReader *bufio.Reader, eventBus *eventbus.LocalEventBus) {
 readLoop:
 	for {
 		line, err := bufferedReader.ReadString('\n')

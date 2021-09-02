@@ -2,21 +2,20 @@ package eventbus
 
 import (
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"reflect"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
 )
 
 type LocalEventBus struct {
 	subscribers   []*subscription
 	subscribeLock sync.Mutex
 }
-
-var _ EventBus = &LocalEventBus{}
 
 type subscription struct {
 	pattern   string
