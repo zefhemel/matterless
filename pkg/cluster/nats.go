@@ -43,6 +43,10 @@ func spawnNatsServer(port int) error {
 		Port:                  port,
 		MaxControlLine:        4096,
 		DisableShortFirstPing: true,
+
+		// Jetstream
+		JetStream: true,
+		StoreDir:  "js-data",
 	}
 
 	s, err := server.NewServer(opts)
