@@ -13,6 +13,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
+
 const sequenceKey = "$$seq"
 
 type syncMessage struct {

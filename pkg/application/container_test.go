@@ -1,15 +1,18 @@
 package application_test
 
 import (
-	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
-	"github.com/zefhemel/matterless/pkg/application"
-	"github.com/zefhemel/matterless/pkg/config"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/nats-io/nats.go"
+	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
+	"github.com/zefhemel/matterless/pkg/application"
+	"github.com/zefhemel/matterless/pkg/config"
 )
 
 func TestEventHTTP(t *testing.T) {
@@ -24,14 +27,13 @@ func TestEventHTTP(t *testing.T) {
 	cfg.AdminToken = "1234"
 
 	container, err := application.NewContainer(cfg)
+	a.NoError(err)
 	defer container.Close()
-	container.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) {
-		log.Infof("Log: %+v", eventData)
+	container.ClusterConnection().Subscribe(fmt.Sprintf("%s.*.function.*.log", cfg.NatsPrefix), func(m *nats.Msg) {
+		log.Infof("[%s] %s", m.Subject, m.Data)
 	})
+	app, err := container.CreateApp("test")
 	a.NoError(err)
-	app, err := application.NewApplication(cfg, "test")
-	a.NoError(err)
-	container.Register("test", app)
 	a.NoError(app.Eval(strings.ReplaceAll(`
 # events
 |||yaml
@@ -45,10 +47,10 @@ func TestEventHTTP(t *testing.T) {
 import {events} from "./matterless.ts";
 
 async function handle(event) {
-    await events.respond(event, {
+    return {
         status: 200,
         body: "OK"
-    });
+    };
 }
 |||
 `, "|||", "```")))

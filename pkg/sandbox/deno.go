@@ -22,7 +22,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
-	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/util"
 )
 
@@ -98,7 +97,7 @@ func newFunctionHash(name string, code string) functionHash {
 	return functionHash(fmt.Sprintf("%x", bs))
 }
 
-func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode RunMode, name string, eventBus *eventbus.LocalEventBus, functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
+func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
 	inst := &denoFunctionInstance{
 		name:   name,
 		config: config,
@@ -159,8 +158,8 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 	bufferedStderr := bufio.NewReader(stderrPipe)
 
 	// Send stdout and stderr to the log channel
-	go pipeLogStreamToEventBus(name, bufferedStdout, eventBus)
-	go pipeLogStreamToEventBus(name, bufferedStderr, eventBus)
+	go pipeLogStreamToCallback(name, bufferedStdout, logCallback)
+	go pipeLogStreamToCallback(name, bufferedStderr, logCallback)
 
 	inst.serverURL = fmt.Sprintf("http://localhost:%d", listenPort)
 
@@ -264,10 +263,10 @@ func (inst *denoJobInstance) Name() string {
 	return inst.name
 }
 
-func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, eventBus *eventbus.LocalEventBus, functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
+func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
 	inst := &denoJobInstance{}
 
-	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, apiToken, RunModeJob, name, eventBus, functionConfig, code)
+	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, apiToken, RunModeJob, name, logCallback, functionConfig, code)
 	if err != nil {
 		return nil, err
 	}

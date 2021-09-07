@@ -2,10 +2,13 @@ package application
 
 import (
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net/http"
+
+	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/cluster"
+	"github.com/zefhemel/matterless/pkg/util"
 )
 
 func (ag *APIGateway) exposeAdminAPI() {
@@ -25,13 +28,12 @@ func (ag *APIGateway) exposeAdminAPI() {
 
 		app := ag.container.Get(appName)
 		if app == nil {
-			app, err = NewApplication(ag.config, appName)
+			app, err = ag.container.CreateApp(appName)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				fmt.Fprintf(w, "Could not create app: %s", err)
 				return
 			}
-			ag.container.Register(appName, app)
 		}
 
 		if err := app.Eval(string(defBytes)); err != nil {
@@ -39,6 +41,14 @@ func (ag *APIGateway) exposeAdminAPI() {
 			fmt.Fprint(w, err.Error())
 			return
 		}
+
+		if err := ag.container.clusterConn.Publish(cluster.EventPublishApp, []byte(util.MustJsonString(cluster.PublishApp{
+			Name: appName,
+			Code: string(defBytes),
+		}))); err != nil {
+			log.Errorf("Could not publish app registration event to cluster: %s", err)
+		}
+
 		fmt.Fprint(w, app.Definitions().Markdown())
 	}).Methods("PUT")
 
@@ -74,6 +84,13 @@ func (ag *APIGateway) exposeAdminAPI() {
 			return
 		}
 		ag.container.Deregister(appName)
+
+		if err := ag.container.clusterConn.Publish(cluster.EventDeleteApp, []byte(util.MustJsonString(cluster.DeleteApp{
+			Name: appName,
+		}))); err != nil {
+			log.Errorf("Could not publish app deletion event to cluster: %s", err)
+		}
+
 		fmt.Fprint(w, "OK")
 	}).Methods("DELETE")
 

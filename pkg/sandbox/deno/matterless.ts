@@ -47,24 +47,6 @@ const events = {
         if (jsonResult.status === "error") {
             throw Error(jsonResult.error);
         }
-    },
-    async respond(toEventData: any, eventData: any) {
-        let result = await fetch(`${Deno.env.get("API_URL")}/_event/${toEventData['$response_event']}`, {
-            method: "POST",
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `bearer ${Deno.env.get("API_TOKEN")}`
-            },
-            body: JSON.stringify(eventData)
-        })
-        if (result.status == 200) {
-            let jsonResult = await result.json();
-            if (jsonResult.status === "error") {
-                throw Error(jsonResult.error);
-            }
-        } else {
-            throw new Error(`HTTP request not ok: ${await result.text()}`);
-        }
     }
 };
 

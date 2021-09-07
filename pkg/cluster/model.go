@@ -26,7 +26,12 @@ type PublishEvent struct {
 	Data interface{} `json:"data"`
 }
 
-type InvokeFunction struct {
-	Name      string        `json:"name"`
-	Arguments []interface{} `json:"arguments"`
+type FunctionInvoke struct {
+	Data interface{} `json:"data"`
+}
+
+type FunctionResult struct {
+	IsError bool        `json:"is_error,omitempty"`
+	Error   string      `json:"error,omitempty"`
+	Data    interface{} `json:"data,omitempty"`
 }

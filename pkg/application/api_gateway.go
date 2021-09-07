@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/cluster"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
@@ -93,8 +93,8 @@ func (ag *APIGateway) Stop() {
 
 type APIGatewayResponse struct {
 	Headers map[string]string `json:"headers"`
-	Status  int
-	Body    interface{}
+	Status  int               `json:"status"`
+	Body    interface{}       `json:"body"`
 }
 
 func (ag *APIGateway) buildRouter(config *config.Config) {
@@ -131,7 +131,10 @@ func (ag *APIGateway) buildRouter(config *config.Config) {
 		log.Debugf("Received HTTP request (%s) %s", request.Method, path)
 
 		// Perform Request via eventbus
-		response, err := app.EventBus().Request(fmt.Sprintf("http:%s:/%s", request.Method, path), evt, app.config.HTTPGatewayResponseTimeout)
+		response, err := app.EventBus().Request("events", util.MustJsonByteSlice(cluster.PublishEvent{
+			Name: fmt.Sprintf("http:%s:/%s", request.Method, path),
+			Data: evt,
+		}), config.HTTPGatewayResponseTimeout)
 		if err != nil {
 			reportHTTPError(err)
 			return
@@ -140,8 +143,7 @@ func (ag *APIGateway) buildRouter(config *config.Config) {
 		// Decode response and send back
 		var apiGResponse APIGatewayResponse
 
-		// Decode map structure into struct
-		if err := mapstructure.Decode(response, &apiGResponse); err != nil {
+		if err := json.Unmarshal(response.Data, &apiGResponse); err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(writer, "Error: Did not get back an properly structured object")
 			return

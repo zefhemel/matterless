@@ -2,15 +2,18 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/zefhemel/matterless/pkg/application"
 	"github.com/zefhemel/matterless/pkg/client"
 	"github.com/zefhemel/matterless/pkg/config"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 func runCommand() *cobra.Command {
@@ -116,21 +119,10 @@ func runServer(cfg *config.Config) *application.Container {
 	}
 
 	// Subscribe to all logs and write to stdout
-	appContainer.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) {
-		if le, ok := eventData.(application.LogEntry); ok {
-
-			log.Infof("[%s | %s] %s", le.AppName, le.LogEntry.FunctionName, le.LogEntry.Message)
-		} else {
-			log.Error("Received log event that's not an application.LogEntry ", eventData)
-		}
+	appContainer.ClusterConnection().Subscribe(fmt.Sprintf("%s.*.function.*.log", cfg.NatsPrefix), func(m *nats.Msg) {
+		parts := strings.Split(m.Subject, ".") // mls.myapp.function.MyFunction.log
+		log.Infof("[%s | %s] %s", parts[1], parts[3], string(m.Data))
 	})
-
-	// Load previously deployed apps from disk
-	if cfg.PersistApps {
-		if err := appContainer.LoadAppsFromDisk(); err != nil {
-			log.Errorf("Could not load apps from disk: %s", err)
-		}
-	}
 
 	// Handle Ctrl-c gracefully
 	killing := make(chan os.Signal)

@@ -3,11 +3,11 @@ package application
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
-	"net/http"
 )
 
 func (ag *APIGateway) exposeFunctionAPI() {
@@ -40,7 +40,7 @@ func (ag *APIGateway) exposeFunctionAPI() {
 		}
 
 		// Invoke function
-		result, err := app.InvokeFunction(definition.FunctionID(functionName), bodyJSON)
+		result, err := app.InvokeFunction(functionName, bodyJSON)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprint(w, err.Error())

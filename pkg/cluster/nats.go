@@ -1,6 +1,8 @@
 package cluster
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -9,6 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/util"
 )
 
 // Checks if a NATS port is running at the given hostName and port, if not and if
@@ -62,4 +65,53 @@ func spawnNatsServer(port int) error {
 	}
 
 	return nil
+}
+
+type Subscription interface {
+	Unsubscribe() error
+}
+
+type ClusterEventBus struct {
+	conn   *nats.Conn
+	prefix string
+}
+
+func NewClusterEventBus(conn *nats.Conn, prefix string) *ClusterEventBus {
+	return &ClusterEventBus{
+		conn:   conn,
+		prefix: prefix,
+	}
+}
+
+func (eb *ClusterEventBus) Publish(name string, data []byte) error {
+	return eb.conn.Publish(fmt.Sprintf("%s.%s", eb.prefix, name), data)
+}
+
+func (eb *ClusterEventBus) Request(name string, data []byte, timeout time.Duration) (*nats.Msg, error) {
+	return eb.conn.Request(fmt.Sprintf("%s.%s", eb.prefix, name), data, timeout)
+}
+
+func (eb *ClusterEventBus) Subscribe(name string, callback func(msg *nats.Msg)) (Subscription, error) {
+	return eb.conn.Subscribe(fmt.Sprintf("%s.%s", eb.prefix, name), callback)
+}
+
+func (eb *ClusterEventBus) QueueSubscribe(name string, queue string, callback func(msg *nats.Msg)) (Subscription, error) {
+	return eb.conn.QueueSubscribe(fmt.Sprintf("%s.%s", eb.prefix, name), fmt.Sprintf("%s.%s", eb.prefix, queue), callback)
+}
+
+func (eb *ClusterEventBus) InvokeFunction(name string, event interface{}) (interface{}, error) {
+	resp, err := eb.Request(fmt.Sprintf("function.%s", name), util.MustJsonByteSlice(FunctionInvoke{
+		Data: event,
+	}), 10*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	var respMsg FunctionResult
+	if err := json.Unmarshal(resp.Data, &respMsg); err != nil {
+		return nil, err
+	}
+	if respMsg.IsError {
+		return nil, errors.New(respMsg.Error)
+	}
+	return respMsg.Data, nil
 }

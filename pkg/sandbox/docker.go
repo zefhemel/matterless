@@ -17,7 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
-	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/util"
 )
 
@@ -47,7 +46,7 @@ func (inst *dockerFunctionInstance) LastInvoked() time.Time {
 	return inst.lastInvoked
 }
 
-func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runMode RunMode, name string, eventBus *eventbus.LocalEventBus, functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
+func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
 
 	funcHash := newFunctionHash(name, code)
 	inst := &dockerFunctionInstance{
@@ -94,8 +93,8 @@ func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL s
 	}
 
 	// Send stdout and stderr to the log channel
-	go pipeLogStreamToEventBus(name, bufferedStdout, eventBus)
-	go pipeLogStreamToEventBus(name, bufferedStderr, eventBus)
+	go pipeLogStreamToCallback(name, bufferedStdout, logCallback)
+	go pipeLogStreamToCallback(name, bufferedStderr, logCallback)
 
 	// Run "docker inspect" to fetch exposed ports
 	inspectData, err := exec.Command("docker", "inspect", inst.containerName).CombinedOutput()
@@ -234,13 +233,13 @@ func (inst *dockerJobInstance) Name() string {
 	return inst.name
 }
 
-func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, eventBus *eventbus.LocalEventBus, functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
+func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
 	inst := &dockerJobInstance{
 		name:   name,
 		config: cfg,
 	}
 
-	functionInstance, err := newDockerFunctionInstance(ctx, cfg, apiURL, apiToken, RunModeJob, name, eventBus, functionConfig, code)
+	functionInstance, err := newDockerFunctionInstance(ctx, cfg, apiURL, apiToken, RunModeJob, name, logCallback, functionConfig, code)
 	if err != nil {
 		return nil, err
 	}

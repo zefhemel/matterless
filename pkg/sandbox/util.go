@@ -2,14 +2,12 @@ package sandbox
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/eventbus"
 )
 
-func pipeLogStreamToEventBus(functionName string, bufferedReader *bufio.Reader, eventBus *eventbus.LocalEventBus) {
+func pipeLogStreamToCallback(functionName string, bufferedReader *bufio.Reader, callback func(funcName string, message string)) {
 readLoop:
 	for {
 		line, err := bufferedReader.ReadString('\n')
@@ -20,9 +18,6 @@ readLoop:
 			log.Error("log read error", err)
 			break readLoop
 		}
-		eventBus.Publish(fmt.Sprintf("logs:%s", functionName), LogEntry{
-			FunctionName: functionName,
-			Message:      line,
-		})
+		callback(functionName, line)
 	}
 }

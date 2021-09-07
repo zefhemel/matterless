@@ -20,5 +20,6 @@ You should now see something along the lines of
 ```javascript
 function handle(event) {
     console.log("Hello world!");
+    return {result: 100};
 }
 ```
