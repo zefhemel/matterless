@@ -7,18 +7,16 @@ import (
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/cluster"
-	"github.com/zefhemel/matterless/pkg/util"
 )
 
-type subscribeMessage struct {
-	Pattern string `json:"pattern"`
-}
+// type subscribeMessage struct {
+// 	Pattern string `json:"pattern"`
+// }
 
-type eventMessage struct {
-	EventName string      `json:"name"`
-	Data      interface{} `json:"data"`
-}
+// type eventMessage struct {
+// 	EventName string      `json:"name"`
+// 	Data      interface{} `json:"data"`
+// }
 
 func (ag *APIGateway) exposeEventAPI() {
 	ag.rootRouter.HandleFunc("/{app}/_event/{eventName}", func(w http.ResponseWriter, r *http.Request) {
@@ -51,10 +49,12 @@ func (ag *APIGateway) exposeEventAPI() {
 		}
 
 		// Publish event
-		app.EventBus().Publish("events", util.MustJsonByteSlice(cluster.PublishEvent{
-			Name: eventName,
-			Data: bodyJSON,
-		}))
+		if err := app.PublishAppEvent(eventName, bodyJSON); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
+			log.Debugf("Could not publish: %s", err.Error())
+			return
+		}
 
 		// Done
 		w.Header().Set("content-type", "application/json")

@@ -3,6 +3,7 @@ package application
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
@@ -81,12 +82,75 @@ func NewContainer(config *config.Config) (*Container, error) {
 		return nil, err
 	}
 
+	if config.LoadApps {
+		if err := c.loadApps(); err != nil {
+			return nil, err
+		}
+	}
+
+	c.subscribeToEvents()
+
 	return c, nil
+}
+
+func (c *Container) subscribeToEvents() {
+	// c.clusterEventBus.Subscribe(">", func(msg *nats.Msg) {
+	// 	log.Infof("MONITOR %s EVENT: %s", msg.Subject, msg.Data)
+	// })
+	c.clusterStore.SubscribePuts(func(event store.PutMessage) {
+		if strings.HasPrefix(event.Key, "app:") {
+			var err error
+			appName := event.Key[len("app:"):]
+			app := c.Get(appName)
+
+			log.Infof("Loading app %s...", appName)
+			if app == nil {
+				app, err = c.CreateApp(appName)
+				if err != nil {
+					log.Errorf("Could not create app: %s", appName)
+					return
+				}
+			}
+
+			if err := app.Eval(event.Value.(string)); err != nil {
+				log.Errorf("Could not evaluate app: %s", err)
+				return
+			}
+		}
+	})
+
+	c.clusterStore.SubscribeDeletes(func(event store.DeleteMessage) {
+		if strings.HasPrefix(event.Key, "app:") {
+			appName := event.Key[len("app:"):]
+
+			log.Infof("Deleting app %s...", appName)
+			c.Deregister(appName)
+		}
+	})
+}
+
+func (c *Container) loadApps() error {
+	results, err := c.clusterStore.QueryPrefix("app:")
+	if err != nil {
+		return errors.Wrap(err, "query apps")
+	}
+	for _, result := range results {
+		appName := result.Key[len("app:"):]
+		code := result.Value.(string)
+
+		app, err := c.CreateApp(appName)
+		if err != nil {
+			return errors.Wrap(err, "create app")
+		}
+		if err := app.Eval(code); err != nil {
+			return errors.Wrap(err, "eval app")
+		}
+	}
+	return nil
 }
 
 func (c *Container) CreateApp(appName string) (*Application, error) {
 	appDataPath := fmt.Sprintf("%s/%s", c.config.DataDir, util.SafeFilename(appName))
-	// eventBus := eventbus.NewLocalEventBus()
 
 	if err := os.MkdirAll(appDataPath, 0700); err != nil {
 		return nil, errors.Wrap(err, "create data dir")
@@ -105,29 +169,12 @@ func (c *Container) CreateApp(appName string) (*Application, error) {
 		return nil, errors.Wrap(err, "jetstream store connect")
 	}
 
-	// TODO: Re-enabled evented store
-	// dataStore := store.NewEventedStore(jsStore, eventBus)
 	app, err := NewApplication(c.config, appName, jsStore, cluster.NewClusterEventBus(c.clusterConn, fmt.Sprintf("%s.%s", c.config.NatsPrefix, appName)))
 	if err != nil {
 		return nil, err
 	}
 
 	c.apps[appName] = app
-
-	// Listen to sandbox log events, republish on cluster event bus
-	// DISABLED because all going through cluster now
-	// app.EventBus().Subscribe("logs:*", func(eventName string, eventData interface{}) {
-	// 	if le, ok := eventData.(sandbox.LogEntry); ok {
-	// 		if err := c.clusterConn.Publish(fmt.Sprintf("%s.logs.%s.%s", c.config.NatsPrefix, appName, le.FunctionName), util.MustJsonByteSlice(LogEntry{
-	// 			AppName:  appName,
-	// 			LogEntry: le,
-	// 		})); err != nil {
-	// 			log.Errorf("Could not publish log event: %s", err)
-	// 		}
-	// 	} else {
-	// 		log.Fatal("Did not get sandbox.LogEntry", eventData)
-	// 	}
-	// })
 
 	return app, nil
 }
@@ -158,32 +205,9 @@ func (c *Container) Deregister(name string) {
 	}
 }
 
-// func (c *Container) LoadAppsFromDisk() error {
-// 	files, err := os.ReadDir(c.config.DataDir)
-// 	if err != nil {
-// 		return err
-// 	}
-// fileLoop:
-// 	for _, file := range files {
-// 		appName := file.Name()
-// 		if file.IsDir() && !strings.HasPrefix(file.Name(), ".") {
-// 			if _, err := os.Stat(fmt.Sprintf("%s/%s/application.md", c.config.DataDir, appName)); err != nil {
-// 				// No application file
-// 				continue fileLoop
-// 			}
-// 			// It's an app, let's load it
-// 			app, err := NewApplication(c.config, appName)
-// 			if err != nil {
-// 				return errors.Wrapf(err, "creating app: %s", appName)
-// 			}
-// 			c.Register(appName, app)
-// 			if err := app.LoadFromDisk(); err != nil {
-// 				return errors.Wrapf(err, "loading app: %s", appName)
-// 			}
-// 		}
-// 	}
-// 	return nil
-// }
+func (c *Container) Store() *store.JetstreamStore {
+	return c.clusterStore
+}
 
 func (c *Container) List() []string {
 	appNames := make([]string, 0, len(c.apps))

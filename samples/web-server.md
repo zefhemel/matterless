@@ -5,6 +5,8 @@ http:GET:/:
   - WebFunction
 custom-event:
   - MyCustomFunction
+store:put:counter:
+- MyPutListener
 ```
 
 # function WebFunction
@@ -28,5 +30,13 @@ async function handle(evt) {
 ```javascript
 function handle(evt) {
     console.log("Sup", evt);
+}
+```
+
+# function MyPutListener
+
+```javascript
+function handle(evt) {
+    console.log("Putting", evt.key, evt.new_value);
 }
 ```

@@ -1,13 +1,14 @@
-package application
+package definition
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/store"
-	"gopkg.in/yaml.v3"
 	"reflect"
 	"regexp"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/store"
+	"gopkg.in/yaml.v2"
 )
 
 var interPolationRegexp = regexp.MustCompile(`\$\{[^\}]+\}`)
@@ -39,23 +40,21 @@ func interpolateStoreValues(store store.Store, s string, logCallback func(string
 }
 
 // Normalize replaces environment variables with their values
-func (app *Application) interpolateStoreValues() {
-	defs := app.definitions
-
+func (defs *Definitions) InterpolateStoreValues(store store.Store) {
 	logCallback := func(message string) {
-		log.Errorf("[%s] %s", app.appName, message)
+		log.Error(message)
 	}
 
 	for _, def := range defs.Jobs {
 		yamlBuf, _ := yaml.Marshal(def.Config.Init)
-		interPolatedYaml := interpolateStoreValues(app.dataStore, string(yamlBuf), logCallback)
+		interPolatedYaml := interpolateStoreValues(store, string(yamlBuf), logCallback)
 		var val interface{}
 		yaml.Unmarshal([]byte(interPolatedYaml), &val)
 		def.Config.Init = val
 	}
 	for _, def := range defs.Functions {
 		yamlBuf, _ := yaml.Marshal(def.Config.Init)
-		interPolatedYaml := interpolateStoreValues(app.dataStore, string(yamlBuf), logCallback)
+		interPolatedYaml := interpolateStoreValues(store, string(yamlBuf), logCallback)
 		var val interface{}
 		yaml.Unmarshal([]byte(interPolatedYaml), &val)
 		def.Config.Init = val
@@ -63,7 +62,7 @@ func (app *Application) interpolateStoreValues() {
 
 	for _, def := range defs.MacroInstances {
 		yamlBuf, _ := yaml.Marshal(def.Arguments)
-		interPolatedYaml := interpolateStoreValues(app.dataStore, string(yamlBuf), logCallback)
+		interPolatedYaml := interpolateStoreValues(store, string(yamlBuf), logCallback)
 		var val interface{}
 		yaml.Unmarshal([]byte(interPolatedYaml), &val)
 		def.Arguments = val

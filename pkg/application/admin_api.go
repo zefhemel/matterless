@@ -6,12 +6,12 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/cluster"
+	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
 )
 
 func (ag *APIGateway) exposeAdminAPI() {
+	// Application PUT
 	ag.rootRouter.HandleFunc("/{app}", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
@@ -26,30 +26,27 @@ func (ag *APIGateway) exposeAdminAPI() {
 			return
 		}
 
-		app := ag.container.Get(appName)
-		if app == nil {
-			app, err = ag.container.CreateApp(appName)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "Could not create app: %s", err)
-				return
-			}
-		}
+		code := string(defBytes)
 
-		if err := app.Eval(string(defBytes)); err != nil {
+		defs, err := definition.Check(code, ag.config)
+
+		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprint(w, err.Error())
 			return
 		}
 
-		if err := ag.container.clusterConn.Publish(cluster.EventPublishApp, []byte(util.MustJsonString(cluster.PublishApp{
-			Name: appName,
-			Code: string(defBytes),
-		}))); err != nil {
-			log.Errorf("Could not publish app registration event to cluster: %s", err)
+		// Rather than applying this locally, we'll store it just in the store, which in turn will lead to the app
+		// being loaded
+		if err := ag.container.Store().Put(fmt.Sprintf("app:%s", appName), string(defBytes)); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
+			return
 		}
 
-		fmt.Fprint(w, app.Definitions().Markdown())
+		// if err := ag.container.Store().
+
+		fmt.Fprint(w, defs.Markdown())
 	}).Methods("PUT")
 
 	ag.rootRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +73,7 @@ func (ag *APIGateway) exposeAdminAPI() {
 		fmt.Fprint(w, app.Definitions().Markdown())
 	}).Methods("GET")
 
+	// Application DELETE
 	ag.rootRouter.HandleFunc("/{app}", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		vars := mux.Vars(r)
@@ -83,12 +81,20 @@ func (ag *APIGateway) exposeAdminAPI() {
 		if !ag.authAdmin(w, r) {
 			return
 		}
-		ag.container.Deregister(appName)
 
-		if err := ag.container.clusterConn.Publish(cluster.EventDeleteApp, []byte(util.MustJsonString(cluster.DeleteApp{
-			Name: appName,
-		}))); err != nil {
-			log.Errorf("Could not publish app deletion event to cluster: %s", err)
+		// Check if exists
+		app := ag.container.Get(appName)
+		if app == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Rather than deregistering directly, we'll delete it in the store, the unregistering will be a cascading
+		// effect
+		if err := ag.container.Store().Delete(fmt.Sprintf("app:%s", appName)); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
+			return
 		}
 
 		fmt.Fprint(w, "OK")

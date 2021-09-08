@@ -67,8 +67,8 @@ func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL s
 	}
 	cmd := exec.Command("docker", "run", "--rm", "-P", "-i",
 		fmt.Sprintf("--name=%s", inst.containerName),
-		fmt.Sprintf("-e API_URL=%s", fmt.Sprintf(inst.apiURL, apiHost)),
-		fmt.Sprintf("-e API_TOKEN=%s", apiToken),
+		fmt.Sprintf("-eAPI_URL=%s", fmt.Sprintf(inst.apiURL, apiHost)),
+		fmt.Sprintf("-eAPI_TOKEN=%s", apiToken),
 		"zefhemel/matterless-runner-docker", runnerType)
 
 	stdoutPipe, err := cmd.StdoutPipe()

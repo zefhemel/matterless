@@ -2,18 +2,15 @@ package sandbox
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/cluster"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
-	"github.com/zefhemel/matterless/pkg/util"
 )
 
 type FunctionExecutionWorker struct {
@@ -50,39 +47,7 @@ func NewFunctionExecutionWorker(
 		done:           make(chan struct{}),
 	}
 
-	fm.subscription, err = ceb.QueueSubscribe(fmt.Sprintf("function.%s", name), fmt.Sprintf("function.%s.workers", fm.name), func(msg *nats.Msg) {
-		var requestMessage cluster.FunctionInvoke
-		if err := json.Unmarshal(msg.Data, &requestMessage); err != nil {
-			log.Errorf("Could not unmarshal event data: %s", err)
-			err = msg.Respond([]byte(util.MustJsonByteSlice(cluster.FunctionResult{
-				IsError: true,
-				Error:   err.Error(),
-			})))
-			if err != nil {
-				log.Errorf("Could not respond with error message: %s", err)
-			}
-			return
-		}
-		resp, err := fm.invoke(requestMessage.Data)
-		if err != nil {
-			log.Errorf("Error executing function: %s", err)
-			err = msg.Respond([]byte(util.MustJsonByteSlice(cluster.FunctionResult{
-				IsError: true,
-				Error:   err.Error(),
-			})))
-			if err != nil {
-				log.Errorf("Could not respond with error message: %s", err)
-			}
-			return
-		}
-		err = msg.Respond([]byte(util.MustJsonByteSlice(cluster.FunctionResult{
-			Data: resp,
-		})))
-		if err != nil {
-			log.Errorf("Could not respond with response: %s", err)
-		}
-	})
-	if err != nil {
+	if fm.subscription, err = ceb.SubscribeInvokeFunction(name, fm.invoke); err != nil {
 		return nil, err
 	}
 
@@ -130,7 +95,8 @@ func (fm *FunctionExecutionWorker) invoke(event interface{}) (interface{}, error
 	)
 	// TODO: Do something better here?
 	ctx := context.Background()
-	// TODO: Don't limit to one function instantiation at a time
+
+	// One invoke at a time per worker
 	fm.functionExecutionLock.Lock()
 	defer fm.functionExecutionLock.Unlock()
 	inst = fm.runningInstance
@@ -152,6 +118,7 @@ func (fm *FunctionExecutionWorker) invoke(event interface{}) (interface{}, error
 		}
 		fm.runningInstance = inst
 	}
+	log.Infof("Now actually locally invoking %s", fm.name)
 	return inst.Invoke(ctx, event)
 }
 

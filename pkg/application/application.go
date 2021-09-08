@@ -10,7 +10,6 @@ import (
 	"github.com/zefhemel/matterless/pkg/cluster"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
-	"github.com/zefhemel/matterless/pkg/eventbus"
 	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/store"
 	"github.com/zefhemel/matterless/pkg/util"
@@ -26,32 +25,45 @@ type Application struct {
 	config             *config.Config
 	eventBus           *cluster.ClusterEventBus
 	eventsSubscription cluster.Subscription
-	functionWorkers    []*sandbox.FunctionExecutionWorker
+	sandbox            *sandbox.Sandbox
 
 	// API
 	apiToken  string
 	dataStore store.Store
 }
 
-type eventSubscription struct {
-	eventPattern     string
-	subscriptionFunc eventbus.SubscriptionFunc
-}
-
 func NewApplication(cfg *config.Config, appName string, s store.Store, ceb *cluster.ClusterEventBus) (*Application, error) {
+	apiURL := fmt.Sprintf("http://%s:%d/%s", "%s", cfg.APIBindPort, appName)
 	apiToken := util.TokenGenerator()
+	sb, err := sandbox.NewSandbox(cfg, apiURL, apiToken, ceb)
+	if err != nil {
+		return nil, errors.Wrap(err, "sandbox create")
+	}
 	app := &Application{
-		config:          cfg,
-		appName:         appName,
-		dataStore:       s,
-		eventBus:        ceb,
-		apiToken:        apiToken,
-		functionWorkers: []*sandbox.FunctionExecutionWorker{},
+		config:   cfg,
+		appName:  appName,
+		eventBus: ceb,
+		apiToken: apiToken,
+		sandbox:  sb,
 	}
 
-	var err error
+	app.dataStore = store.NewEventedStore(s, func(key string, val interface{}) {
+		if err := app.PublishAppEvent(fmt.Sprintf("store:put:%s", key), map[string]interface{}{
+			"key":       key,
+			"new_value": val,
+		}); err != nil {
+			log.Errorf("Could not publish store:put event: %s", err)
+		}
+	}, func(key string) {
+		if err := app.PublishAppEvent(fmt.Sprintf("store:del:%s", key), map[string]interface{}{
+			"key": key,
+		}); err != nil {
+			log.Errorf("Could not publish store:del event: %s", err)
+		}
+	})
 
-	app.eventsSubscription, err = app.eventBus.QueueSubscribe("events", "events.workers", func(msg *nats.Msg) {
+	// We send all app events through a single event queue
+	app.eventsSubscription, err = app.eventBus.QueueSubscribe(cluster.EventPublishEvent, "event.workers", func(msg *nats.Msg) {
 		var eventData cluster.PublishEvent
 		if err := json.Unmarshal(msg.Data, &eventData); err != nil {
 			log.Errorf("Could not unmarshal event: %s - %s", err, string(msg.Data))
@@ -81,11 +93,10 @@ func NewApplication(cfg *config.Config, appName string, s store.Store, ceb *clus
 // Only for testing
 func NewMockApplication(config *config.Config, appName string) *Application {
 	return &Application{
-		appName:         appName,
-		definitions:     &definition.Definitions{},
-		dataStore:       &store.MockStore{},
-		config:          config,
-		functionWorkers: []*sandbox.FunctionExecutionWorker{},
+		appName:     appName,
+		definitions: &definition.Definitions{},
+		dataStore:   &store.MockStore{},
+		config:      config,
 	}
 }
 
@@ -93,6 +104,14 @@ var FunctionDoesNotExistError = errors.New("function does not exist")
 
 func (app *Application) InvokeFunction(name string, event interface{}) (interface{}, error) {
 	return app.eventBus.InvokeFunction(name, event)
+}
+
+// Publish a (custom) application event
+func (app *Application) PublishAppEvent(name string, event interface{}) error {
+	return app.eventBus.Publish(cluster.EventPublishEvent, util.MustJsonByteSlice(cluster.PublishEvent{
+		Name: name,
+		Data: event,
+	}))
 }
 
 func (app *Application) Eval(code string) error {
@@ -111,52 +130,33 @@ func (app *Application) Eval(code string) error {
 	}
 
 	app.definitions = defs
-	app.interpolateStoreValues()
+	defs.InterpolateStoreValues(app.dataStore)
 
-	fmt.Println(defs.Markdown())
+	// fmt.Println(defs.Markdown())
 
 	app.reset()
 
-	apiURL := fmt.Sprintf("http://%s:%d/%s", "%s", app.config.APIBindPort, app.appName)
+	log.Info("Loading functions...")
 	for name, def := range defs.Functions {
-		worker, err := sandbox.NewFunctionExecutionWorker(app.config, apiURL, app.apiToken, app.eventBus, string(name), def.Config, def.Code)
-		if err != nil {
+		if err := app.sandbox.LoadFunction(string(name), def.Config, def.Code); err != nil {
 			log.Errorf("Could not spin up function worker for %s: %s", name, err)
 		}
-		app.functionWorkers = append(app.functionWorkers, worker)
 	}
 
-	// log.Info("Starting jobs...")
-	// for name, def := range defs.Jobs {
-	// 	jobTimeoutCtx, cancel := context.WithTimeout(context.Background(), app.config.SanboxJobInitTimeout)
-	// 	job, err := app.sandbox.Job(jobTimeoutCtx, string(name), def.Config, def.Code)
-	// 	if err != nil {
-	// 		cancel()
-	// 		return errors.Wrap(err, "init job")
-	// 	}
-	// 	cancel()
-	// 	jobStartTimeoutCtx, cancel := context.WithTimeout(context.Background(), app.config.SandboxJobStartTimeout)
-	// 	if err := job.Start(jobStartTimeoutCtx); err != nil {
-	// 		cancel()
-	// 		return errors.Wrap(err, "start job")
-	// 	}
-	// 	cancel()
-	// }
+	log.Info("Loading jobs...")
+	for name, def := range defs.Jobs {
+		if err := app.sandbox.LoadJob(string(name), def.Config, def.Code); err != nil {
+			log.Errorf("Could not spin up job worker for %s: %s", name, err)
+		}
+	}
 
 	log.Info("Ready to go.")
-	app.eventBus.Publish("init", []byte{})
 	return nil
 }
 
 // reset but ready to start again
 func (app *Application) reset() {
-	// stop all function workers
-	for _, worker := range app.functionWorkers {
-		if err := worker.Close(); err != nil {
-			log.Errorf("Could not close worker: %s", err)
-		}
-	}
-	app.functionWorkers = []*sandbox.FunctionExecutionWorker{}
+	app.sandbox.Flush()
 }
 
 func (app *Application) Close() error {

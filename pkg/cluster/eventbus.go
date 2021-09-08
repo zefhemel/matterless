@@ -25,12 +25,15 @@ func ConnectOrBoot(natsUrl string, options ...nats.Option) (*nats.Conn, error) {
 		}
 		if parsedUrl.Hostname() == "localhost" || parsedUrl.Hostname() == "127.0.0.1" {
 			// Attempt to boot it locally
-			log.Debug("Booting nats server")
+			log.Debug("Booting NATS server")
 			p, err := strconv.Atoi(parsedUrl.Port())
 			if err != nil {
 				return nil, errors.Wrap(err, "parsing port")
 			}
 			err = spawnNatsServer(p)
+			if err != nil {
+				return nil, errors.Wrap(err, "nats spawn")
+			}
 		}
 		nc, err = nats.Connect(natsUrl, options...)
 		if err != nil {
@@ -114,4 +117,36 @@ func (eb *ClusterEventBus) InvokeFunction(name string, event interface{}) (inter
 		return nil, errors.New(respMsg.Error)
 	}
 	return respMsg.Data, nil
+}
+
+func (eb *ClusterEventBus) SubscribeInvokeFunction(name string, callback func(interface{}) (interface{}, error)) (Subscription, error) {
+	return eb.QueueSubscribe(fmt.Sprintf("function.%s", name), fmt.Sprintf("function.%s.workers", name), func(msg *nats.Msg) {
+		var requestMessage FunctionInvoke
+		if err := json.Unmarshal(msg.Data, &requestMessage); err != nil {
+			log.Errorf("Could not unmarshal event data: %s", err)
+			err = msg.Respond([]byte(util.MustJsonByteSlice(FunctionResult{
+				IsError: true,
+				Error:   err.Error(),
+			})))
+			if err != nil {
+				log.Errorf("Could not respond with error message: %s", err)
+			}
+			return
+		}
+		resp, err := callback(requestMessage.Data)
+		if err != nil {
+			if err := msg.Respond([]byte(util.MustJsonByteSlice(FunctionResult{
+				IsError: true,
+				Error:   err.Error(),
+			}))); err != nil {
+				log.Errorf("Could not respond with error message: %s", err)
+			}
+			return
+		}
+		if err := msg.Respond([]byte(util.MustJsonByteSlice(FunctionResult{
+			Data: resp,
+		}))); err != nil {
+			log.Errorf("Could not respond with response: %s", err)
+		}
+	})
 }

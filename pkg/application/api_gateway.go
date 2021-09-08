@@ -131,7 +131,7 @@ func (ag *APIGateway) buildRouter(config *config.Config) {
 		log.Debugf("Received HTTP request (%s) %s", request.Method, path)
 
 		// Perform Request via eventbus
-		response, err := app.EventBus().Request("events", util.MustJsonByteSlice(cluster.PublishEvent{
+		response, err := app.EventBus().Request(cluster.EventPublishEvent, util.MustJsonByteSlice(cluster.PublishEvent{
 			Name: fmt.Sprintf("http:%s:/%s", request.Method, path),
 			Data: evt,
 		}), config.HTTPGatewayResponseTimeout)

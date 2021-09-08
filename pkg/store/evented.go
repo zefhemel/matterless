@@ -1,42 +1,26 @@
 package store
 
-import (
-	"fmt"
-
-	"github.com/zefhemel/matterless/pkg/eventbus"
-)
-
 type EventedStore struct {
-	wrappedStore Store
-	eventBus     *eventbus.LocalEventBus
+	wrappedStore    Store
+	putCallback     func(key string, val interface{})
+	deletedCallback func(key string)
 }
 
 var _ Store = &EventedStore{}
 
-func NewEventedStore(wrappedStore Store, eventBus *eventbus.LocalEventBus) *EventedStore {
+func NewEventedStore(wrappedStore Store, putCallback func(key string, val interface{}), deletedCallback func(key string)) *EventedStore {
 	return &EventedStore{
-		wrappedStore: wrappedStore,
-		eventBus:     eventBus,
+		wrappedStore:    wrappedStore,
+		putCallback:     putCallback,
+		deletedCallback: deletedCallback,
 	}
-}
-
-type PutEvent struct {
-	Key      string      `json:"key"`
-	NewValue interface{} `json:"new_value"`
-}
-
-type DeleteEvent struct {
-	Key string `json:"key"`
 }
 
 func (s *EventedStore) Put(key string, val interface{}) error {
 	if err := s.wrappedStore.Put(key, val); err != nil {
 		return err
 	} else {
-		s.eventBus.PublishAsync(fmt.Sprintf("store:put:%s", key), &PutEvent{
-			Key:      key,
-			NewValue: val,
-		})
+		s.putCallback(key, val)
 		return nil
 	}
 }
@@ -45,9 +29,7 @@ func (s *EventedStore) Delete(key string) error {
 	if err := s.wrappedStore.Delete(key); err != nil {
 		return err
 	} else {
-		s.eventBus.PublishAsync(fmt.Sprintf("store:del:%s", key), &DeleteEvent{
-			Key: key,
-		})
+		s.deletedCallback(key)
 		return nil
 	}
 }

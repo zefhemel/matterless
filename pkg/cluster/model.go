@@ -1,21 +1,15 @@
 package cluster
 
+// New app deployments are signaled through the cluster data
+// store through puts and deletes on the app keys
+
+// In addition
+
 const (
-	EventPublishApp     = "app.publish"
-	EventDeleteApp      = "app.delete"
-	EventRestartApp     = "app.restart"
-	EventPublishEvent   = "event"
-	EventInvokeFunction = "invoke"
+	EventRestartApp   = "restart"
+	EventPublishEvent = "event"
+	EventStartJob     = "job"
 )
-
-type PublishApp struct {
-	Name string `json:"name"`
-	Code string `json:"code"`
-}
-
-type DeleteApp struct {
-	Name string `json:"name"`
-}
 
 type RestartApp struct {
 	Name string `json:"name"`

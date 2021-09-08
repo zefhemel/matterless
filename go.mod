@@ -9,7 +9,6 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/imdario/mergo v0.3.12
-	github.com/juju/fslock v0.0.0-20160525022230-4d5c94c67b4b // indirect
 	github.com/mitchellh/mapstructure v1.4.1
 	github.com/nats-io/nats-server/v2 v2.4.0 // indirect
 	github.com/nats-io/nats.go v1.12.0 // indirect
@@ -20,5 +19,6 @@ require (
 	github.com/syndtr/goleveldb v1.0.0
 	github.com/yuin/goldmark v1.3.2
 	github.com/zefhemel/yamlschema v0.0.0-20210331100236-6d05c787ad8c
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )

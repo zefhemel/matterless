@@ -24,9 +24,7 @@ func runCommand() *cobra.Command {
 		Short: "Run matterless in ad-hoc mode for specified markdown definition files",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			// Don't save application files
-			cfg.PersistApps = false
-
+			cfg.LoadApps = false
 			container := runServer(cfg)
 			defer container.Close()
 
@@ -44,6 +42,7 @@ func runCommand() *cobra.Command {
 	cmd.Flags().IntVarP(&cfg.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
 	cmd.Flags().StringVarP(&cfg.AdminToken, "token", "t", "", "Admin API token")
 	cmd.Flags().StringVar(&cfg.DataDir, "data", "./mls-data", "Path to keep Matterless state")
+	cmd.Flags().StringVarP(&cfg.NatsUrl, "nats", "n", "nats://localhost:4222", "NATS server to connect to")
 
 	return cmd
 }
@@ -85,6 +84,26 @@ func deployCommand() *cobra.Command {
 	return cmdDeploy
 }
 
+func attachCommand() *cobra.Command {
+	var (
+		url        string
+		adminToken string
+	)
+	var cmd = &cobra.Command{
+		Use:   "attach",
+		Short: "Attach to a running matterless server console",
+		Args:  cobra.MinimumNArgs(0),
+		Run: func(cmd *cobra.Command, args []string) {
+			mlsClient := client.NewMatterlessClient(url, adminToken)
+			runConsole(mlsClient, []string{})
+		},
+	}
+	cmd.Flags().StringVar(&url, "url", "", "URL or Matterless server to deploy to")
+	cmd.Flags().StringVarP(&adminToken, "token", "t", "", "Root token for Matterless server")
+
+	return cmd
+}
+
 func rootCommand() *cobra.Command {
 	cfg := config.NewConfig()
 
@@ -92,7 +111,6 @@ func rootCommand() *cobra.Command {
 		Use:   "mls",
 		Short: "Run Matterless in server mode",
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg.PersistApps = true
 			runServer(cfg)
 			busyLoop()
 		},
@@ -100,6 +118,7 @@ func rootCommand() *cobra.Command {
 	cmd.Flags().IntVarP(&cfg.APIBindPort, "port", "p", 8222, "Port to listen to")
 	cmd.Flags().StringVarP(&cfg.AdminToken, "token", "t", "", "Admin API token")
 	cmd.Flags().StringVar(&cfg.DataDir, "data", "./mls-data", "location to keep Matterless state")
+	cmd.Flags().StringVarP(&cfg.NatsUrl, "nats", "n", "nats://localhost:4222", "NATS server to connect to")
 
 	return cmd
 }
@@ -108,7 +127,7 @@ func main() {
 	log.SetLevel(log.DebugLevel)
 
 	cmd := rootCommand()
-	cmd.AddCommand(runCommand(), deployCommand(), ppCommand())
+	cmd.AddCommand(runCommand(), deployCommand(), attachCommand(), ppCommand())
 	cmd.Execute()
 }
 
@@ -129,6 +148,7 @@ func runServer(cfg *config.Config) *application.Container {
 	signal.Notify(killing, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-killing
+		log.Info("Shutting down...")
 		appContainer.Close()
 		os.Exit(0)
 	}()

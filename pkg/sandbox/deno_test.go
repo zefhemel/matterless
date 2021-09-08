@@ -3,6 +3,7 @@ package sandbox_test
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
@@ -42,7 +43,7 @@ func TestDenoSandboxFunction(t *testing.T) {
 	})
 
 	// Boot worker
-	worker, err := sandbox.NewFunctionExecutionWorker(cfg, "", "", ceb, "TestFunction", &definition.FunctionConfig{
+	worker, err := sandbox.NewFunctionExecutionWorker(cfg, "http://%s", "", ceb, "TestFunction", &definition.FunctionConfig{
 		Runtime: "deno",
 	}, code)
 	assert.NoError(t, err)
@@ -57,52 +58,59 @@ func TestDenoSandboxFunction(t *testing.T) {
 	// t.Fail()
 }
 
-// func TestDenoSandboxJob(t *testing.T) {
-// 	cfg := config.NewConfig()
-// 	cfg.DataDir = os.TempDir()
-// 	cfg.UseSystemDeno = true
+func TestDenoSandboxJob(t *testing.T) {
+	cfg := config.NewConfig()
+	cfg.DataDir = os.TempDir()
+	cfg.UseSystemDeno = true
 
-// 	eventBus := eventbus.NewLocalEventBus()
-// 	s, err := sandbox.NewSandbox(cfg, "", "1234", eventBus)
-// 	assert.NoError(t, err)
-// 	logCounter := 0
-// 	eventBus.Subscribe("logs:*", func(eventName string, eventData interface{}) {
-// 		logEntry := eventData.(sandbox.LogEntry)
-// 		log.Infof("Got log: %s", logEntry.Message)
-// 		logCounter++
-// 	})
-// 	defer s.Close()
-// 	code := `
-// 	function init(config) {
-//        console.log("Got config", config, "and env", Deno.env.get("ENVVAR"));
-//    }
+	code := `
+function init(config) {
+	console.log("Got config", config, "and env", Deno.env.get("API_URL"));
+}
 
-// 	function start() {
-// 	}
+function start() {
+}
 
-//    function run() {
-//        console.log("Running");
-// 		setInterval(() => {
-//            console.log("Iteration");
-//        }, 500);
-//    }
+function run() {
+	console.log("Running");
+	setInterval(() => {
+		console.log("Iteration");
+	}, 50);
+}
 
-//    function done() {
-//        console.log("Stopping");
-//    }
-// 	`
-// 	// Init
-// 	jobInstance, err := s.Job(context.Background(), "test", &definition.FunctionConfig{
-// 		Init: map[string]interface{}{
-// 			"something": "To do",
-// 		},
-// 		Runtime: "deno",
-// 	}, code)
-// 	assert.NoError(t, err)
+function stop() {
+	console.log("Stopping");
+}
+`
+	// Boot up cluster
+	conn, err := cluster.ConnectOrBoot("nats://localhost:4222")
+	assert.NoError(t, err)
+	ceb := cluster.NewClusterEventBus(conn, "test")
 
-// 	err = jobInstance.Start(context.Background())
-// 	assert.NoError(t, err)
-// 	time.Sleep(2 * time.Second)
-// 	// Some iteration logs should have been written
-// 	assert.True(t, logCounter > 5)
-// }
+	// Listen to logs
+	allLogs := ""
+	ceb.Subscribe("function.*.log", func(msg *nats.Msg) {
+		log.Infof("Got log: %s", msg.Data)
+		allLogs = allLogs + string(msg.Data)
+	})
+
+	// Boot worker
+	worker, err := sandbox.NewJobExecutionWorker(cfg, "http://%s", "", ceb, "TestJob", &definition.FunctionConfig{
+		Runtime: "deno",
+		Init: map[string]interface{}{
+			"something": "To do",
+		},
+	}, code)
+	assert.NoError(t, err)
+
+	// Start Job
+	_, err = ceb.InvokeFunction("TestJob", struct{}{})
+	assert.NoError(t, err)
+	time.Sleep(1 * time.Second)
+	assert.NoError(t, worker.Close())
+	assert.Contains(t, allLogs, "http://localhost")
+	assert.Contains(t, allLogs, "To do")
+	assert.Contains(t, allLogs, "Iteration")
+	assert.Contains(t, allLogs, "Stopping")
+	// t.Fail()
+}

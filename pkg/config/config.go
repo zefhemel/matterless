@@ -12,7 +12,7 @@ type Config struct {
 	NatsUrl    string
 	NatsPrefix string
 
-	PersistApps   bool // Whether to write deployed app code to disk
+	LoadApps      bool
 	UseSystemDeno bool // Use the system installed deno rather than the version downloaded automatically
 
 	FunctionRunTimeout         time.Duration
@@ -26,6 +26,7 @@ type Config struct {
 
 func NewConfig() *Config {
 	return &Config{
+		LoadApps:                   true,
 		NatsUrl:                    "nats://localhost:4222",
 		NatsPrefix:                 "mls",
 		FunctionRunTimeout:         1 * time.Minute,

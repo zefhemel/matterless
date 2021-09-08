@@ -3,17 +3,18 @@ package definition
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+	"text/template"
+
 	"github.com/imdario/mergo"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/util"
 	"github.com/zefhemel/yamlschema"
-	"io"
-	"net/http"
-	"os"
-	"strings"
-	"text/template"
 )
 
 func (defs *Definitions) ExpandMacros() error {

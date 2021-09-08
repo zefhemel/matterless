@@ -3,14 +3,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/c-bata/go-prompt"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/client"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
-	"os"
-	"strings"
-	"time"
 )
 
 func completer(in prompt.Document) []prompt.Suggest {
@@ -252,6 +253,7 @@ func runConsole(c *client.MatterlessClient, filePaths []string) {
 
 // Fetches meta data (app names, definitions) regularly for auto complete
 func metaDataFetcher() {
+	time.Sleep(time.Second)
 	for {
 		fetchMetadata()
 		time.Sleep(10 * time.Second)
