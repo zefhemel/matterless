@@ -9,8 +9,9 @@ type Config struct {
 	DataDir     string
 	AdminToken  string
 
-	NatsUrl    string
-	NatsPrefix string
+	ClusterNatsUrl           string
+	ClusterNatsPrefix        string
+	ClusterHeartbeatInterval time.Duration
 
 	LoadApps      bool
 	UseSystemDeno bool // Use the system installed deno rather than the version downloaded automatically
@@ -27,8 +28,9 @@ type Config struct {
 func NewConfig() *Config {
 	return &Config{
 		LoadApps:                   true,
-		NatsUrl:                    "nats://localhost:4222",
-		NatsPrefix:                 "mls",
+		ClusterNatsUrl:             "nats://localhost:4222",
+		ClusterNatsPrefix:          "mls",
+		ClusterHeartbeatInterval:   2 * time.Second,
 		FunctionRunTimeout:         1 * time.Minute,
 		HTTPGatewayResponseTimeout: 10 * time.Second,
 		SanboxJobInitTimeout:       10 * time.Second,

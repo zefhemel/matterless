@@ -154,6 +154,16 @@ func (app *Application) Eval(code string) error {
 	return nil
 }
 
+func (app *Application) StartJobs() error {
+	log.Info("Starting jobs...")
+	for name, def := range app.definitions.Jobs {
+		if _, err := app.InvokeFunction(string(name), def.Config.Init); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // reset but ready to start again
 func (app *Application) reset() {
 	app.sandbox.Flush()

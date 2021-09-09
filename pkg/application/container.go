@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
@@ -15,12 +16,13 @@ import (
 )
 
 type Container struct {
-	config          *config.Config
-	clusterConn     *nats.Conn
-	clusterEventBus *cluster.ClusterEventBus
-	clusterStore    *store.JetstreamStore
-	apps            map[string]*Application
-	apiGateway      *APIGateway
+	config                *config.Config
+	clusterConn           *nats.Conn
+	clusterEventBus       *cluster.ClusterEventBus
+	clusterLeaderElection *cluster.LeaderElection
+	clusterStore          *store.JetstreamStore
+	apps                  map[string]*Application
+	apiGateway            *APIGateway
 }
 
 const (
@@ -39,19 +41,24 @@ func NewContainer(config *config.Config) (*Container, error) {
 		return nil, errors.Wrap(err, "create data dir")
 	}
 
-	c.clusterConn, err = cluster.ConnectOrBoot(config.NatsUrl)
+	c.clusterConn, err = cluster.ConnectOrBoot(config.ClusterNatsUrl)
 	if err != nil {
 		return nil, errors.Wrap(err, "create container nats")
 	}
 
-	c.clusterEventBus = cluster.NewClusterEventBus(c.clusterConn, config.NatsPrefix)
+	c.clusterLeaderElection, err = cluster.NewLeaderElection(c.clusterConn, fmt.Sprintf("%s.leader", config.ClusterNatsPrefix), 2*time.Second)
+	if err != nil {
+		return nil, errors.Wrap(err, "leader election")
+	}
+
+	c.clusterEventBus = cluster.NewClusterEventBus(c.clusterConn, config.ClusterNatsPrefix)
 
 	clusterWrappedStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/cluster_store", config.DataDir))
 	if err != nil {
 		return nil, errors.Wrap(err, "create cluster leveldb store")
 	}
 
-	c.clusterStore, err = store.NewJetstreamStore(c.clusterConn, fmt.Sprintf("%s_cluster", config.NatsPrefix), clusterWrappedStore)
+	c.clusterStore, err = store.NewJetstreamStore(c.clusterConn, fmt.Sprintf("%s_cluster", config.ClusterNatsPrefix), clusterWrappedStore)
 	if err != nil {
 		return nil, errors.Wrap(err, "create cluster store")
 	}
@@ -116,6 +123,12 @@ func (c *Container) subscribeToEvents() {
 				log.Errorf("Could not evaluate app: %s", err)
 				return
 			}
+
+			if c.clusterLeaderElection.IsLeader() {
+				if err := app.StartJobs(); err != nil {
+					log.Errorf("Could not start jobs: %s", err)
+				}
+			}
 		}
 	})
 
@@ -134,6 +147,7 @@ func (c *Container) loadApps() error {
 	if err != nil {
 		return errors.Wrap(err, "query apps")
 	}
+	isLeader := c.clusterLeaderElection.IsLeader()
 	for _, result := range results {
 		appName := result.Key[len("app:"):]
 		code := result.Value.(string)
@@ -145,7 +159,13 @@ func (c *Container) loadApps() error {
 		if err := app.Eval(code); err != nil {
 			return errors.Wrap(err, "eval app")
 		}
+		if isLeader {
+			if err := app.StartJobs(); err != nil {
+				return errors.Wrap(err, "start jobs")
+			}
+		}
 	}
+
 	return nil
 }
 
@@ -160,7 +180,7 @@ func (c *Container) CreateApp(appName string) (*Application, error) {
 		return nil, errors.Wrap(err, "create data store dir")
 	}
 
-	jsStore, err := store.NewJetstreamStore(c.clusterConn, fmt.Sprintf("%s_%s", c.config.NatsPrefix, appName), levelDBStore)
+	jsStore, err := store.NewJetstreamStore(c.clusterConn, fmt.Sprintf("%s_%s", c.config.ClusterNatsPrefix, appName), levelDBStore)
 	if err != nil {
 		return nil, errors.Wrap(err, "create jetstream store")
 	}
@@ -169,7 +189,7 @@ func (c *Container) CreateApp(appName string) (*Application, error) {
 		return nil, errors.Wrap(err, "jetstream store connect")
 	}
 
-	app, err := NewApplication(c.config, appName, jsStore, cluster.NewClusterEventBus(c.clusterConn, fmt.Sprintf("%s.%s", c.config.NatsPrefix, appName)))
+	app, err := NewApplication(c.config, appName, jsStore, cluster.NewClusterEventBus(c.clusterConn, fmt.Sprintf("%s.%s", c.config.ClusterNatsPrefix, appName)))
 	if err != nil {
 		return nil, err
 	}

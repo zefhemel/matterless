@@ -42,7 +42,7 @@ func runCommand() *cobra.Command {
 	cmd.Flags().IntVarP(&cfg.APIBindPort, "port", "p", 8222, "Port to bind API Gateway to")
 	cmd.Flags().StringVarP(&cfg.AdminToken, "token", "t", "", "Admin API token")
 	cmd.Flags().StringVar(&cfg.DataDir, "data", "./mls-data", "Path to keep Matterless state")
-	cmd.Flags().StringVarP(&cfg.NatsUrl, "nats", "n", "nats://localhost:4222", "NATS server to connect to")
+	cmd.Flags().StringVarP(&cfg.ClusterNatsUrl, "nats", "n", "nats://localhost:4222", "NATS server to connect to")
 
 	return cmd
 }
@@ -118,7 +118,7 @@ func rootCommand() *cobra.Command {
 	cmd.Flags().IntVarP(&cfg.APIBindPort, "port", "p", 8222, "Port to listen to")
 	cmd.Flags().StringVarP(&cfg.AdminToken, "token", "t", "", "Admin API token")
 	cmd.Flags().StringVar(&cfg.DataDir, "data", "./mls-data", "location to keep Matterless state")
-	cmd.Flags().StringVarP(&cfg.NatsUrl, "nats", "n", "nats://localhost:4222", "NATS server to connect to")
+	cmd.Flags().StringVarP(&cfg.ClusterNatsUrl, "nats", "n", "nats://localhost:4222", "NATS server to connect to")
 
 	return cmd
 }
@@ -138,7 +138,7 @@ func runServer(cfg *config.Config) *application.Container {
 	}
 
 	// Subscribe to all logs and write to stdout
-	appContainer.ClusterConnection().Subscribe(fmt.Sprintf("%s.*.function.*.log", cfg.NatsPrefix), func(m *nats.Msg) {
+	appContainer.ClusterConnection().Subscribe(fmt.Sprintf("%s.*.function.*.log", cfg.ClusterNatsPrefix), func(m *nats.Msg) {
 		parts := strings.Split(m.Subject, ".") // mls.myapp.function.MyFunction.log
 		log.Infof("[%s | %s] %s", parts[1], parts[3], string(m.Data))
 	})

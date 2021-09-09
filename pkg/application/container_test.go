@@ -25,11 +25,12 @@ func TestEventHTTP(t *testing.T) {
 	cfg.APIBindPort = 8123
 	cfg.DataDir = os.TempDir()
 	cfg.AdminToken = "1234"
+	cfg.LoadApps = false
 
 	container, err := application.NewContainer(cfg)
 	a.NoError(err)
 	defer container.Close()
-	container.ClusterConnection().Subscribe(fmt.Sprintf("%s.*.function.*.log", cfg.NatsPrefix), func(m *nats.Msg) {
+	container.ClusterConnection().Subscribe(fmt.Sprintf("%s.*.function.*.log", cfg.ClusterNatsPrefix), func(m *nats.Msg) {
 		log.Infof("[%s] %s", m.Subject, m.Data)
 	})
 	app, err := container.CreateApp("test")
