@@ -108,6 +108,7 @@ function stop() {
 	assert.NoError(t, err)
 	time.Sleep(1 * time.Second)
 	assert.NoError(t, worker.Close())
+	time.Sleep(200 * time.Millisecond)
 	assert.Contains(t, allLogs, "http://localhost")
 	assert.Contains(t, allLogs, "To do")
 	assert.Contains(t, allLogs, "Iteration")
