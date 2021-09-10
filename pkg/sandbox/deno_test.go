@@ -104,8 +104,6 @@ function stop() {
 	assert.NoError(t, err)
 
 	// Start Job
-	_, err = ceb.InvokeFunction("TestJob", struct{}{})
-	assert.NoError(t, err)
 	time.Sleep(1 * time.Second)
 	assert.NoError(t, worker.Close())
 	time.Sleep(200 * time.Millisecond)

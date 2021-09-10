@@ -72,8 +72,5 @@ async function handle(event) {
 		a.Contains(string(data), "OK")
 	}
 
-	ni := container.NodeInfo()
-	a.Equal(10, ni.Apps["test"].Sandbox.Functions["MyHTTPFunc"].Invocations)
-	a.Equal(1, ni.Apps["test"].Sandbox.Functions["MyHTTPFunc"].RunningInstances)
 	// t.Fail()
 }

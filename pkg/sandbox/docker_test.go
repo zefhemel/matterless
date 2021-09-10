@@ -117,8 +117,6 @@ func TestDockerSandboxJob(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Start Job
-	_, err = ceb.InvokeFunction("TestJob", struct{}{})
-	assert.NoError(t, err)
 	time.Sleep(1 * time.Second)
 	assert.NoError(t, worker.Close())
 	assert.Contains(t, allLogs, "http://host.docker.internal")
