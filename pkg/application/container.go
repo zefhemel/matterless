@@ -46,7 +46,7 @@ func NewContainer(config *config.Config) (*Container, error) {
 		return nil, errors.Wrap(err, "create container nats")
 	}
 
-	c.clusterLeaderElection, err = cluster.NewLeaderElection(c.clusterConn, fmt.Sprintf("%s.leader", config.ClusterNatsPrefix), 2*time.Second)
+	c.clusterLeaderElection, err = cluster.NewLeaderElection(c.clusterConn, fmt.Sprintf("%s.currentLeader", config.ClusterNatsPrefix), fmt.Sprintf("%s.heartbeat", config.ClusterNatsPrefix), 2*time.Second)
 	if err != nil {
 		return nil, errors.Wrap(err, "leader election")
 	}

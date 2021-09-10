@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -12,17 +13,14 @@ import (
 	"github.com/zefhemel/matterless/pkg/util"
 )
 
-const (
-// broadcastInterval = 2 * time.Second
-// timeoutDuration   = 5 * time.Second
-)
-
 type NodeID = uint64
 
 type LeaderElection struct {
-	conn                  *nats.Conn
-	heartbeatEvent        string
-	heartbeatSubscription *nats.Subscription
+	conn                         *nats.Conn
+	currentLeaderRPCSubject      string
+	heartbeatSubject             string
+	heartbeatSubscription        *nats.Subscription
+	currentLeaderRPCSubscription *nats.Subscription
 
 	startTime         time.Time
 	broadcastInterval time.Duration
@@ -45,18 +43,51 @@ func init() {
 	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
-func NewLeaderElection(conn *nats.Conn, hearthbeatEvent string, broadcastInterval time.Duration) (*LeaderElection, error) {
+func NewLeaderElection(conn *nats.Conn, currentLeaderRPCSubject string, hearthbeatSubject string, broadcastInterval time.Duration) (*LeaderElection, error) {
 	var err error
 	le := &LeaderElection{
-		heartbeatEvent:    hearthbeatEvent,
-		hearbeats:         make(map[NodeID]time.Time),
-		startTime:         time.Now(),
-		broadcastInterval: broadcastInterval,
-		timeoutDuration:   broadcastInterval * 3,
-		conn:              conn,
+		currentLeaderRPCSubject: currentLeaderRPCSubject,
+		heartbeatSubject:        hearthbeatSubject,
+		hearbeats:               make(map[NodeID]time.Time),
+		startTime:               time.Now(),
+		broadcastInterval:       broadcastInterval,
+		timeoutDuration:         broadcastInterval * 3,
+		conn:                    conn,
 	}
 
-	le.heartbeatSubscription, err = conn.Subscribe(hearthbeatEvent, func(msg *nats.Msg) {
+	// Let's make a quick getLeader call to the bus and see if somebody got a response
+	resp, err := conn.Request(currentLeaderRPCSubject, []byte{}, 2*time.Second)
+	if err == nil {
+		// Got answer, great
+		var msg heartbeatMessage
+		if err := json.Unmarshal(resp.Data, &msg); err != nil {
+			return nil, errors.Wrap(err, "unmarshall getLeader")
+		}
+		// Let's persist it
+		le.hearbeats[msg.NodeID] = time.Now()
+		// And generate an ID > the current leader's ID
+		le.ID = generateNodeID(msg.NodeID)
+	} else if err == nats.ErrNoResponders || err == nats.ErrTimeout {
+		// Either no responders or timeout => We're the first!
+		// log.Infof("Got RPC error: %s", err)
+		// Generate a random ID
+		le.ID = generateNodeID(0)
+		// Let's persist it
+		le.hearbeats[le.ID] = time.Now()
+	} else {
+		return nil, errors.Wrap(err, "getLeader call")
+	}
+	// And let's start broadcasting
+	go le.broadcaster()
+
+	le.currentLeaderRPCSubscription, err = conn.QueueSubscribe(currentLeaderRPCSubject, fmt.Sprintf("%s.workers", currentLeaderRPCSubject), func(msg *nats.Msg) {
+		msg.Respond(util.MustJsonByteSlice(heartbeatMessage{le.Leader()}))
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "getLeader subscription")
+	}
+
+	le.heartbeatSubscription, err = conn.Subscribe(hearthbeatSubject, func(msg *nats.Msg) {
 		var hm heartbeatMessage
 		if err := json.Unmarshal(msg.Data, &hm); err != nil {
 			log.Errorf("Could not unmarshal heartbeat message")
@@ -65,15 +96,7 @@ func NewLeaderElection(conn *nats.Conn, hearthbeatEvent string, broadcastInterva
 		le.mutex.Lock()
 		defer le.mutex.Unlock()
 		le.hearbeats[hm.NodeID] = time.Now()
-		if le.ID == 0 {
-			// Time for me to generate my own ID
-			le.ID = generateNodeID(hm.NodeID)
-			go le.broadcaster()
-		}
 	})
-
-	// Async kick off initial election
-	go le.Leader()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "heartbeat subscription")
@@ -85,25 +108,6 @@ func NewLeaderElection(conn *nats.Conn, hearthbeatEvent string, broadcastInterva
 func (le *LeaderElection) Leader() NodeID {
 	le.mutex.Lock()
 	defer le.mutex.Unlock()
-	if len(le.hearbeats) == 0 {
-		// log.Info("No heartbets received yet, let's wait")
-		// No heartbeats received, two options:
-		// 1. Too early, need to wait or
-		// 2. I'm the first one in the cluster
-		le.mutex.Unlock()
-		// Wait up to timeOutDuration
-		for time.Since(le.startTime) < le.timeoutDuration && le.ID == 0 {
-			time.Sleep(time.Duration(rand.Int63n(500)) * time.Millisecond)
-		}
-		le.mutex.Lock()
-		if len(le.hearbeats) == 0 {
-			// log.Info("Still nuthin, I suppose I'm first?")
-			// Ok I'm the first, cool
-			le.ID = generateNodeID(0)
-			go le.broadcaster()
-			return le.ID
-		}
-	}
 	// Iterate over all heartbeats
 	now := time.Now()
 	currentLeaderID := NodeID(0)
@@ -121,6 +125,10 @@ func (le *LeaderElection) Leader() NodeID {
 }
 
 func (le *LeaderElection) IsLeader() bool {
+	if le.done {
+		// Short circuit
+		return false
+	}
 	return le.Leader() == le.ID
 }
 
@@ -139,7 +147,7 @@ func (le *LeaderElection) broadcaster() {
 			return
 		}
 		// log.Infof("Broadcasting my ID %d", le.ID)
-		if err := le.conn.Publish(le.heartbeatEvent, util.MustJsonByteSlice(heartbeatMessage{le.ID})); err != nil {
+		if err := le.conn.Publish(le.heartbeatSubject, util.MustJsonByteSlice(heartbeatMessage{le.ID})); err != nil {
 			log.Errorf("Could not broadcast heartbeat: %s", err)
 		}
 		time.Sleep(le.broadcastInterval)

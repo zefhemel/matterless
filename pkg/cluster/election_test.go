@@ -1,6 +1,7 @@
 package cluster_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -17,22 +18,32 @@ func TestMasterElection(t *testing.T) {
 	defer conn.Close()
 
 	nodes := make([]*cluster.LeaderElection, 50)
+	var wg sync.WaitGroup
 	for i := 0; i < len(nodes); i++ {
-		nodes[i], err = cluster.NewLeaderElection(conn, "test-me", 500*time.Millisecond)
-		a.NoError(err)
+		j := i
+		wg.Add(1)
+		go func() {
+			nodes[j], err = cluster.NewLeaderElection(conn, "election.heartbeat", "election.getLeader", 500*time.Millisecond)
+			a.NoError(err)
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(600 * time.Millisecond)
 
 	leaders := 0
 	var leader *cluster.LeaderElection
 	for _, node := range nodes {
 		if node.IsLeader() {
 			leaders++
+			log.Infof("Found leader: %d", node.ID)
 			leader = node
 		}
 	}
 	a.Equal(1, leaders)
+
+	log.Info("Now kicking out current leader")
 	leader.Close()
 
 	time.Sleep(3 * time.Second)
@@ -41,6 +52,7 @@ func TestMasterElection(t *testing.T) {
 	for _, node := range nodes {
 		if node.IsLeader() {
 			leaders++
+			log.Infof("Found leader: %d", node.ID)
 			leader = node
 		}
 	}
