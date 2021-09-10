@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -37,6 +38,24 @@ func TestNatsCluster(t *testing.T) {
 			a.Fail("Error, incorrect message")
 		}
 	}
+
+	ceb.SubscribeFetchClusterInfo(func() *cluster.NodeInfo {
+		return &cluster.NodeInfo{
+			ID:   1,
+			Apps: map[string]*cluster.AppInfo{},
+		}
+	})
+	ceb.SubscribeFetchClusterInfo(func() *cluster.NodeInfo {
+		return &cluster.NodeInfo{
+			ID:   2,
+			Apps: map[string]*cluster.AppInfo{},
+		}
+	})
+
+	inf, err := ceb.FetchClusterInfo(1 * time.Second)
+	a.NoError(err)
+	a.Equal(cluster.NodeID(1), inf.Nodes[1].ID)
+	a.Equal(cluster.NodeID(2), inf.Nodes[2].ID)
 
 	// t.Fail()
 }

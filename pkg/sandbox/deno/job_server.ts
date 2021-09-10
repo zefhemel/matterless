@@ -39,6 +39,9 @@ Promise.resolve(init()).then(async () => {
                     headers: headers,
                     body: JSON.stringify(result || {})
                 });
+                setTimeout(() => {
+                    Deno.exit(0);
+                });
             }).catch(e => {
                 request.respond({
                     status: 500,

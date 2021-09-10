@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
@@ -149,4 +152,73 @@ func (eb *ClusterEventBus) SubscribeInvokeFunction(name string, callback func(in
 			log.Errorf("Could not respond with response: %s", err)
 		}
 	})
+}
+
+func (eb *ClusterEventBus) FetchClusterInfo(wait time.Duration) (*ClusterInfo, error) {
+	// TODO: Generate unique ID some other way
+	responseSubject := fmt.Sprintf("clusterinfo.%s", strings.ReplaceAll(uuid.NewString(), "-", ""))
+
+	ci := &ClusterInfo{
+		Nodes: map[uint64]*NodeInfo{},
+	}
+	var mutex sync.Mutex
+
+	sub, err := eb.Subscribe(responseSubject, func(msg *nats.Msg) {
+		var ni NodeInfo
+		if err := json.Unmarshal(msg.Data, &ni); err != nil {
+			log.Errorf("Could not unmarshal node info: %s", err)
+			return
+		}
+		mutex.Lock()
+		ci.Nodes[ni.ID] = &ni
+		defer mutex.Unlock()
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer sub.Unsubscribe()
+	if err := eb.Publish(EventFetchNodeInfo, util.MustJsonByteSlice(FetchNodeInfo{
+		ReplyTo: responseSubject,
+	})); err != nil {
+		return nil, err
+	}
+
+	// Now give all nodes time to respond
+	time.Sleep(wait)
+
+	// Enough already!
+	return ci, nil
+}
+
+func (eb *ClusterEventBus) SubscribeFetchClusterInfo(callback func() *NodeInfo) (Subscription, error) {
+	return eb.Subscribe(EventFetchNodeInfo, func(msg *nats.Msg) {
+		var fni FetchNodeInfo
+		if err := json.Unmarshal(msg.Data, &fni); err != nil {
+			log.Errorf("Could not unmarshal fetch node info: %s", err)
+			return
+		}
+		if err := eb.Publish(fni.ReplyTo, util.MustJsonByteSlice(callback())); err != nil {
+			log.Errorf("Error publishing fetch node info: %s", err)
+		}
+	})
+}
+
+func (eb *ClusterEventBus) SubscribeRequestJobWorker(callback func(jobName string)) (Subscription, error) {
+	return eb.QueueSubscribe(EventStartJobWorker, fmt.Sprintf("%s.workers", EventStartJobWorker), func(msg *nats.Msg) {
+		var sjw StartJobWorker
+		if err := json.Unmarshal(msg.Data, &sjw); err != nil {
+			log.Errorf("Could not unmarshal start job worker: %s", err)
+			return
+		}
+		callback(sjw.Name)
+	})
+}
+
+func (eb *ClusterEventBus) RequestJobWorkers(name string, n int) error {
+	for i := 0; i < n; i++ {
+		if err := eb.Publish(EventStartJobWorker, util.MustJsonByteSlice(StartJobWorker{name})); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -39,13 +39,14 @@ type FunctionInstance interface {
 	Name() string
 	Invoke(ctx context.Context, event interface{}) (interface{}, error)
 	LastInvoked() time.Time
-	Kill() error
+	Kill()
 }
 
 type JobInstance interface {
 	Name() string
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
+	DidExit() chan error
 }
 
 type Sandbox struct {
@@ -85,8 +86,8 @@ func (s *Sandbox) LoadFunction(name string, functionConfig *definition.FunctionC
 	return nil
 }
 
-func (s *Sandbox) LoadJob(name string, functionConfig *definition.FunctionConfig, code string) error {
-	worker, err := NewJobExecutionWorker(s.config, s.apiURL, s.apiToken, s.ceb, name, functionConfig, code)
+func (s *Sandbox) StartJobWorker(name definition.FunctionID, functionConfig *definition.FunctionConfig, code string) error {
+	worker, err := NewJobExecutionWorker(s.config, s.apiURL, s.apiToken, s.ceb, string(name), functionConfig, code)
 	if err != nil {
 		return err
 	}
@@ -108,4 +109,18 @@ func (s *Sandbox) Flush() {
 		}
 	}
 	s.jobWorkers = []*JobExecutionWorker{}
+}
+
+func (s *Sandbox) AppInfo() *cluster.AppInfo {
+	si := &cluster.AppInfo{
+		FunctionWorkers: map[string]int{},
+		JobWorkers:      map[string]int{},
+	}
+	for _, functionWorker := range s.functionWorkers {
+		si.FunctionWorkers[functionWorker.name]++
+	}
+	for _, jobWorker := range s.jobWorkers {
+		si.JobWorkers[jobWorker.name]++
+	}
+	return si
 }

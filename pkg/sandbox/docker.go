@@ -34,6 +34,8 @@ type dockerFunctionInstance struct {
 	runLock       sync.Mutex
 	name          string
 	apiURL        string
+
+	procExit chan error
 }
 
 var _ FunctionInstance = &dockerFunctionInstance{}
@@ -53,6 +55,7 @@ func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL s
 		name:          name,
 		apiURL:        apiURL,
 		containerName: fmt.Sprintf("mls-%s", funcHash),
+		procExit:      make(chan error, 1),
 	}
 
 	apiHost := "172.17.0.1"
@@ -131,7 +134,7 @@ func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL s
 	return inst, nil
 }
 
-func (inst *dockerFunctionInstance) Kill() error {
+func (inst *dockerFunctionInstance) Kill() {
 	// Don't Kill until current run is over, if any
 	inst.runLock.Lock()
 	inst.runLock.Unlock()
@@ -143,7 +146,6 @@ func (inst *dockerFunctionInstance) Kill() error {
 	exec.Command("docker", "kill", inst.containerName).Run()
 
 	log.Debug("Killed function instance.")
-	return nil
 }
 
 type jsError struct {
@@ -268,6 +270,7 @@ func (inst *dockerJobInstance) Start(ctx context.Context) error {
 }
 
 func (inst *dockerJobInstance) Stop(ctx context.Context) error {
+	defer inst.Kill()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/stop", inst.serverURL), nil)
 	if err != nil {
 		return errors.Wrap(err, "stop call")
@@ -277,5 +280,9 @@ func (inst *dockerJobInstance) Stop(ctx context.Context) error {
 		return errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
 	}
 	defer resp.Body.Close()
-	return inst.Kill()
+	return nil
+}
+
+func (inst *dockerJobInstance) DidExit() chan error {
+	return inst.procExit
 }

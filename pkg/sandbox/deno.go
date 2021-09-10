@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"text/template"
 	"time"
 
@@ -34,6 +35,7 @@ type denoFunctionInstance struct {
 	runLock     sync.Mutex
 	serverURL   string
 	tempDir     string
+	denoExited  chan error
 }
 
 var _ FunctionInstance = &denoFunctionInstance{}
@@ -128,6 +130,11 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 
 	// Run deno as child process with only network and environment variable access
 	inst.cmd = exec.Command(denoBinPath(config), "run", "--allow-net", "--allow-env", fmt.Sprintf("%s/%s_server.ts", denoDir, runModeString), fmt.Sprintf("%d", listenPort))
+
+	// Don't propagate Ctrl-c to children
+	inst.cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
 	inst.cmd.Env = append(inst.cmd.Env,
 		"NO_COLOR=1",
 		fmt.Sprintf("DENO_DIR=%s/.deno/cache", config.DataDir),
@@ -145,12 +152,12 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 
 	// Kick off the command in the background
 	// Making it buffered to prevent go-routine leak (we don't care for the result after initial start-up)
-	denoExited := make(chan error, 1)
+	inst.denoExited = make(chan error, 1)
 	if err := inst.cmd.Start(); err != nil {
 		return nil, errors.Wrap(err, "deno run")
 	}
 	go func() {
-		denoExited <- inst.cmd.Wait()
+		inst.denoExited <- inst.cmd.Wait()
 	}()
 
 	// Listen to the stderr and log pipes and ship everything to logChannel
@@ -172,7 +179,7 @@ waitLoop:
 				return nil, ctx.Err()
 			}
 			break waitLoop
-		case err := <-denoExited:
+		case err := <-inst.denoExited:
 			return nil, err
 		default:
 		}
@@ -186,17 +193,14 @@ waitLoop:
 	return inst, nil
 }
 
-func (inst *denoFunctionInstance) Kill() error {
+func (inst *denoFunctionInstance) Kill() {
 	if err := inst.cmd.Process.Kill(); err != nil {
 		log.Errorf("Error killing deno instance: %s", err)
 	}
 
-	log.Info("Killed deno process, cleaning files from disk.")
 	if err := os.RemoveAll(inst.tempDir); err != nil {
 		log.Errorf("Could not delete directory %s: %s", inst.tempDir, err)
 	}
-
-	return nil
 }
 
 type InvocationError struct {
@@ -295,6 +299,7 @@ func (inst *denoJobInstance) Start(ctx context.Context) error {
 }
 
 func (inst *denoJobInstance) Stop(ctx context.Context) error {
+	defer inst.Kill()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/stop", inst.serverURL), nil)
 	if err != nil {
 		return errors.Wrap(err, "stop call")
@@ -303,6 +308,10 @@ func (inst *denoJobInstance) Stop(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
 	}
-	defer resp.Body.Close()
-	return inst.Kill()
+	resp.Body.Close()
+	return nil
+}
+
+func (inst *denoJobInstance) DidExit() chan error {
+	return inst.denoExited
 }

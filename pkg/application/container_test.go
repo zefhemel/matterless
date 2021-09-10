@@ -23,6 +23,7 @@ func TestEventHTTP(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	cfg := config.NewConfig()
 	cfg.APIBindPort = 8123
+	cfg.ClusterNatsUrl = "nats://localhost:4225"
 	cfg.DataDir = os.TempDir()
 	cfg.AdminToken = "1234"
 	cfg.LoadApps = false
@@ -33,9 +34,13 @@ func TestEventHTTP(t *testing.T) {
 	container.ClusterConnection().Subscribe(fmt.Sprintf("%s.*.function.*.log", cfg.ClusterNatsPrefix), func(m *nats.Msg) {
 		log.Infof("[%s] %s", m.Subject, m.Data)
 	})
+	if err := container.Start(); err != nil {
+		log.Fatalf("Could not start container: %s", err)
+	}
+
 	app, err := container.CreateApp("test")
 	a.NoError(err)
-	a.NoError(app.Eval(strings.ReplaceAll(`
+	a.NoError(app.EvalString(strings.ReplaceAll(`
 # events
 |||yaml
 "http:GET:/hello":
@@ -66,4 +71,9 @@ async function handle(event) {
 		a.NoError(err)
 		a.Contains(string(data), "OK")
 	}
+
+	ni := container.NodeInfo()
+	a.Equal(10, ni.Apps["test"].Sandbox.Functions["MyHTTPFunc"].Invocations)
+	a.Equal(1, ni.Apps["test"].Sandbox.Functions["MyHTTPFunc"].RunningInstances)
+	// t.Fail()
 }

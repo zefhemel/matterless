@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/cluster"
 	"github.com/zefhemel/matterless/pkg/config"
@@ -29,6 +28,7 @@ type FunctionExecutionWorker struct {
 
 	functionExecutionLock sync.Mutex
 	runningInstance       FunctionInstance
+	invocationCount       int
 }
 
 func NewFunctionExecutionWorker(
@@ -81,9 +81,7 @@ func (fm *FunctionExecutionWorker) cleanup() {
 	now := time.Now()
 	if fm.runningInstance.LastInvoked().Add(fm.config.SandboxFunctionKeepAlive).Before(now) {
 		log.Debugf("Killing function '%s'.", fm.runningInstance.Name())
-		if err := fm.runningInstance.Kill(); err != nil {
-			log.Errorf("Error killing function instance: %s", err)
-		}
+		fm.runningInstance.Kill()
 		fm.runningInstance = nil
 	}
 }
@@ -119,6 +117,7 @@ func (fm *FunctionExecutionWorker) invoke(event interface{}) (interface{}, error
 		fm.runningInstance = inst
 	}
 	log.Infof("Now actually locally invoking %s", fm.name)
+	fm.invocationCount++
 	return inst.Invoke(ctx, event)
 }
 
@@ -131,9 +130,8 @@ func (fm *FunctionExecutionWorker) Close() error {
 
 	// Stop running instance if any
 	if fm.runningInstance != nil {
-		if err := fm.runningInstance.Kill(); err != nil {
-			return errors.Wrap(err, "closing worker")
-		}
+		fm.runningInstance.Kill()
+		fm.runningInstance = nil
 	}
 
 	// Unsubscribe from queue

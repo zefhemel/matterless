@@ -19,13 +19,13 @@ type Application struct {
 	// Definitions
 	appName     string
 	definitions *definition.Definitions
-	code        string
 
 	// Runtime
-	config             *config.Config
-	eventBus           *cluster.ClusterEventBus
-	eventsSubscription cluster.Subscription
-	sandbox            *sandbox.Sandbox
+	config                  *config.Config
+	eventBus                *cluster.ClusterEventBus
+	eventsSubscription      cluster.Subscription
+	startWorkerSubscription cluster.Subscription
+	sandbox                 *sandbox.Sandbox
 
 	// API
 	apiToken  string
@@ -87,6 +87,13 @@ func NewApplication(cfg *config.Config, appName string, s store.Store, ceb *clus
 		return nil, errors.Wrap(err, "event subscribe")
 	}
 
+	app.startWorkerSubscription, err = app.eventBus.SubscribeRequestJobWorker(func(jobName string) {
+		job := app.definitions.Jobs[definition.FunctionID(jobName)]
+		if err := app.sandbox.StartJobWorker(definition.FunctionID(jobName), job.Config, job.Code); err != nil {
+			log.Errorf("Could not start job %s: %s", jobName, err)
+		}
+	})
+
 	return app, nil
 }
 
@@ -114,21 +121,7 @@ func (app *Application) PublishAppEvent(name string, event interface{}) error {
 	}))
 }
 
-func (app *Application) Eval(code string) error {
-	log.Debug("Parsing and checking definitions...")
-	app.code = code
-	defs, err := definition.Parse(code)
-	if err != nil {
-		return err
-	}
-
-	if err := defs.InlineImports(fmt.Sprintf("%s/.importcache", app.config.DataDir)); err != nil {
-		return err
-	}
-	if err := defs.ExpandMacros(); err != nil {
-		return err
-	}
-
+func (app *Application) Eval(defs *definition.Definitions) error {
 	app.definitions = defs
 	defs.InterpolateStoreValues(app.dataStore)
 
@@ -143,26 +136,35 @@ func (app *Application) Eval(code string) error {
 		}
 	}
 
-	log.Info("Loading jobs...")
-	for name, def := range defs.Jobs {
-		if err := app.sandbox.LoadJob(string(name), def.Config, def.Code); err != nil {
-			log.Errorf("Could not spin up job worker for %s: %s", name, err)
-		}
-	}
+	//log.Info("Loading jobs...")
+	//for name, def := range defs.Jobs {
+	//	if err := app.sandbox.StartJobWorker(name, def.Config, def.Code); err != nil {
+	//		log.Errorf("Could not spin up job worker for %s: %s", name, err)
+	//	}
+	//}
 
 	log.Info("Ready to go.")
 	return nil
 }
 
-func (app *Application) StartJobs() error {
-	log.Info("Starting jobs...")
-	for name, def := range app.definitions.Jobs {
-		if _, err := app.InvokeFunction(string(name), def.Config.Init); err != nil {
-			return err
-		}
+func (app *Application) EvalString(code string) error {
+	defs, err := definition.Check(code, app.config)
+	if err != nil {
+		return err
 	}
-	return nil
+
+	return app.Eval(defs)
 }
+
+//func (app *Application) StartJobs() error {
+//	log.Info("Starting jobs...")
+//	for name, def := range app.definitions.Jobs {
+//		if _, err := app.InvokeFunction(string(name), def.Config.Init); err != nil {
+//			return err
+//		}
+//	}
+//	return nil
+//}
 
 // reset but ready to start again
 func (app *Application) reset() {
@@ -171,6 +173,9 @@ func (app *Application) reset() {
 
 func (app *Application) Close() error {
 	if err := app.eventsSubscription.Unsubscribe(); err != nil {
+		return err
+	}
+	if err := app.startWorkerSubscription.Unsubscribe(); err != nil {
 		return err
 	}
 	app.reset()
@@ -183,4 +188,12 @@ func (app *Application) Definitions() *definition.Definitions {
 
 func (app *Application) EventBus() *cluster.ClusterEventBus {
 	return app.eventBus
+}
+
+func (app *Application) Sandbox() *sandbox.Sandbox {
+	return app.sandbox
+}
+
+func (app *Application) Name() string {
+	return app.appName
 }

@@ -19,11 +19,10 @@ func (ag *APIGateway) exposeApplicationAPI() {
 		if !ag.authApp(w, r, app) {
 			return
 		}
-		if err := app.Eval(app.code); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "Error: %s", err)
-			return
-		}
+
+		panic("TO IMPLEMENT")
+		// TODO Implement again with cluster event
+
 		fmt.Fprint(w, `{"status": "ok"}`)
 	}).Methods("POST")
 }

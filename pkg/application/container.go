@@ -2,6 +2,8 @@ package application
 
 import (
 	"fmt"
+	"github.com/mitchellh/mapstructure"
+	"github.com/zefhemel/matterless/pkg/definition"
 	"os"
 	"strings"
 	"time"
@@ -23,6 +25,7 @@ type Container struct {
 	clusterStore          *store.JetstreamStore
 	apps                  map[string]*Application
 	apiGateway            *APIGateway
+	done                  chan struct{}
 }
 
 const (
@@ -53,7 +56,7 @@ func NewContainer(config *config.Config) (*Container, error) {
 
 	c.clusterEventBus = cluster.NewClusterEventBus(c.clusterConn, config.ClusterNatsPrefix)
 
-	clusterWrappedStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/cluster_store", config.DataDir))
+	clusterWrappedStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/.cluster_store", config.DataDir))
 	if err != nil {
 		return nil, errors.Wrap(err, "create cluster leveldb store")
 	}
@@ -84,20 +87,26 @@ func NewContainer(config *config.Config) (*Container, error) {
 		}
 	}
 
-	c.apiGateway = NewAPIGateway(config, c)
-	if err := c.apiGateway.Start(); err != nil {
-		return nil, err
-	}
-
-	if config.LoadApps {
-		if err := c.loadApps(); err != nil {
-			return nil, err
-		}
-	}
-
 	c.subscribeToEvents()
 
 	return c, nil
+}
+
+func (c *Container) Start() error {
+	c.apiGateway = NewAPIGateway(c.config, c)
+	if err := c.apiGateway.Start(); err != nil {
+		return err
+	}
+
+	if c.config.LoadApps {
+		if err := c.loadApps(); err != nil {
+			return err
+		}
+	}
+	c.done = make(chan struct{}, 1)
+	go c.monitorCluster()
+
+	return nil
 }
 
 func (c *Container) subscribeToEvents() {
@@ -119,14 +128,20 @@ func (c *Container) subscribeToEvents() {
 				}
 			}
 
-			if err := app.Eval(event.Value.(string)); err != nil {
+			var defs definition.Definitions
+			if err := mapstructure.Decode(event.Value, &defs); err != nil {
+				log.Errorf("Could not unmarshall definitions: %s", err)
+				return
+			}
+
+			if err := app.Eval(&defs); err != nil {
 				log.Errorf("Could not evaluate app: %s", err)
 				return
 			}
 
 			if c.clusterLeaderElection.IsLeader() {
-				if err := app.StartJobs(); err != nil {
-					log.Errorf("Could not start jobs: %s", err)
+				if err := c.bringToDesiredState(); err != nil {
+					log.Errorf("Could not bring cluster to desired state: %s", err)
 				}
 			}
 		}
@@ -140,6 +155,10 @@ func (c *Container) subscribeToEvents() {
 			c.Deregister(appName)
 		}
 	})
+
+	c.clusterEventBus.SubscribeFetchClusterInfo(func() *cluster.NodeInfo {
+		return c.NodeInfo()
+	})
 }
 
 func (c *Container) loadApps() error {
@@ -147,26 +166,82 @@ func (c *Container) loadApps() error {
 	if err != nil {
 		return errors.Wrap(err, "query apps")
 	}
-	isLeader := c.clusterLeaderElection.IsLeader()
 	for _, result := range results {
 		appName := result.Key[len("app:"):]
-		code := result.Value.(string)
+		var defs definition.Definitions
+		if err := mapstructure.Decode(result.Value, &defs); err != nil {
+			return errors.Wrap(err, "decode apps")
+		}
 
 		app, err := c.CreateApp(appName)
 		if err != nil {
 			return errors.Wrap(err, "create app")
 		}
-		if err := app.Eval(code); err != nil {
+		if err := app.Eval(&defs); err != nil {
 			return errors.Wrap(err, "eval app")
 		}
-		if isLeader {
-			if err := app.StartJobs(); err != nil {
-				return errors.Wrap(err, "start jobs")
-			}
+	}
+	if c.clusterLeaderElection.IsLeader() {
+		if err := c.bringToDesiredState(); err != nil {
+			return errors.Wrap(err, "desired state")
 		}
 	}
 
 	return nil
+}
+
+func (c *Container) monitorCluster() {
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-time.After(10 * time.Second):
+			if c.clusterLeaderElection.IsLeader() {
+				c.bringToDesiredState()
+			}
+		}
+	}
+}
+
+func (c *Container) bringToDesiredState() error {
+	clusterInfo, err := c.clusterEventBus.FetchClusterInfo(time.Second)
+	if err != nil {
+		return errors.Wrap(err, "fetch cluster info")
+	}
+	// Iterate over all apps
+	for _, app := range c.apps {
+		c.bringAppToDesiredState(app, clusterInfo)
+	}
+
+	return nil
+}
+
+func (c *Container) bringAppToDesiredState(app *Application, clusterInfo *cluster.ClusterInfo) {
+	//functionInstancesToStart := map[definition.FunctionID]int{}
+	jobInstancesToStart := map[definition.FunctionID]int{}
+
+	// First collect all jobs desired instances
+	for jobName, jobDef := range app.definitions.Jobs {
+		jobInstancesToStart[jobName] = jobDef.Config.DesiredInstances
+	}
+
+	// Then iterate over all nodes and remove all runnings jobs
+	for _, nodeInfo := range clusterInfo.Nodes {
+		for jobName, runningInstances := range nodeInfo.Apps[app.Name()].JobWorkers {
+			jobInstancesToStart[definition.FunctionID(jobName)] -= runningInstances
+		}
+	}
+
+	// We're now left with a map with not running jobs, let's kick those off
+	for jobName, toStart := range jobInstancesToStart {
+		if toStart <= 0 {
+			continue
+		}
+		log.Infof("Now requesting %d instances of %s", toStart, jobName)
+		if err := app.eventBus.RequestJobWorkers(string(jobName), toStart); err != nil {
+			log.Errorf("Could not start workers")
+		}
+	}
 }
 
 func (c *Container) CreateApp(appName string) (*Application, error) {
@@ -200,6 +275,7 @@ func (c *Container) CreateApp(appName string) (*Application, error) {
 }
 
 func (c *Container) Close() {
+	close(c.done)
 	for _, app := range c.apps {
 		if err := app.Close(); err != nil {
 			log.Errorf("Failed to cleanly shut down application %s: %s", app.appName, err)
@@ -210,6 +286,10 @@ func (c *Container) Close() {
 
 func (c *Container) ClusterConnection() *nats.Conn {
 	return c.clusterConn
+}
+
+func (c *Container) ClusterEventBus() *cluster.ClusterEventBus {
+	return c.clusterEventBus
 }
 
 func (c *Container) Get(name string) *Application {
@@ -235,4 +315,15 @@ func (c *Container) List() []string {
 		appNames = append(appNames, name)
 	}
 	return appNames
+}
+
+func (c *Container) NodeInfo() *cluster.NodeInfo {
+	ni := &cluster.NodeInfo{
+		ID:   c.clusterLeaderElection.ID,
+		Apps: map[string]*cluster.AppInfo{},
+	}
+	for appName, app := range c.apps {
+		ni.Apps[appName] = app.Sandbox().AppInfo()
+	}
+	return ni
 }

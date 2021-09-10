@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/zefhemel/matterless/pkg/definition"
@@ -38,7 +39,7 @@ func (ag *APIGateway) exposeAdminAPI() {
 
 		// Rather than applying this locally, we'll store it just in the store, which in turn will lead to the app
 		// being loaded
-		if err := ag.container.Store().Put(fmt.Sprintf("app:%s", appName), string(defBytes)); err != nil {
+		if err := ag.container.Store().Put(fmt.Sprintf("app:%s", appName), defs); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprint(w, err.Error())
 			return
@@ -56,6 +57,20 @@ func (ag *APIGateway) exposeAdminAPI() {
 		}
 
 		fmt.Fprint(w, util.MustJsonString(ag.container.List()))
+	}).Methods("GET")
+
+	ag.rootRouter.HandleFunc("/_info", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		if !ag.authAdmin(w, r) {
+			return
+		}
+		info, err := ag.container.ClusterEventBus().FetchClusterInfo(1 * time.Second)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
+			return
+		}
+		fmt.Fprint(w, util.MustJsonString(info))
 	}).Methods("GET")
 
 	ag.rootRouter.HandleFunc("/{app}", func(w http.ResponseWriter, r *http.Request) {

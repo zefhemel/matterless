@@ -100,6 +100,9 @@ func Parse(code string) (*Definitions, error) {
 				// No parameter clause
 				jobDef.Code = currentBody
 			}
+			if jobDef.Config.DesiredInstances == 0 {
+				jobDef.Config.DesiredInstances = 1
+			}
 			decls.Jobs[FunctionID(currentDeclarationName)] = jobDef
 		case "events":
 			var def map[string][]FunctionID

@@ -14,6 +14,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/application"
 	"github.com/zefhemel/matterless/pkg/client"
 	"github.com/zefhemel/matterless/pkg/config"
+	"github.com/zefhemel/matterless/pkg/util"
 )
 
 func runCommand() *cobra.Command {
@@ -78,7 +79,7 @@ func deployCommand() *cobra.Command {
 	}
 
 	cmdDeploy.Flags().BoolVarP(&watch, "watch", "w", false, "watch apps for changes and redeploy")
-	cmdDeploy.Flags().StringVar(&url, "url", "", "URL or Matterless server to deploy to")
+	cmdDeploy.Flags().StringVar(&url, "url", "http://localhost:8222", "URL or Matterless server to deploy to")
 	cmdDeploy.Flags().StringVarP(&adminToken, "token", "t", "", "Root token for Matterless server")
 
 	return cmdDeploy
@@ -98,7 +99,32 @@ func attachCommand() *cobra.Command {
 			runConsole(mlsClient, []string{})
 		},
 	}
-	cmd.Flags().StringVar(&url, "url", "", "URL or Matterless server to deploy to")
+	cmd.Flags().StringVar(&url, "url", "http://localhost:8222", "URL of matterless server to connect to")
+	cmd.Flags().StringVarP(&adminToken, "token", "t", "", "Root token for Matterless server")
+
+	return cmd
+}
+
+func infoCommand() *cobra.Command {
+	var (
+		url        string
+		adminToken string
+	)
+	var cmd = &cobra.Command{
+		Use:   "info",
+		Short: "Retrieve cluster information",
+		Args:  cobra.MinimumNArgs(0),
+		Run: func(cmd *cobra.Command, args []string) {
+			mlsClient := client.NewMatterlessClient(url, adminToken)
+			info, err := mlsClient.ClusterInfo()
+			if err != nil {
+				fmt.Printf("Error fetching cluster info: %s\n", err)
+				return
+			}
+			fmt.Println(util.MustJsonString(info))
+		},
+	}
+	cmd.Flags().StringVar(&url, "url", "http://localhost:8222", "URL of matterless server to connect to")
 	cmd.Flags().StringVarP(&adminToken, "token", "t", "", "Root token for Matterless server")
 
 	return cmd
@@ -127,7 +153,7 @@ func main() {
 	log.SetLevel(log.DebugLevel)
 
 	cmd := rootCommand()
-	cmd.AddCommand(runCommand(), deployCommand(), attachCommand(), ppCommand())
+	cmd.AddCommand(runCommand(), deployCommand(), attachCommand(), infoCommand(), ppCommand())
 	cmd.Execute()
 }
 
@@ -140,11 +166,15 @@ func runServer(cfg *config.Config) *application.Container {
 	// Subscribe to all logs and write to stdout
 	appContainer.ClusterConnection().Subscribe(fmt.Sprintf("%s.*.function.*.log", cfg.ClusterNatsPrefix), func(m *nats.Msg) {
 		parts := strings.Split(m.Subject, ".") // mls.myapp.function.MyFunction.log
-		log.Infof("[%s | %s] %s", parts[1], parts[3], string(m.Data))
+		log.Infof("LOG [%s | %s]: %s", parts[1], parts[3], string(m.Data))
 	})
 
+	if err := appContainer.Start(); err != nil {
+		log.Fatalf("Could not start container: %s", err)
+	}
+
 	// Handle Ctrl-c gracefully
-	killing := make(chan os.Signal)
+	killing := make(chan os.Signal, 1)
 	signal.Notify(killing, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-killing

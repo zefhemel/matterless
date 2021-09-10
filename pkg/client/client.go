@@ -3,16 +3,18 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/fsnotify/fsnotify"
-	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/definition"
-	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/cluster"
+	"github.com/zefhemel/matterless/pkg/definition"
+	"github.com/zefhemel/matterless/pkg/util"
 )
 
 type MatterlessClient struct {
@@ -136,6 +138,35 @@ func (client *MatterlessClient) ListApps() ([]string, error) {
 		return nil, err
 	}
 	return appNames, nil
+}
+
+func (client *MatterlessClient) ClusterInfo() (*cluster.ClusterInfo, error) {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/_info", client.URL), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "request failed")
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", client.Token))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "request failed")
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP Error: %s", resp.Status)
+	}
+
+	bodyData, _ := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	var clusterInfo cluster.ClusterInfo
+	if err := json.Unmarshal(bodyData, &clusterInfo); err != nil {
+		return nil, err
+	}
+	return &clusterInfo, nil
 }
 
 func (client *MatterlessClient) storeOp(appName string, op []interface{}) (interface{}, error) {

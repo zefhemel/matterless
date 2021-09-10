@@ -13,8 +13,6 @@ import (
 	"github.com/zefhemel/matterless/pkg/util"
 )
 
-type NodeID = uint64
-
 type LeaderElection struct {
 	conn                         *nats.Conn
 	currentLeaderRPCSubject      string
