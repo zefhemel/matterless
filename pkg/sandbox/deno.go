@@ -179,8 +179,9 @@ waitLoop:
 				return nil, ctx.Err()
 			}
 			break waitLoop
-		case err := <-inst.denoExited:
-			return nil, err
+		case <-inst.denoExited:
+			//log.Info("Exited ", err)
+			return nil, errors.New("deno exited on boot")
 		default:
 		}
 		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", listenPort))
@@ -267,10 +268,16 @@ func (inst *denoJobInstance) Name() string {
 	return inst.name
 }
 
-func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
+func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string) (JobInstance, error) {
 	inst := &denoJobInstance{}
 
-	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, apiToken, RunModeJob, name, logCallback, functionConfig, code)
+	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, apiToken, RunModeJob, name, logCallback, &definition.FunctionConfig{
+		Init:        jobConfig.Init,
+		Runtime:     jobConfig.Runtime,
+		Prewarm:     false,
+		Instances:   jobConfig.Instances,
+		DockerImage: jobConfig.DockerImage,
+	}, code)
 	if err != nil {
 		return nil, err
 	}

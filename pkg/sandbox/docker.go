@@ -235,13 +235,19 @@ func (inst *dockerJobInstance) Name() string {
 	return inst.name
 }
 
-func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (JobInstance, error) {
+func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string) (JobInstance, error) {
 	inst := &dockerJobInstance{
 		name:   name,
 		config: cfg,
 	}
 
-	functionInstance, err := newDockerFunctionInstance(ctx, cfg, apiURL, apiToken, RunModeJob, name, logCallback, functionConfig, code)
+	functionInstance, err := newDockerFunctionInstance(ctx, cfg, apiURL, apiToken, RunModeJob, name, logCallback, &definition.FunctionConfig{
+		Init:        jobConfig.Init,
+		Runtime:     jobConfig.Runtime,
+		Prewarm:     false,
+		Instances:   jobConfig.Instances,
+		DockerImage: jobConfig.DockerImage,
+	}, code)
 	if err != nil {
 		return nil, err
 	}

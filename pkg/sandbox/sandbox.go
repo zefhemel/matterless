@@ -26,7 +26,7 @@ var runtimeFunctionInstantiators = map[string]RuntimeFunctionInstantiator{
 	"node": newDockerFunctionInstance,
 }
 
-type RuntimeJobInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (JobInstance, error)
+type RuntimeJobInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string) (JobInstance, error)
 
 var runtimeJobInstantiators = map[string]RuntimeJobInstantiator{
 	"deno": newDenoJobInstance,
@@ -77,7 +77,7 @@ func NewSandbox(cfg *config.Config, apiURL string, apiToken string, ceb *cluster
 	return s, nil
 }
 
-func (s *Sandbox) LoadFunction(name string, functionConfig *definition.FunctionConfig, code string) error {
+func (s *Sandbox) StartFunctionWorker(name string, functionConfig *definition.FunctionConfig, code string) error {
 	worker, err := NewFunctionExecutionWorker(s.config, s.apiURL, s.apiToken, s.ceb, name, functionConfig, code)
 	if err != nil {
 		return err
@@ -86,8 +86,8 @@ func (s *Sandbox) LoadFunction(name string, functionConfig *definition.FunctionC
 	return nil
 }
 
-func (s *Sandbox) StartJobWorker(name definition.FunctionID, functionConfig *definition.FunctionConfig, code string) error {
-	worker, err := NewJobExecutionWorker(s.config, s.apiURL, s.apiToken, s.ceb, string(name), functionConfig, code)
+func (s *Sandbox) StartJobWorker(name definition.FunctionID, jobConfig *definition.JobConfig, code string) error {
+	worker, err := NewJobExecutionWorker(s.config, s.apiURL, s.apiToken, s.ceb, string(name), jobConfig, code)
 	if err != nil {
 		return err
 	}

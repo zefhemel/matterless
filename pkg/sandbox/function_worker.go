@@ -51,9 +51,16 @@ func NewFunctionExecutionWorker(
 		return nil, err
 	}
 
-	if cfg.SandboxCleanupInterval != 0 {
+	if !functionConfig.Prewarm && cfg.SandboxCleanupInterval != 0 {
+		// Cleanup job
 		fm.ticker = time.NewTicker(cfg.SandboxCleanupInterval)
 		go fm.cleanupJob()
+	}
+
+	if functionConfig.Prewarm {
+		if err := fm.warmup(context.Background()); err != nil {
+			return nil, err
+		}
 	}
 
 	return fm, err
@@ -87,17 +94,23 @@ func (fm *FunctionExecutionWorker) cleanup() {
 }
 
 func (fm *FunctionExecutionWorker) invoke(event interface{}) (interface{}, error) {
-	var (
-		inst FunctionInstance
-		err  error
-	)
-	// TODO: Do something better here?
-	ctx := context.Background()
-
 	// One invoke at a time per worker
 	fm.functionExecutionLock.Lock()
 	defer fm.functionExecutionLock.Unlock()
-	inst = fm.runningInstance
+	// TODO: Do something better here?
+	ctx := context.Background()
+
+	if err := fm.warmup(ctx); err != nil {
+		return nil, err
+	}
+	log.Infof("Now actually locally invoking %s", fm.name)
+	fm.invocationCount++
+	return fm.runningInstance.Invoke(ctx, event)
+}
+
+func (fm *FunctionExecutionWorker) warmup(ctx context.Context) error {
+	var err error
+	inst := fm.runningInstance
 
 	if inst == nil {
 		if fm.functionConfig.Runtime == "" {
@@ -106,19 +119,17 @@ func (fm *FunctionExecutionWorker) invoke(event interface{}) (interface{}, error
 
 		builder, ok := runtimeFunctionInstantiators[fm.functionConfig.Runtime]
 		if !ok {
-			return nil, fmt.Errorf("unsupported runtime: %s", fm.functionConfig.Runtime)
+			return fmt.Errorf("unsupported runtime: %s", fm.functionConfig.Runtime)
 		}
 
 		inst, err = builder(ctx, fm.config, fm.apiURL, fm.apiToken, RunModeFunction, fm.name, fm.log, fm.functionConfig, fm.code)
 
 		if err != nil {
-			return nil, err
+			return err
 		}
 		fm.runningInstance = inst
 	}
-	log.Infof("Now actually locally invoking %s", fm.name)
-	fm.invocationCount++
-	return inst.Invoke(ctx, event)
+	return nil
 }
 
 func (fm *FunctionExecutionWorker) Close() error {

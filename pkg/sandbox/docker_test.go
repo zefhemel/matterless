@@ -108,7 +108,7 @@ func TestDockerSandboxJob(t *testing.T) {
 	})
 
 	// Boot worker
-	worker, err := sandbox.NewJobExecutionWorker(cfg, "http://%s", "", ceb, "TestJob", &definition.FunctionConfig{
+	worker, err := sandbox.NewJobExecutionWorker(cfg, "http://%s", "", ceb, "TestJob", &definition.JobConfig{
 		Runtime: "node",
 		Init: map[string]interface{}{
 			"something": "To do",

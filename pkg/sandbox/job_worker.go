@@ -21,9 +21,9 @@ type JobExecutionWorker struct {
 
 	ceb *cluster.ClusterEventBus
 
-	name           string
-	functionConfig *definition.FunctionConfig
-	code           string
+	name      string
+	jobConfig *definition.JobConfig
+	code      string
 
 	functionExecutionLock sync.Mutex
 	runningInstance       JobInstance
@@ -31,18 +31,18 @@ type JobExecutionWorker struct {
 
 func NewJobExecutionWorker(
 	cfg *config.Config, apiURL string, apiToken string, ceb *cluster.ClusterEventBus,
-	name string, functionConfig *definition.FunctionConfig, code string) (*JobExecutionWorker, error) {
+	name string, jobConfig *definition.JobConfig, code string) (*JobExecutionWorker, error) {
 
 	var err error
 	ew := &JobExecutionWorker{
-		config:         cfg,
-		ceb:            ceb,
-		apiURL:         apiURL,
-		apiToken:       apiToken,
-		name:           name,
-		functionConfig: functionConfig,
-		code:           code,
-		done:           make(chan struct{}, 1),
+		config:    cfg,
+		ceb:       ceb,
+		apiURL:    apiURL,
+		apiToken:  apiToken,
+		name:      name,
+		jobConfig: jobConfig,
+		code:      code,
+		done:      make(chan struct{}, 1),
 	}
 
 	if err := ew.start(); err != nil {
@@ -71,16 +71,16 @@ func (ew *JobExecutionWorker) start() error {
 		return errors.New("job already running")
 	}
 
-	if ew.functionConfig.Runtime == "" {
-		ew.functionConfig.Runtime = DefaultRuntime
+	if ew.jobConfig.Runtime == "" {
+		ew.jobConfig.Runtime = DefaultRuntime
 	}
 
-	builder, ok := runtimeJobInstantiators[ew.functionConfig.Runtime]
+	builder, ok := runtimeJobInstantiators[ew.jobConfig.Runtime]
 	if !ok {
-		return fmt.Errorf("unsupported runtime: %s", ew.functionConfig.Runtime)
+		return fmt.Errorf("unsupported runtime: %s", ew.jobConfig.Runtime)
 	}
 
-	ew.runningInstance, err = builder(ctx, ew.config, ew.apiURL, ew.apiToken, ew.name, ew.log, ew.functionConfig, ew.code)
+	ew.runningInstance, err = builder(ctx, ew.config, ew.apiURL, ew.apiToken, ew.name, ew.log, ew.jobConfig, ew.code)
 
 	if err != nil {
 		return err

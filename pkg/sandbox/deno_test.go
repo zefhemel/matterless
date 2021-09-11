@@ -19,6 +19,7 @@ func TestDenoSandboxFunction(t *testing.T) {
 	cfg := config.NewConfig()
 	cfg.DataDir = os.TempDir()
 	cfg.UseSystemDeno = true
+	cfg.LoadApps = false
 
 	sillyEvent := map[string]string{
 		"name": "Zef",
@@ -95,7 +96,7 @@ function stop() {
 	})
 
 	// Boot worker
-	worker, err := sandbox.NewJobExecutionWorker(cfg, "http://%s", "", ceb, "TestJob", &definition.FunctionConfig{
+	worker, err := sandbox.NewJobExecutionWorker(cfg, "http://%s", "", ceb, "TestJob", &definition.JobConfig{
 		Runtime: "deno",
 		Init: map[string]interface{}{
 			"something": "To do",

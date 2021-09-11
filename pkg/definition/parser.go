@@ -82,12 +82,15 @@ func Parse(code string) (*Definitions, error) {
 				// No parameter clause
 				funcDef.Code = currentBody
 			}
+			if funcDef.Config.Instances == 0 {
+				funcDef.Config.Instances = 1
+			}
 			decls.Functions[FunctionID(currentDeclarationName)] = funcDef
 		case "job":
 			jobDef := &JobDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
-				Config:   &FunctionConfig{},
+				Config:   &JobConfig{},
 			}
 			if currentBody2 != "" {
 				// We got a parameter clause on our hands, parse the currentBody as YAML
@@ -100,8 +103,8 @@ func Parse(code string) (*Definitions, error) {
 				// No parameter clause
 				jobDef.Code = currentBody
 			}
-			if jobDef.Config.DesiredInstances == 0 {
-				jobDef.Config.DesiredInstances = 1
+			if jobDef.Config.Instances == 0 {
+				jobDef.Config.Instances = 1
 			}
 			decls.Jobs[FunctionID(currentDeclarationName)] = jobDef
 		case "events":

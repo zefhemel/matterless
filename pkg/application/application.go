@@ -131,8 +131,10 @@ func (app *Application) Eval(defs *definition.Definitions) error {
 
 	log.Info("Loading functions...")
 	for name, def := range defs.Functions {
-		if err := app.sandbox.LoadFunction(string(name), def.Config, def.Code); err != nil {
-			log.Errorf("Could not spin up function worker for %s: %s", name, err)
+		for i := 0; i < def.Config.Instances; i++ {
+			if err := app.sandbox.StartFunctionWorker(string(name), def.Config, def.Code); err != nil {
+				log.Errorf("Could not spin up function worker for %s: %s", name, err)
+			}
 		}
 	}
 

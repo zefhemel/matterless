@@ -74,7 +74,10 @@ func deployCommand() *cobra.Command {
 				return
 			}
 
-			runConsole(mlsClient, args)
+			if watch {
+				busyLoop()
+			}
+			//runConsole(mlsClient, args)
 		},
 	}
 

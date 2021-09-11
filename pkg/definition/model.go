@@ -33,11 +33,11 @@ type Definitions struct {
 }
 
 type FunctionConfig struct {
-	Init             interface{} `yaml:"init" json:"init,omitempty"`
-	Runtime          string      `yaml:"runtime" json:"runtime,omitempty"`
-	DesiredInstances int         `yaml:"desired_instances,omitempty"`
-
-	DockerImage string `yaml:"docker_image" json:"docker_image,omitempty"`
+	Init        interface{} `yaml:"init" json:"init,omitempty"`
+	Runtime     string      `yaml:"runtime" json:"runtime,omitempty"`
+	Prewarm     bool        `yaml:"prewarm"`             // Boot runtime immediately and don't clean it up automatically
+	Instances   int         `yaml:"instances,omitempty"` // Number of workers to start PER NODE
+	DockerImage string      `yaml:"docker_image" json:"docker_image,omitempty"`
 }
 
 type FunctionDef struct {
@@ -47,11 +47,18 @@ type FunctionDef struct {
 	Code     string          `json:"code,omitempty"`
 }
 
+type JobConfig struct {
+	Init        interface{} `yaml:"init" json:"init,omitempty"`
+	Runtime     string      `yaml:"runtime" json:"runtime,omitempty"`
+	Instances   int         `yaml:"instances,omitempty"` // Number of instances globally for the whole cluster
+	DockerImage string      `yaml:"docker_image" json:"docker_image,omitempty"`
+}
+
 type JobDef struct {
-	Name     string          `json:"name"`
-	Config   *FunctionConfig `json:"config,omitempty"`
-	Language string          `json:"language,omitempty"`
-	Code     string          `json:"code,omitempty"`
+	Name     string     `json:"name"`
+	Config   *JobConfig `json:"config,omitempty"`
+	Language string     `json:"language,omitempty"`
+	Code     string     `json:"code,omitempty"`
 }
 
 type MacroDef struct {

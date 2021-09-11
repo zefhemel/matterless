@@ -222,7 +222,7 @@ func (c *Container) bringAppToDesiredState(app *Application, clusterInfo *cluste
 
 	// First collect all jobs desired instances
 	for jobName, jobDef := range app.definitions.Jobs {
-		jobInstancesToStart[jobName] = jobDef.Config.DesiredInstances
+		jobInstancesToStart[jobName] = jobDef.Config.Instances
 	}
 
 	// Then iterate over all nodes and remove all runnings jobs
