@@ -31,7 +31,6 @@ function handle(event) {
 |||
 `, "|||", "```"))
 	assert.NoError(t, err)
-	log.Infof("Here: %+v", decls)
 	assert.Equal(t, "TestFunction1", decls.Functions["TestFunction1"].Name)
 	assert.Equal(t, "TestFunction2", decls.Functions["TestFunction2"].Name)
 	assert.Equal(t, "javascript", decls.Functions["TestFunction2"].Language)

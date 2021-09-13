@@ -41,6 +41,7 @@ type FunctionInstance interface {
 	Invoke(ctx context.Context, event interface{}) (interface{}, error)
 	LastInvoked() time.Time
 	Kill()
+	DidExit() chan error
 }
 
 type JobInstance interface {

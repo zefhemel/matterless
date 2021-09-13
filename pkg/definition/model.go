@@ -37,7 +37,7 @@ type FunctionConfig struct {
 	Runtime     string      `yaml:"runtime" json:"runtime,omitempty"`
 	Prewarm     bool        `yaml:"prewarm"`             // Boot runtime immediately and don't clean it up automatically
 	Instances   int         `yaml:"instances,omitempty"` // Number of workers to start PER NODE
-	DockerImage string      `yaml:"docker_image" json:"docker_image,omitempty"`
+	DockerImage string      `yaml:"docker_image" json:"docker_image,omitempty" mapstructure:"docker_image"`
 }
 
 type FunctionDef struct {

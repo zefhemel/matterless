@@ -14,8 +14,6 @@ vet:
 	go vet ./...
 
 docker:
-	GOARCH=amd64 GOOS=linux go build -o runners/docker/mls-lambda.x86_64 ${PACKAGE}/cmd/mls-lambda
-	GOARCH=arm64 GOOS=linux go build -o runners/docker/mls-lambda.aarch64 ${PACKAGE}/cmd/mls-lambda
 	docker build -t ${DOCKER_RUNNER_IMAGE} runners/docker
 
 docker-push:

@@ -1,6 +1,6 @@
 import http from 'http';
 
-import {init, handle} from "./function.mjs"
+import {handle} from "./function.mjs"
 
 const server = http.createServer((req, res) => {
     let data = '';
@@ -29,8 +29,6 @@ const server = http.createServer((req, res) => {
         })
     }
 });
-
-Promise.resolve(init()).then(() => {
-    server.listen(8080);
-});
+console.error("Starting node.js server...");
+server.listen(8080);
 

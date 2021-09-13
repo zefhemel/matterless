@@ -22,22 +22,15 @@ import (
 	"github.com/zefhemel/matterless/pkg/util"
 )
 
-type DockerInitMessage struct {
-	Script string      `json:"script"`
-	Config interface{} `json:"config"`
-}
-
 // ======= Functions ============
 type dockerFunctionInstance struct {
 	containerName string
-	controlURL    string
 	serverURL     string
 	lastInvoked   time.Time
 	runLock       sync.Mutex
 	name          string
 	apiURL        string
-
-	procExit chan error
+	procExit      chan error
 }
 
 var _ FunctionInstance = &dockerFunctionInstance{}
@@ -50,12 +43,16 @@ func (inst *dockerFunctionInstance) LastInvoked() time.Time {
 	return inst.lastInvoked
 }
 
+func (inst *dockerFunctionInstance) DidExit() chan error {
+	return inst.procExit
+}
+
 func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
-	funcHash := newFunctionHash(name, code)
+	//funcHash := newFunctionHash(name, code)
 	inst := &dockerFunctionInstance{
 		name:          name,
 		apiURL:        apiURL,
-		containerName: fmt.Sprintf("mls-%s", funcHash),
+		containerName: fmt.Sprintf("mls-%s", uuid.NewString()),
 		procExit:      make(chan error, 1),
 	}
 
@@ -65,16 +62,16 @@ func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL s
 	}
 
 	// Run "docker run -i" as child process
-	runnerType := "node-function"
-	if runMode == RunModeJob {
-		runnerType = "node-job"
-	}
 	cmd := exec.Command("docker", "run", "--rm", "-P", "-i",
 		fmt.Sprintf("--name=%s", inst.containerName),
 		fmt.Sprintf("-eAPI_URL=%s", fmt.Sprintf(inst.apiURL, apiHost)),
 		fmt.Sprintf("-eAPI_TOKEN=%s", apiToken),
-		"zefhemel/matterless-runner-docker", runnerType)
+		functionConfig.DockerImage)
 
+	stdInPipe, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, errors.Wrap(err, "stdin pipe")
+	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, errors.Wrap(err, "stdout pipe")
@@ -92,17 +89,34 @@ func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL s
 	// Listen to the stderr and log pipes and ship everything to logChannel
 	bufferedStdout := bufio.NewReader(stdoutPipe)
 	bufferedStderr := bufio.NewReader(stderrPipe)
-	if _, err := bufferedStderr.Peek(1); err != nil {
-		log.Error("Could not peek stdout data", err)
-	}
 
 	// Send stdout and stderr to the log channel
 	go pipeLogStreamToCallback(name, bufferedStdout, logCallback)
 	go pipeLogStreamToCallback(name, bufferedStderr, logCallback)
 
+	if code != "" {
+		if _, err := stdInPipe.Write([]byte(code)); err != nil {
+			log.Errorf("Could not write: %s", err)
+		}
+		if err := stdInPipe.Close(); err != nil {
+			log.Errorf("Could not close: %s", err)
+		}
+	}
+
+	go func() {
+		cmd.Wait()
+		log.Info("Docker process exited")
+		close(inst.procExit)
+	}()
+
+	// Wait for something to come out of stdout or stderr
+	if _, err := bufferedStderr.Peek(1); err != nil {
+		log.Error("Could not peek stdout data", err)
+	}
 	// Run "docker inspect" to fetch exposed ports
 	inspectData, err := exec.Command("docker", "inspect", inst.containerName).CombinedOutput()
 	if err != nil {
+		log.Infof("Result: %s", inspectData)
 		return nil, errors.Wrap(err, "docker inspect")
 	}
 	var dockerInspectOutputs []struct {
@@ -120,17 +134,12 @@ func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL s
 		return nil, errors.New("invalid docker inspect output")
 	}
 
-	if len(dockerInspectOutputs[0].NetworkSettings.Ports["8081/tcp"]) == 0 {
+	if len(dockerInspectOutputs[0].NetworkSettings.Ports["8080/tcp"]) == 0 {
 		return nil, errors.New("invalid docker inspect output")
 	}
 
-	inst.controlURL = fmt.Sprintf("http://localhost:%s", dockerInspectOutputs[0].NetworkSettings.Ports["8081/tcp"][0].HostPort)
 	inst.serverURL = fmt.Sprintf("http://localhost:%s", dockerInspectOutputs[0].NetworkSettings.Ports["8080/tcp"][0].HostPort)
-
-	// Initialize the container via the /init call that uploads the code
-	if err := inst.init(functionConfig, code); err != nil {
-		return nil, err
-	}
+	log.Info("Server url", inst.serverURL)
 
 	return inst, nil
 }
@@ -140,11 +149,8 @@ func (inst *dockerFunctionInstance) Kill() {
 	inst.runLock.Lock()
 	inst.runLock.Unlock()
 
-	// Call /stop on control server, but ignore if this fails for whatever reason
-	http.Get(fmt.Sprintf("%s/stop", inst.controlURL))
-
 	// Now hard Kill the docker container, if it's still running
-	exec.Command("docker", "kill", inst.containerName).Run()
+	exec.Command("docker", "stop", "-t5", inst.containerName).Run()
 
 	log.Debug("Killed function instance.")
 }
@@ -193,32 +199,6 @@ func (inst *dockerFunctionInstance) Invoke(ctx context.Context, event interface{
 	}
 
 	return result, nil
-}
-
-func (inst *dockerFunctionInstance) init(functionConfig *definition.FunctionConfig, code string) error {
-	httpClient := http.DefaultClient
-	// TODO: Remove magic 15s value
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	initMessage := DockerInitMessage{
-		Config: functionConfig.Init,
-		Script: code,
-	}
-	req, err := http.NewRequestWithContext(timeoutCtx, "POST", fmt.Sprintf("%s/init", inst.controlURL), strings.NewReader(util.MustJsonString(initMessage)))
-	if err != nil {
-		return errors.Wrap(err, "init call")
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return errors.Wrapf(err, "init http call: %s", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Init Error: %s", body)
-	}
-	return nil
 }
 
 // ======= Jobs ============

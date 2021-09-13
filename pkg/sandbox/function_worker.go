@@ -128,6 +128,12 @@ func (fm *FunctionExecutionWorker) warmup(ctx context.Context) error {
 			return err
 		}
 		fm.runningInstance = inst
+
+		go func() {
+			<-inst.DidExit()
+			log.Info("Docker process exited, resetting running instance")
+			fm.runningInstance = nil
+		}()
 	}
 	return nil
 }

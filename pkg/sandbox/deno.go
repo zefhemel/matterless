@@ -48,6 +48,10 @@ func (inst *denoFunctionInstance) LastInvoked() time.Time {
 	return inst.lastInvoked
 }
 
+func (inst *denoFunctionInstance) DidExit() chan error {
+	return inst.denoExited
+}
+
 // All these files will be copied into a temporary function directory that deno will be invoked on
 //go:embed deno/*.ts
 var denoFiles embed.FS
