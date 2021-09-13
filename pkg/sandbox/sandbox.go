@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -22,15 +23,15 @@ const (
 type RuntimeFunctionInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error)
 
 var runtimeFunctionInstantiators = map[string]RuntimeFunctionInstantiator{
-	"deno": newDenoFunctionInstance,
-	"node": newDockerFunctionInstance,
+	"deno":   newDenoFunctionInstance,
+	"docker": newDockerFunctionInstance,
 }
 
 type RuntimeJobInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string) (JobInstance, error)
 
 var runtimeJobInstantiators = map[string]RuntimeJobInstantiator{
-	"deno": newDenoJobInstance,
-	"node": newDockerJobInstance,
+	"deno":   newDenoJobInstance,
+	"docker": newDockerJobInstance,
 }
 
 const DefaultRuntime = "deno"
@@ -92,23 +93,47 @@ func (s *Sandbox) StartJobWorker(name definition.FunctionID, jobConfig *definiti
 		return err
 	}
 	s.jobWorkers = append(s.jobWorkers, worker)
+	go func() {
+		<-worker.done
+		workers := make([]*JobExecutionWorker, 0, len(s.jobWorkers))
+		for _, w := range s.jobWorkers {
+			if w != worker {
+				workers = append(workers, w)
+			}
+		}
+		s.jobWorkers = workers
+	}()
 	return nil
 }
 
 func (s *Sandbox) Flush() {
+	log.Info("Flushing the sandbox")
+	var wg sync.WaitGroup
 	for _, worker := range s.functionWorkers {
-		if err := worker.Close(); err != nil {
-			log.Errorf("Error closing function worker: %s", err)
-		}
+		wg.Add(1)
+		worker2 := worker
+		go func() {
+			if err := worker2.Close(); err != nil {
+				log.Errorf("Error closing function worker: %s", err)
+			}
+			wg.Done()
+		}()
 	}
-	s.functionWorkers = []*FunctionExecutionWorker{}
 
 	for _, worker := range s.jobWorkers {
-		if err := worker.Close(); err != nil {
-			log.Errorf("Error closing job worker: %s", err)
-		}
+		wg.Add(1)
+		worker2 := worker
+		go func() {
+			if err := worker2.Close(); err != nil {
+				log.Errorf("Error closing job worker: %s", err)
+			}
+			wg.Done()
+		}()
 	}
-	s.jobWorkers = []*JobExecutionWorker{}
+	wg.Wait()
+	log.Info("Fully flushed")
+	s.functionWorkers = []*FunctionExecutionWorker{}
+	//s.jobWorkers = []*JobExecutionWorker{}
 }
 
 func (s *Sandbox) AppInfo() *cluster.AppInfo {

@@ -89,6 +89,7 @@ func NewApplication(cfg *config.Config, appName string, s store.Store, ceb *clus
 
 	app.startWorkerSubscription, err = app.eventBus.SubscribeRequestJobWorker(func(jobName string) {
 		job := app.definitions.Jobs[definition.FunctionID(jobName)]
+		log.Info("Starting job worker ", jobName)
 		if err := app.sandbox.StartJobWorker(definition.FunctionID(jobName), job.Config, job.Code); err != nil {
 			log.Errorf("Could not start job %s: %s", jobName, err)
 		}

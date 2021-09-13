@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/pkg/errors"
@@ -49,7 +51,6 @@ func (inst *dockerFunctionInstance) LastInvoked() time.Time {
 }
 
 func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
-
 	funcHash := newFunctionHash(name, code)
 	inst := &dockerFunctionInstance{
 		name:          name,
@@ -223,10 +224,15 @@ func (inst *dockerFunctionInstance) init(functionConfig *definition.FunctionConf
 // ======= Jobs ============
 
 type dockerJobInstance struct {
-	dockerFunctionInstance
-	config      *config.Config
-	timeStarted time.Time
-	name        string
+	config        *config.Config
+	timeStarted   time.Time
+	name          string
+	cmd           *exec.Cmd
+	code          string
+	logCallback   func(funcName string, message string)
+	apiURL        string
+	containerName string
+	procExit      chan error
 }
 
 var _ JobInstance = &dockerJobInstance{}
@@ -236,56 +242,91 @@ func (inst *dockerJobInstance) Name() string {
 }
 
 func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string) (JobInstance, error) {
+	//funcHash := newFunctionHash(name, code)
 	inst := &dockerJobInstance{
-		name:   name,
-		config: cfg,
+		apiURL:        apiURL,
+		containerName: fmt.Sprintf("mls-%s", uuid.NewString()),
+		procExit:      make(chan error, 1),
+		config:        cfg,
+		timeStarted:   time.Time{},
+		name:          name,
+		code:          code,
+		logCallback:   logCallback,
 	}
 
-	functionInstance, err := newDockerFunctionInstance(ctx, cfg, apiURL, apiToken, RunModeJob, name, logCallback, &definition.FunctionConfig{
-		Init:        jobConfig.Init,
-		Runtime:     jobConfig.Runtime,
-		Prewarm:     false,
-		Instances:   jobConfig.Instances,
-		DockerImage: jobConfig.DockerImage,
-	}, code)
-	if err != nil {
-		return nil, err
+	apiHost := "172.17.0.1"
+	if runtime.GOOS != "linux" {
+		apiHost = "host.docker.internal"
 	}
 
-	inst.dockerFunctionInstance = *(functionInstance.(*dockerFunctionInstance))
+	// Run "docker run -i" as child process
+	inst.cmd = exec.Command("docker", "run", "--rm", "-i",
+		fmt.Sprintf("--name=%s", inst.containerName),
+		fmt.Sprintf("-eAPI_URL=%s", fmt.Sprintf(inst.apiURL, apiHost)),
+		fmt.Sprintf("-eAPI_TOKEN=%s", apiToken),
+		jobConfig.DockerImage)
+	inst.cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
 
 	return inst, nil
 }
 
 func (inst *dockerJobInstance) Start(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/start", inst.serverURL), nil)
+	stdoutPipe, err := inst.cmd.StdoutPipe()
 	if err != nil {
-		return errors.Wrap(err, "invoke call")
+		return errors.Wrap(err, "stdout pipe")
 	}
-	resp, err := http.DefaultClient.Do(req)
+	stderrPipe, err := inst.cmd.StderrPipe()
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
+		return errors.Wrap(err, "stderr pipe")
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("HTTP Error: %s", body)
+	// If code was supplied, let's pipe that into the docker container's stdin
+	stdInPipe, err := inst.cmd.StdinPipe()
+	if err != nil {
+		return errors.Wrap(err, "stdin pipe")
 	}
+
+	// Kick off the command
+	if err := inst.cmd.Start(); err != nil {
+		return errors.Wrap(err, "docker run")
+	}
+
+	// Listen to the stderr and log pipes and ship everything to logChannel
+	bufferedStdout := bufio.NewReader(stdoutPipe)
+	bufferedStderr := bufio.NewReader(stderrPipe)
+
+	// Send stdout and stderr to the log channel
+	go pipeLogStreamToCallback(inst.name, bufferedStdout, inst.logCallback)
+	go pipeLogStreamToCallback(inst.name, bufferedStderr, inst.logCallback)
+
+	if inst.code != "" {
+		if _, err := stdInPipe.Write([]byte(inst.code)); err != nil {
+			log.Errorf("Could not write: %s", err)
+		}
+		if err := stdInPipe.Close(); err != nil {
+			log.Errorf("Could not close: %s", err)
+		}
+	}
+
+	go func() {
+		inst.cmd.Wait()
+		close(inst.procExit)
+	}()
 
 	return nil
 }
 
 func (inst *dockerJobInstance) Stop(ctx context.Context) error {
-	defer inst.Kill()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/stop", inst.serverURL), nil)
-	if err != nil {
-		return errors.Wrap(err, "stop call")
+	if inst.cmd.Process != nil {
+		log.Info("Stopping container")
+		if err := exec.Command("docker", "stop", "-t", "5", inst.containerName).Run(); err != nil {
+			log.Error("docker stop failed", err)
+		}
+		log.Info("Stopping completed")
+	} else {
+		log.Error("Container not running (no process)")
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("could not make HTTP invocation: %s", err.Error()))
-	}
-	defer resp.Body.Close()
 	return nil
 }
 

@@ -34,6 +34,7 @@ func NewJobExecutionWorker(
 	name string, jobConfig *definition.JobConfig, code string) (*JobExecutionWorker, error) {
 
 	var err error
+
 	ew := &JobExecutionWorker{
 		config:    cfg,
 		ceb:       ceb,
@@ -93,6 +94,7 @@ func (ew *JobExecutionWorker) start() error {
 		case <-ew.runningInstance.DidExit():
 			log.Infof("Job process exited")
 			ew.runningInstance = nil
+			close(ew.done)
 		}
 	}()
 
@@ -101,7 +103,6 @@ func (ew *JobExecutionWorker) start() error {
 
 func (ew *JobExecutionWorker) Close() error {
 	close(ew.done)
-	// Stop running instance if any
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := ew.runningInstance.Stop(ctx); err != nil {

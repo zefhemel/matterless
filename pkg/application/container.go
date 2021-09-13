@@ -18,14 +18,15 @@ import (
 )
 
 type Container struct {
-	config                *config.Config
-	clusterConn           *nats.Conn
-	clusterEventBus       *cluster.ClusterEventBus
-	clusterLeaderElection *cluster.LeaderElection
-	clusterStore          *store.JetstreamStore
-	apps                  map[string]*Application
-	apiGateway            *APIGateway
-	done                  chan struct{}
+	config                 *config.Config
+	clusterConn            *nats.Conn
+	clusterEventBus        *cluster.ClusterEventBus
+	clusterLeaderElection  *cluster.LeaderElection
+	clusterStore           *store.JetstreamStore
+	apps                   map[string]*Application
+	apiGateway             *APIGateway
+	done                   chan struct{}
+	bringingToDesiredState bool
 }
 
 const (
@@ -204,6 +205,14 @@ func (c *Container) monitorCluster() {
 }
 
 func (c *Container) bringToDesiredState() error {
+	// TODO: This is a bit unsafe
+	if c.bringingToDesiredState {
+		return nil
+	}
+	c.bringingToDesiredState = true
+	defer func() {
+		c.bringingToDesiredState = false
+	}()
 	clusterInfo, err := c.clusterEventBus.FetchClusterInfo(time.Second)
 	if err != nil {
 		return errors.Wrap(err, "fetch cluster info")

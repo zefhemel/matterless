@@ -50,8 +50,8 @@ type FunctionDef struct {
 type JobConfig struct {
 	Init        interface{} `yaml:"init" json:"init,omitempty"`
 	Runtime     string      `yaml:"runtime" json:"runtime,omitempty"`
-	Instances   int         `yaml:"instances,omitempty"` // Number of instances globally for the whole cluster
-	DockerImage string      `yaml:"docker_image" json:"docker_image,omitempty"`
+	Instances   int         `yaml:"instances,omitempty"  json:"instances,omitempty"` // Number of instances globally for the whole cluster
+	DockerImage string      `yaml:"docker_image" json:"docker_image,omitempty" mapstructure:"docker_image"`
 }
 
 type JobDef struct {
