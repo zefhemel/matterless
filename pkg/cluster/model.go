@@ -1,11 +1,10 @@
 package cluster
 
 const (
-	EventRestartApp          = "restart"
-	EventPublishEvent        = "event"
-	EventFetchNodeInfo       = "nodeinfo"
-	EventStartJobWorker      = "startjob"
-	EventStartFunctionWorker = "startfunction"
+	EventRestartApp     = "restart"
+	EventPublishEvent   = "event"
+	EventFetchNodeInfo  = "nodeinfo"
+	EventStartJobWorker = "startjob"
 )
 
 type NodeID = uint64

@@ -1,14 +1,15 @@
 package definition
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/zefhemel/matterless/pkg/util"
 	"reflect"
 	"regexp"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/store"
-	"gopkg.in/yaml.v2"
 )
 
 var interPolationRegexp = regexp.MustCompile(`\$\{[^\}]+\}`)
@@ -46,25 +47,22 @@ func (defs *Definitions) InterpolateStoreValues(store store.Store) {
 	}
 
 	for _, def := range defs.Jobs {
-		yamlBuf, _ := yaml.Marshal(def.Config.Init)
-		interPolatedYaml := interpolateStoreValues(store, string(yamlBuf), logCallback)
+		interPolatedJSON := interpolateStoreValues(store, util.MustJsonString(def.Config.Init), logCallback)
 		var val interface{}
-		yaml.Unmarshal([]byte(interPolatedYaml), &val)
+		json.Unmarshal([]byte(interPolatedJSON), &val)
 		def.Config.Init = val
 	}
 	for _, def := range defs.Functions {
-		yamlBuf, _ := yaml.Marshal(def.Config.Init)
-		interPolatedYaml := interpolateStoreValues(store, string(yamlBuf), logCallback)
+		interPolatedJSON := interpolateStoreValues(store, util.MustJsonString(def.Config.Init), logCallback)
 		var val interface{}
-		yaml.Unmarshal([]byte(interPolatedYaml), &val)
+		json.Unmarshal([]byte(interPolatedJSON), &val)
 		def.Config.Init = val
 	}
 
 	for _, def := range defs.MacroInstances {
-		yamlBuf, _ := yaml.Marshal(def.Arguments)
-		interPolatedYaml := interpolateStoreValues(store, string(yamlBuf), logCallback)
+		interPolatedJSON := interpolateStoreValues(store, util.MustJsonString(def.Arguments), logCallback)
 		var val interface{}
-		yaml.Unmarshal([]byte(interPolatedYaml), &val)
+		json.Unmarshal([]byte(interPolatedJSON), &val)
 		def.Arguments = val
 	}
 }

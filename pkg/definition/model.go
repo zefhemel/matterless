@@ -3,12 +3,10 @@ package definition
 import (
 	"bytes"
 	_ "embed"
-	"fmt"
 	"strings"
 	"text/template"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -94,13 +92,13 @@ var CodeGenFuncs = template.FuncMap{
 	},
 }
 
-func Check(code string, cfg *config.Config) (*Definitions, error) {
+func Check(path string, code string, cacheDir string) (*Definitions, error) {
 	defs, err := Parse(code)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := defs.InlineImports(fmt.Sprintf("%s/.importcache", cfg.DataDir)); err != nil {
+	if err := defs.InlineImports(path, cacheDir); err != nil {
 		return nil, err
 	}
 	if err := defs.ExpandMacros(); err != nil {

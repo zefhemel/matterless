@@ -3,6 +3,7 @@ package application
 import (
 	"fmt"
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -20,8 +21,12 @@ func (ag *APIGateway) exposeApplicationAPI() {
 			return
 		}
 
-		panic("TO IMPLEMENT")
-		// TODO Implement again with cluster event
+		if err := ag.container.ClusterEventBus().RestartApp(appName); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, err.Error())
+			log.Infof("Restart error: %s", err.Error())
+			return
+		}
 
 		fmt.Fprint(w, `{"status": "ok"}`)
 	}).Methods("POST")

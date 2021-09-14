@@ -106,6 +106,7 @@ func Parse(code string) (*Definitions, error) {
 			if jobDef.Config.Instances == 0 {
 				jobDef.Config.Instances = 1
 			}
+			//log.Info("FOr job ", currentDeclarationName, " got config ", jobDef.Config)
 			decls.Jobs[FunctionID(currentDeclarationName)] = jobDef
 		case "events":
 			var def map[string][]FunctionID

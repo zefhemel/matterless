@@ -3,6 +3,7 @@ package application
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
@@ -151,7 +152,7 @@ func (app *Application) Eval(defs *definition.Definitions) error {
 }
 
 func (app *Application) EvalString(code string) error {
-	defs, err := definition.Check(code, app.config)
+	defs, err := definition.Check("", code, filepath.Join(app.config.DataDir, ".importcache"))
 	if err != nil {
 		return err
 	}

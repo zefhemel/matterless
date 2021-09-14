@@ -44,7 +44,12 @@ func (client *MatterlessClient) DeployAppFiles(files []string, watch bool) error
 		if err != nil {
 			return errors.Wrapf(err, "read file: %s", path)
 		}
-		if err := client.DeployApp(AppNameFromPath(path), string(data)); err != nil {
+		defs, err := definition.Check(path, string(data), "")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if err := client.DeployApp(AppNameFromPath(path), defs.Markdown()); err != nil {
 			return errors.Wrap(err, "deploy")
 		}
 		err = watcher.Add(path)
@@ -349,11 +354,18 @@ eventLoop:
 				log.Infof("Definition %s modified, reloading...", path)
 				data, err := os.ReadFile(path)
 				if err != nil {
-					log.Fatalf("Could not open file %s: %s", path, err)
+					log.Error(err)
 					continue eventLoop
 				}
-				if err := client.DeployApp(AppNameFromPath(path), string(data)); err != nil {
+				defs, err := definition.Check(path, string(data), "")
+				if err != nil {
+					log.Error(err)
+					continue eventLoop
+				}
+
+				if err := client.DeployApp(AppNameFromPath(path), defs.Markdown()); err != nil {
 					log.Errorf("Could not redeploy app %s: %s", AppNameFromPath(path), err)
+					continue eventLoop
 				}
 			}
 		case err, ok := <-watcher.Errors:

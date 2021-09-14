@@ -1,8 +1,8 @@
 package application
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"os"
 	"strings"
@@ -111,9 +111,7 @@ func (c *Container) Start() error {
 }
 
 func (c *Container) subscribeToEvents() {
-	// c.clusterEventBus.Subscribe(">", func(msg *nats.Msg) {
-	// 	log.Infof("MONITOR %s EVENT: %s", msg.Subject, msg.Data)
-	// })
+
 	c.clusterStore.SubscribePuts(func(event store.PutMessage) {
 		if strings.HasPrefix(event.Key, "app:") {
 			var err error
@@ -130,7 +128,7 @@ func (c *Container) subscribeToEvents() {
 			}
 
 			var defs definition.Definitions
-			if err := mapstructure.Decode(event.Value, &defs); err != nil {
+			if err := json.Unmarshal(util.MustJsonByteSlice(event.Value), &defs); err != nil {
 				log.Errorf("Could not unmarshall definitions: %s", err)
 				return
 			}
@@ -143,6 +141,9 @@ func (c *Container) subscribeToEvents() {
 			if c.clusterLeaderElection.IsLeader() {
 				if err := c.bringToDesiredState(); err != nil {
 					log.Errorf("Could not bring cluster to desired state: %s", err)
+				}
+				if err := app.PublishAppEvent("init", struct{}{}); err != nil {
+					log.Errorf("could not send init event: %s", err)
 				}
 			}
 		}
@@ -160,6 +161,17 @@ func (c *Container) subscribeToEvents() {
 	c.clusterEventBus.SubscribeFetchClusterInfo(func() *cluster.NodeInfo {
 		return c.NodeInfo()
 	})
+
+	c.clusterEventBus.SubscribeRestartApp(func(appName string) {
+		app := c.Get(appName)
+		if app == nil {
+			log.Errorf("Asked to restart non-existing app: %s", appName)
+			return
+		}
+		if err := app.Eval(app.Definitions()); err != nil {
+			log.Errorf("Error starting app: %s", err)
+		}
+	})
 }
 
 func (c *Container) loadApps() error {
@@ -170,7 +182,7 @@ func (c *Container) loadApps() error {
 	for _, result := range results {
 		appName := result.Key[len("app:"):]
 		var defs definition.Definitions
-		if err := mapstructure.Decode(result.Value, &defs); err != nil {
+		if err := json.Unmarshal(util.MustJsonByteSlice(result.Value), &defs); err != nil {
 			return errors.Wrap(err, "decode apps")
 		}
 

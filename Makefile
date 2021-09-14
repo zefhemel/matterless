@@ -1,5 +1,5 @@
 PACKAGE=github.com/zefhemel/matterless
-DOCKER_RUNNER_IMAGE=zefhemel/matterless-runner-docker
+DOCKER_RUNNER_IMAGE=
 
 install:
 	go install ${PACKAGE}/cmd/mls
@@ -13,11 +13,20 @@ test-short:
 vet:
 	go vet ./...
 
-docker:
-	docker build -t ${DOCKER_RUNNER_IMAGE} runners/docker
+docker-node-function:
+	docker build -t zefhemel/mls-node-function runners/node-function
 
-docker-push:
-	GOARCH=amd64 GOOS=linux go build -o runners/docker/mls-lambda.x86_64 ${PACKAGE}/cmd/mls-lambda
-	GOARCH=arm64 GOOS=linux go build -o runners/docker/mls-lambda.aarch64 ${PACKAGE}/cmd/mls-lambda
-	docker buildx build --platform linux/amd64,linux/arm64 -t ${DOCKER_RUNNER_IMAGE} --push runners/docker
-	docker build -t ${DOCKER_RUNNER_IMAGE} runners/docker
+docker-python3-job:
+	docker build -t zefhemel/mls-python3-job runners/python3-job
+
+docker: docker-node-function docker-python3-job
+
+docker-push: docker-node-function-push docker-python3-job-push
+
+docker-node-function-push:
+	docker buildx build --platform linux/amd64,linux/arm64 -t zefhemel/mls-node-function --push runners/node-function
+	docker build -t zefhemel/mls-node-function runners/node-function
+
+docker-python3-job-push:
+	docker buildx build --platform linux/amd64,linux/arm64 -t zefhemel/mls-python3-job --push runners/python3-job
+	docker build -t zefhemel/mls-python3-job runners/python3-job

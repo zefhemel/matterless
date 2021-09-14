@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -148,12 +149,16 @@ func (defs *Definitions) MergeFrom(moreDefs *Definitions) error {
 	return nil
 }
 
-func (defs *Definitions) InlineImports(cacheDir string) error {
-	if err := os.MkdirAll(cacheDir, 0700); err != nil {
-		return errors.Wrap(err, "create cache dir")
+func (defs *Definitions) InlineImports(currentPath string, cacheDir string) error {
+	if cacheDir != "" {
+		if err := os.MkdirAll(cacheDir, 0700); err != nil {
+			return errors.Wrap(err, "create cache dir")
+		}
 	}
 	// Track imported URLs
-	allImports := map[string]bool{}
+	allImports := map[string]bool{
+		currentPath: true,
+	}
 importLoop:
 	for len(defs.Imports) > 0 {
 		for _, importUrl := range defs.Imports {
@@ -171,10 +176,12 @@ importLoop:
 			log.Debug("Now importing ", importUrl)
 			cachedPath := fmt.Sprintf("%s/%s", cacheDir, util.SafeFilename(importUrl))
 			var fileContent string
-			if strings.HasPrefix(importUrl, "file:") {
+			if strings.HasPrefix(importUrl, "./") || strings.HasPrefix(importUrl, "../") {
+				if currentPath == "" {
+					return errors.New("local imports not supported")
+				}
 				// Fetch from local path
-				filePath := importUrl[len("file:"):]
-				buf, err := os.ReadFile(filePath)
+				buf, err := os.ReadFile(filepath.Join(filepath.Dir(currentPath), importUrl))
 				if err != nil {
 					return errors.Wrap(err, "reading local file")
 				}
@@ -194,11 +201,13 @@ importLoop:
 				if resp.StatusCode != http.StatusOK {
 					return fmt.Errorf("HTTP error (%d): %s", resp.StatusCode, buf)
 				}
-				if err := os.WriteFile(cachedPath, buf, 0600); err != nil {
-					return errors.Wrap(err, "writing cached file")
+				if cacheDir != "" {
+					if err := os.WriteFile(cachedPath, buf, 0600); err != nil {
+						return errors.Wrap(err, "writing cached file")
+					}
 				}
 				fileContent = string(buf)
-			} else {
+			} else if cacheDir != "" {
 				// Load from local file
 				buf, err := os.ReadFile(cachedPath)
 				if err != nil {
@@ -209,6 +218,10 @@ importLoop:
 			moreDefs, err := Parse(fileContent)
 			if err != nil {
 				return fmt.Errorf("Error parsing imported URL (%s): %s", importUrl, err)
+			}
+			// Prefix imports with import path dir
+			for i, imp := range moreDefs.Imports {
+				moreDefs.Imports[i] = fmt.Sprintf("./%s", filepath.Join(filepath.Dir(importUrl), imp))
 			}
 			if err := defs.MergeFrom(moreDefs); err != nil {
 				return errors.Wrap(err, "merging definitions during import")

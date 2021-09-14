@@ -222,3 +222,18 @@ func (eb *ClusterEventBus) RequestJobWorkers(name string, n int) error {
 	}
 	return nil
 }
+
+func (eb *ClusterEventBus) RestartApp(appName string) error {
+	return eb.Publish(EventRestartApp, util.MustJsonByteSlice(RestartApp{appName}))
+}
+
+func (eb *ClusterEventBus) SubscribeRestartApp(callback func(appName string)) (Subscription, error) {
+	return eb.Subscribe(EventRestartApp, func(msg *nats.Msg) {
+		var restartEvent RestartApp
+		if err := json.Unmarshal(msg.Data, &restartEvent); err != nil {
+			log.Errorf("Could not decode restart app message: %s", err)
+			return
+		}
+		callback(restartEvent.Name)
+	})
+}

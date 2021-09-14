@@ -1,4 +1,5 @@
 # Data store bot
+
 This example uses the Mattermost store API to implement a CLI-style database application.
 
 The Matterless store API is a simple key-value store, so operations are limited, but this adds a few niceties.
@@ -7,19 +8,21 @@ The application registers a new `@db-bot` bot you can talk to, these are the com
 
 * `all` — lists all entries in a nice table format
 * `keys [prefix]` — lists all keys with a particular prefix
-* `put [key] [yaml-data]` — creates/updates a new entry, example (creating a new item with key "zef" with an object with two attributes: name and spouse):
-  
+* `put [key] [yaml-data]` — creates/updates a new entry, example (creating a new item with key "zef" with an object with
+  two attributes: name and spouse):
+
       put zef
       name: Zef Hemel
       country: PL
 * `get [key]` — looks up the entry with key `key`
-* `del [key]` — deletes entry with key `key` 
+* `del [key]` — deletes entry with key `key`
 * `pput [key] [prop] [yaml-data]` — Sets one particular property of the entry, e.g. `pput zef name Zef Hemel Jr.`
 * `pdel [key] [prop]` — deletes a particularly property of the entry with key `key`
 
 That's all!
 
 ## Configuration
+
 To configure this DB bot you need to set the following configuration variables in the store:
 
 * `config:url`: URL to your Mattermost installation
@@ -29,10 +32,13 @@ To configure this DB bot you need to set the following configuration variables i
 That's it!
 
 # import
-* https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost.md
+
+* ../lib/mattermost.md
 
 ## mattermostBot DatabaseBot
+
 Defines the bot using the `mattermostBot` macro.
+
 ```yaml
 username: db-bot
 display_name: Database bot
@@ -49,6 +55,7 @@ events:
 ```
 
 ## function HandleCommand
+
 Implements the actual logic for the commands invoked whenever the bot is sent a message in a direct channel.
 
 ```yaml
@@ -65,7 +72,7 @@ import {Mattermost} from "https://raw.githubusercontent.com/zefhemel/matterless/
 let client;
 
 function init(cfg) {
-    if(!cfg.url || !cfg.token) {
+    if (!cfg.url || !cfg.token) {
         console.error("URL and token not initialized yet");
         return;
     }
@@ -75,9 +82,9 @@ function init(cfg) {
 // Nicely format an array of JSON objects as a Markdown table
 function jsonToMDTable(jsonArray) {
     let headers = {};
-    for(const [key, val] of jsonArray) {
-        if(typeof val !== 'object') continue;
-        for(const key of Object.keys(val)) {
+    for (const [key, val] of jsonArray) {
+        if (typeof val !== 'object') continue;
+        for (const key of Object.keys(val)) {
             headers[key] = true;
         }
     }
@@ -85,10 +92,10 @@ function jsonToMDTable(jsonArray) {
     let lines = [];
     lines.push('|Key|' + headerList.join('|') + '|');
     lines.push('|---|' + headerList.map(title => '----').join('|') + '|');
-    for(const [key, val] of jsonArray) {
-        if(typeof val !== 'object') continue;
+    for (const [key, val] of jsonArray) {
+        if (typeof val !== 'object') continue;
         let el = [];
-        for(let prop of headerList) {
+        for (let prop of headerList) {
             el.push(JSON.stringify(val[prop]));
         }
         lines.push('|' + key + '|' + el.join('|') + '|');
@@ -99,22 +106,22 @@ function jsonToMDTable(jsonArray) {
 // Main event handler
 async function handle(event) {
     console.log("Got event", event);
-    if(!client) {
+    if (!client) {
         console.log("Not inited yet");
     }
     let post = JSON.parse(event.data.post);
     let me = await client.getMeCached();
-    
+
     // Lookup channel
     let channel = await client.getChannelCached(post.channel_id);
     // Ignore bot posts
-    if(post.user_id === me.id) return;
+    if (post.user_id === me.id) return;
     // Skip any message outside a private chat
-    if(channel.type != 'D') return;
-        
+    if (channel.type != 'D') return;
+
     let words = post.message.split(' ');
     let key, result, val, prop;
-    switch(words[0]) {
+    switch (words[0]) {
         case "get":
             key = words[1];
             result = await store.get(key);

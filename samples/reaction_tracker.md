@@ -1,4 +1,5 @@
 # Mattermost Reaction Tracker
+
 Tracks all reactions added or removed for a specific user, and notifies the user about this via a bot account.
 
 Required store values for this to work:
@@ -8,9 +9,11 @@ Required store values for this to work:
 * `config:botToken`: Personal access token for bot user to send you messages as (create a separate bot account for this)
 
 # import
-* https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost.md
+
+* ../lib/mattermost.md
 
 # mattermostListener TrackerClient
+
 ```yaml
 url: ${config:url}
 token: ${config:meToken}
@@ -22,6 +25,7 @@ events:
 ```
 
 # function ReactionChange
+
 ```javascript
 import {store, events} from "./matterless.ts";
 import {Mattermost} from "https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost_client.js";
@@ -33,11 +37,11 @@ async function init() {
     let url = await store.get("config:url"),
         meToken = await store.get("config:meToken"),
         botToken = await store.get("config:botToken");
-    
+
     // Create Mattermost clients
     botClient = new Mattermost(url, botToken);
     meClient = new Mattermost(url, meToken);
-    
+
     // Cache often used values
     bot = await botClient.getMeCached();
     me = await meClient.getMeCached();
@@ -46,11 +50,11 @@ async function init() {
 
 async function handle(event) {
     console.log("Event", event);
-    
+
     let reaction = JSON.parse(event.data.reaction);
     let reacter = await meClient.getUserCached(reaction.user_id);
     let post = await meClient.getPost(reaction.post_id);
-    if(post.user_id !== me.id) {
+    if (post.user_id !== me.id) {
         return;
     }
 

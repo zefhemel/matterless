@@ -51,7 +51,8 @@ func TestDockerSandboxFunction(t *testing.T) {
 
 	// Boot worker
 	worker, err := sandbox.NewFunctionExecutionWorker(cfg, "", "", ceb, "TestFunction", &definition.FunctionConfig{
-		Runtime: "node",
+		Runtime:     "docker",
+		DockerImage: "zefhemel/matterless-runner-docker",
 	}, code)
 	assert.NoError(t, err)
 	defer worker.Close()
@@ -109,10 +110,8 @@ func TestDockerSandboxJob(t *testing.T) {
 
 	// Boot worker
 	worker, err := sandbox.NewJobExecutionWorker(cfg, "http://%s", "", ceb, "TestJob", &definition.JobConfig{
-		Runtime: "node",
-		Init: map[string]interface{}{
-			"something": "To do",
-		},
+		Runtime: "docker",
+		DockerImage:
 	}, code)
 	assert.NoError(t, err)
 

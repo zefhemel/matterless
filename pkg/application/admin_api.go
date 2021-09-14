@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -29,7 +30,7 @@ func (ag *APIGateway) exposeAdminAPI() {
 
 		code := string(defBytes)
 
-		defs, err := definition.Check(code, ag.config)
+		defs, err := definition.Check("", code, filepath.Join(ag.config.DataDir, ".importcache"))
 
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)

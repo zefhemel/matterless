@@ -41,14 +41,8 @@ func prerenderFile(path string, dataDir string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defs, err := definition.Parse(string(buf))
+	defs, err := definition.Check(path, string(buf), "")
 	if err != nil {
-		log.Fatal(err)
-	}
-	if err := defs.InlineImports(fmt.Sprintf("%s/.importcache", dataDir)); err != nil {
-		log.Fatal(err)
-	}
-	if err := defs.ExpandMacros(); err != nil {
 		log.Fatal(err)
 	}
 	outPath := strings.Replace(path, ".md", ".pp.md", 1)

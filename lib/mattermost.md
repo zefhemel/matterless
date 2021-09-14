@@ -9,33 +9,35 @@ Implements the following potentially useful Mattermost macros:
 Check each macro for more documentation.
 
 # import
-* https://raw.githubusercontent.com/zefhemel/matterless/master/lib/cron.md
+
+* ./cron.md
 
 ## macro mattermostListener
-Implements a few mattermost event listener, authenticating to a specific `url` using a `token` listening to `events` and triggering subscribed functions appropriately.
+
+Implements a few mattermost event listener, authenticating to a specific `url` using a `token` listening to `events` and
+triggering subscribed functions appropriately.
 
 ```yaml
 schema:
-   type: object
-   properties:
-      url:
-         type: string
-      token:
-         type: string
-      events:
-        type: object
-        additionalProperties:
-          type: array
-          items:
-            type: string
-   additionalProperties: false
-   required:
-   - url
-   - token
+  type: object
+  properties:
+    url:
+      type: string
+    token:
+      type: string
+    events:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          type: string
+  additionalProperties: false
+  required:
+    - url
+    - token
 ```
 
 This is the macro:
-
 
     # job {{$name}}
     ```yaml
@@ -80,7 +82,7 @@ This is the macro:
         });
         socket.addEventListener('message', function (event) {
             const parsedEvent = JSON.parse(event.data)
-            console.log('Message from server ', parsedEvent);
+            // console.log('Message from server ', parsedEvent);
             if(parsedEvent.seq_reply === 1) {
                 // Auth response
                 if(parsedEvent.status === "OK") {
@@ -118,6 +120,7 @@ This is the macro:
     ```
 
 # macro mattermostBot
+
 ```yaml
 schema:
   type: object
@@ -222,6 +225,7 @@ Template:
     ```
 
 # macro mattermostInstanceWatcher
+
 ```yaml
 schema:
   type: object
