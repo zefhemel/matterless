@@ -1,18 +1,15 @@
 package sandbox_test
 
 import (
-	"os"
-	"testing"
-	"time"
-
-	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/zefhemel/matterless/pkg/cluster"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
-
-	"github.com/stretchr/testify/assert"
 	"github.com/zefhemel/matterless/pkg/sandbox"
+	"os"
+	"testing"
+	"time"
 )
 
 func TestDenoSandboxFunction(t *testing.T) {
@@ -39,14 +36,14 @@ func TestDenoSandboxFunction(t *testing.T) {
 	ceb := cluster.NewClusterEventBus(conn, "test")
 
 	// Listen to logs
-	ceb.Subscribe("function.*.log", func(msg *nats.Msg) {
-		log.Infof("Got log: %s", msg.Data)
+	ceb.SubscribeLogs("*", func(lm cluster.LogMessage) {
+		log.Infof("Got log: %s", lm.Message)
 	})
 
 	// Boot worker
 	worker, err := sandbox.NewFunctionExecutionWorker(cfg, "http://%s", "", ceb, "TestFunction", &definition.FunctionConfig{
 		Runtime: "deno",
-	}, code)
+	}, code, map[definition.FunctionID]*definition.LibraryDef{})
 	assert.NoError(t, err)
 	defer worker.Close()
 
@@ -90,9 +87,10 @@ function stop() {
 
 	// Listen to logs
 	allLogs := ""
-	ceb.Subscribe("function.*.log", func(msg *nats.Msg) {
-		log.Infof("Got log: %s", msg.Data)
-		allLogs = allLogs + string(msg.Data)
+	ceb.SubscribeLogs("*", func(lm cluster.LogMessage) {
+		log.Infof("Got log: %s", lm.Message)
+
+		allLogs = allLogs + string(lm.Message)
 	})
 
 	// Boot worker
@@ -101,7 +99,7 @@ function stop() {
 		Init: map[string]interface{}{
 			"something": "To do",
 		},
-	}, code)
+	}, code, definition.LibraryMap{})
 	assert.NoError(t, err)
 
 	// Start Job

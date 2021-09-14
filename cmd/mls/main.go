@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/zefhemel/matterless/pkg/cluster"
 	"os"
 	"os/signal"
 	"strings"
@@ -167,9 +169,14 @@ func runServer(cfg *config.Config) *application.Container {
 	}
 
 	// Subscribe to all logs and write to stdout
-	appContainer.ClusterConnection().Subscribe(fmt.Sprintf("%s.*.function.*.log", cfg.ClusterNatsPrefix), func(m *nats.Msg) {
-		parts := strings.Split(m.Subject, ".") // mls.myapp.function.MyFunction.log
-		log.Infof("LOG [%s | %s]: %s", parts[1], parts[3], string(m.Data))
+	appContainer.ClusterEventBus().Subscribe("*.function.*.log", func(msg *nats.Msg) {
+		parts := strings.Split(msg.Subject, ".") // mls.myapp.function.MyFunction.log
+		var lm cluster.LogMessage
+		if err := json.Unmarshal(msg.Data, &lm); err != nil {
+			log.Errorf("Could not unmarshal log: %s", err)
+			return
+		}
+		log.Infof("LOG [%s | %s]: %s", parts[1], parts[3], lm.Message)
 	})
 
 	if err := appContainer.Start(); err != nil {

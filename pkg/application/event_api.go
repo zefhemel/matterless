@@ -3,6 +3,7 @@ package application
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/zefhemel/matterless/pkg/util"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -17,8 +18,8 @@ type subscribeMessage struct {
 }
 
 type eventMessage struct {
-	EventName string      `json:"name"`
-	Data      interface{} `json:"data"`
+	Name string      `json:"name"`
+	Data interface{} `json:"data"`
 }
 
 func (ag *APIGateway) exposeEventAPI() {
@@ -83,9 +84,7 @@ func (ag *APIGateway) exposeEventAPI() {
 		}
 
 		// Authenticate
-		//if !ag.authApp(w, r, app) {
-		//	return
-		//}
+		// TODO: Add authentication!
 
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -113,7 +112,16 @@ func (ag *APIGateway) exposeEventAPI() {
 					continue
 				}
 				sub, err := app.EventBus().Subscribe(subscribeMessage.Pattern, func(msg *nats.Msg) {
-					conn.WriteMessage(websocket.TextMessage, msg.Data)
+					var jsonData interface{}
+					if err := json.Unmarshal(msg.Data, &jsonData); err != nil {
+						log.Errorf("Could not unmarshal event data: %s", err)
+						return
+					}
+					conn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(eventMessage{
+						// Strip off the NATS prefix and app name from the event
+						Name: msg.Subject[len(ag.config.ClusterNatsPrefix)+len(appName)+2:],
+						Data: jsonData,
+					}))
 				})
 				if err != nil {
 					log.Error("Could not subscribe to event: ", err)

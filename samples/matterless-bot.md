@@ -47,6 +47,7 @@ init:
 ```javascript
 import {store} from "./matterless.ts";
 import {Mattermost} from "https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost_client.js";
+import {buildAppName, putApp, deleteApp} from "./matterless_root.js";
 
 let client;
 let rootToken;
@@ -63,7 +64,6 @@ async function init(cfg) {
 
 // Main event handler
 async function handle(event) {
-    console.log("Got event", event);
     if (!client) {
         console.log("Not inited yet");
     }
@@ -76,20 +76,139 @@ async function handle(event) {
     if (post.user_id === me.id) return;
     // Skip any message outside a private chat
     if (channel.type != 'D') return;
+    console.log("Got event", event);
 
     let code = post.message;
-    let appName = `${post.user_id}_${post.id}`;
+    let appName = buildAppName(post.user_id, post.id);
     if (event.event === 'post_deleted') {
         console.log("Deleting app:", appName);
-        await deleteApp(appName);
+        await deleteApp(rootToken, appName);
     } else {
         console.log("Updating app:", appName, " with code ", code);
-        await putApp(appName, code);
+        await putApp(rootToken, appName, code);
+    }
+}
+```
+
+# job ListenToLogs
+
+```yaml
+init:
+  url: ${config:url}
+  root_token: ${config:root_token}
+  bot_token: ${token:MatterlessBot}
+  team: ${config:team}
+```
+
+```javascript
+import {listApps, appEventSocket} from "./matterless_root.js";
+import {Mattermost} from "https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost_client.js";
+
+let sockets = [];
+let rootToken;
+let mmClient;
+let team;
+let url;
+
+async function init(cfg) {
+    if (!cfg.url) {
+        return
+    }
+    url = cfg.url;
+    rootToken = cfg.root_token;
+    mmClient = new Mattermost(cfg.url, cfg.bot_token);
+    team = await mmClient.getTeamByName(cfg.team);
+}
+
+
+async function run() {
+    subscribeAll();
+    let ws = appEventSocket(rootToken, 'matterless-bot');
+    console.log("Subscribing to app update events");
+    try {
+        ws.addEventListener('open', function () {
+            ws.send(JSON.stringify({pattern: 'event'}));
+        });
+        ws.addEventListener('message', function (event) {
+            let parsed = JSON.parse(event.data);
+            if (parsed.name === 'event') {
+                console.log(parsed)
+            }
+        });
+    } catch (e) {
+        console.error(e);
     }
 }
 
-async function adminCall(path, method, body) {
-    let rootUrl = Deno.env.get("API_URL").split('/').slice(0, -1).join('/');
+function unsubscribeAll() {
+    for (let socket of sockets) {
+        socket.close();
+    }
+    sockets = [];
+}
+
+async function subscribeAll() {
+    unsubscribeAll();
+    for (let appName of await listApps(rootToken)) {
+        console.log("Evaluating app", appName)
+        if (appName.startsWith('mls_')) {
+            let ws = appEventSocket(rootToken, appName);
+            console.log("Subscribed to logs for an app");
+            try {
+                ws.addEventListener('open', function () {
+                    ws.send(JSON.stringify({pattern: 'function.*.log'}));
+                });
+                ws.addEventListener('message', function (event) {
+                    let logJSON = JSON.parse(event.data);
+                    // let eventNameParts = ;
+                    // console.log("Event parts", JSON.stringify(eventNameParts))
+                    let [_, userId, appId] = appName.split('_');
+                    let functionName = logJSON.name.split('.')[1];
+                    publishLog(userId, appId, functionName, logJSON.data.message);
+                });
+            } catch (e) {
+                console.error(e);
+            }
+            sockets.push(ws);
+        }
+    }
+}
+
+
+async function publishLog(userId, appId, functionName, message) {
+    console.log(`${userId}: ${appId} [${functionName}] ${message}`);
+    let channelName = `matterless-logs-${appId}`.toLowerCase();
+    let channelInfo;
+    try {
+        channelInfo = await mmClient.getChannelByName(team.id, channelName);
+    } catch (e) {
+        // Doesn't exist yet, let's create
+        channelInfo = await mmClient.createChannel({
+            team_id: team.id,
+            name: channelName,
+            display_name: `Matterless : Logs : ${appId}`,
+            header: `Logs for matterless application [${appId}](${url}/${team.name}/pl/${appId})`,
+            type: 'P'
+        })
+    }
+    await mmClient.addUserToChannel(channelInfo.id, userId);
+    await mmClient.createPost({
+        channel_id: channelInfo.id,
+        message: "From `" + functionName + "`:\n```\n" + message + "\n```"
+    });
+}
+```
+
+# library matterless_root.js
+
+```javascript
+const rootUrl = Deno.env.get("API_URL").split('/').slice(0, -1).join('/');
+
+export function buildAppName(userId, postId) {
+    return `mls_${userId}_${postId}`;
+}
+
+export async function adminCall(rootToken, path, method, body) {
     let result = await fetch(`${rootUrl}${path}`, {
         method: method,
         headers: {
@@ -105,40 +224,25 @@ async function adminCall(path, method, body) {
     return textResult;
 }
 
-async function listApps() {
-    return adminCall("", "GET");
+export async function listApps(rootToken) {
+    return JSON.parse(await adminCall(rootToken, "", "GET"));
 }
 
-async function putApp(name, code) {
-    return adminCall(`/${name}`, "PUT", code);
+export async function putApp(rootToken, name, code) {
+    return adminCall(rootToken, `/${name}`, "PUT", code);
 }
 
-async function deleteApp(name) {
+export async function deleteApp(rootToken, name) {
     return adminCall(`/${name}`, "DELETE");
 }
-```
 
-# job ListenToLogs
-
-```yaml
-init:
-  url: ${config:url}
-  root_token: ${config:root_token}
-```
-
-```javascript
-let sockets = [];
-let rootToken;
-
-function init(cfg) {
-    if (!cfg.url) {
-        return
-    }
-    rootToken = cfg.root_token;
-    // ws = new WebSocket(cfg.url);
-    //
-    // ws.addEventListener("error", function (ev) {
-    //     console.error("WS error", ev);
-    // })
+export function appEventSocket(rootToken, appName) {
+    console.log("Now going to subscribe: ", `${rootUrl}/${appName}/_events`)
+    let ws = new WebSocket(`${rootUrl.replace('http://', 'ws://')}/${appName}/_events`);
+    ws.addEventListener('error', function (ev) {
+        console.error("Got websocket error", ev);
+    });
+    return ws;
 }
 ```
+

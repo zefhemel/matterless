@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/zefhemel/matterless/pkg/cluster"
@@ -45,15 +44,15 @@ func TestDockerSandboxFunction(t *testing.T) {
 	ceb := cluster.NewClusterEventBus(conn, "test")
 
 	// Listen to logs
-	ceb.Subscribe("function.*.log", func(msg *nats.Msg) {
-		log.Infof("Got log: %s", msg.Data)
+	ceb.SubscribeLogs("*", func(lm cluster.LogMessage) {
+		log.Infof("Got log: %s", lm.Message)
 	})
 
 	// Boot worker
 	worker, err := sandbox.NewFunctionExecutionWorker(cfg, "", "", ceb, "TestFunction", &definition.FunctionConfig{
 		Runtime:     "docker",
 		DockerImage: "zefhemel/matterless-runner-docker",
-	}, code)
+	}, code, definition.LibraryMap{})
 	assert.NoError(t, err)
 	defer worker.Close()
 
@@ -76,25 +75,14 @@ func TestDockerSandboxJob(t *testing.T) {
 	cfg.UseSystemDeno = true
 
 	code := `
-	function init(config) {
-        console.log("Got config", config, " and env ", process.env);
-    }
+import os
+import time
 
-	function start() {
-		console.log("Starting");
-	}
-
-    function run() {
-        console.log("Running");
-		setInterval(() => {
-            console.log("Iteration");
-        }, 50);
-    }
-
-    function stop() {
-        console.log("Stopping");
-    }
-	`
+print("API_URL", os.getenv("API_URL"))
+for i in range(10):
+    print("Iteration")
+    time.sleep(0.2)
+`
 
 	// Boot up cluster
 	conn, err := cluster.ConnectOrBoot("nats://localhost:4222")
@@ -103,24 +91,24 @@ func TestDockerSandboxJob(t *testing.T) {
 
 	// Listen to logs
 	allLogs := ""
-	ceb.Subscribe("function.*.log", func(msg *nats.Msg) {
-		log.Infof("Got log: %s", msg.Data)
-		allLogs = allLogs + string(msg.Data)
+	ceb.SubscribeLogs("*", func(lm cluster.LogMessage) {
+		log.Infof("Got log: %s", lm.Message)
+		allLogs = allLogs + string(lm.Message)
 	})
 
 	// Boot worker
 	worker, err := sandbox.NewJobExecutionWorker(cfg, "http://%s", "", ceb, "TestJob", &definition.JobConfig{
-		Runtime: "docker",
-		DockerImage:
-	}, code)
+		Runtime:     "docker",
+		DockerImage: "zefhemel/mls-python3-job",
+	}, code, definition.LibraryMap{})
 	assert.NoError(t, err)
 
 	// Start Job
 	time.Sleep(1 * time.Second)
 	assert.NoError(t, worker.Close())
 	assert.Contains(t, allLogs, "http://host.docker.internal")
-	assert.Contains(t, allLogs, "To do")
+	//assert.Contains(t, allLogs, "To do")
 	assert.Contains(t, allLogs, "Iteration")
-	assert.Contains(t, allLogs, "Stopping")
+	//assert.Contains(t, allLogs, "Stopping")
 	// t.Fail()
 }

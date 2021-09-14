@@ -154,6 +154,25 @@ func (eb *ClusterEventBus) SubscribeInvokeFunction(name string, callback func(in
 	})
 }
 
+func (eb *ClusterEventBus) SubscribeLogs(funcName string, callback func(lm LogMessage)) (Subscription, error) {
+	return eb.Subscribe(fmt.Sprintf("function.%s.log", funcName), func(msg *nats.Msg) {
+		var lm LogMessage
+		if err := json.Unmarshal(msg.Data, &lm); err != nil {
+			log.Errorf("Error unmarshaling log message: %s", err)
+			return
+		}
+		//parts := strings.Split(msg.Subject, ".") // mls.myapp.function.MyFunction.log
+		callback(lm)
+	})
+}
+
+func (eb *ClusterEventBus) PublishLog(funcName, message string) error {
+	return eb.Publish(fmt.Sprintf("function.%s.log", funcName), util.MustJsonByteSlice(LogMessage{
+		Function: funcName,
+		Message:  message,
+	}))
+}
+
 func (eb *ClusterEventBus) FetchClusterInfo(wait time.Duration) (*ClusterInfo, error) {
 	// TODO: Generate unique ID some other way
 	responseSubject := fmt.Sprintf("clusterinfo.%s", strings.ReplaceAll(uuid.NewString(), "-", ""))

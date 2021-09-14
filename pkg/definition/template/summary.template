@@ -10,3 +10,6 @@
 ## jobs
 {{ range $key, $env := .Jobs }}
 - `{{ $key }}` {{ end }}
+## libraries
+{{ range $key, $env := .Libraries }}
+- `{{ $key }}` {{ end }}

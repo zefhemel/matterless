@@ -27,11 +27,12 @@ type JobExecutionWorker struct {
 
 	functionExecutionLock sync.Mutex
 	runningInstance       JobInstance
+	libs                  definition.LibraryMap
 }
 
 func NewJobExecutionWorker(
 	cfg *config.Config, apiURL string, apiToken string, ceb *cluster.ClusterEventBus,
-	name string, jobConfig *definition.JobConfig, code string) (*JobExecutionWorker, error) {
+	name string, jobConfig *definition.JobConfig, code string, libs definition.LibraryMap) (*JobExecutionWorker, error) {
 
 	var err error
 
@@ -43,6 +44,7 @@ func NewJobExecutionWorker(
 		name:      name,
 		jobConfig: jobConfig,
 		code:      code,
+		libs:      libs,
 		done:      make(chan struct{}, 1),
 	}
 
@@ -54,7 +56,7 @@ func NewJobExecutionWorker(
 }
 
 func (ew *JobExecutionWorker) log(funcName, message string) {
-	ew.ceb.Publish(fmt.Sprintf("function.%s.log", ew.name), []byte(message))
+	ew.ceb.PublishLog(ew.name, message)
 }
 
 func (ew *JobExecutionWorker) start() error {
@@ -81,7 +83,7 @@ func (ew *JobExecutionWorker) start() error {
 		return fmt.Errorf("unsupported runtime: %s", ew.jobConfig.Runtime)
 	}
 
-	ew.runningInstance, err = builder(ctx, ew.config, ew.apiURL, ew.apiToken, ew.name, ew.log, ew.jobConfig, ew.code)
+	ew.runningInstance, err = builder(ctx, ew.config, ew.apiURL, ew.apiToken, ew.name, ew.log, ew.jobConfig, ew.code, ew.libs)
 
 	if err != nil {
 		return err

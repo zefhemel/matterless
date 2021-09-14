@@ -21,6 +21,12 @@
 {{$def.Code -}}
 ```
 {{end}}
+{{range $name, $def := .Libraries}}
+## library {{$name}}
+```{{$def.Language}}
+{{$def.Code -}}
+```
+{{end}}
 {{- if .Events -}}
 ## events
 ```yaml

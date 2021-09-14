@@ -20,14 +20,14 @@ const (
 	RunModeJob      RunMode = iota
 )
 
-type RuntimeFunctionInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error)
+type RuntimeFunctionInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string, libs definition.LibraryMap) (FunctionInstance, error)
 
 var runtimeFunctionInstantiators = map[string]RuntimeFunctionInstantiator{
 	"deno":   newDenoFunctionInstance,
 	"docker": newDockerFunctionInstance,
 }
 
-type RuntimeJobInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string) (JobInstance, error)
+type RuntimeJobInstantiator func(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string, libs definition.LibraryMap) (JobInstance, error)
 
 var runtimeJobInstantiators = map[string]RuntimeJobInstantiator{
 	"deno":   newDenoJobInstance,
@@ -79,8 +79,8 @@ func NewSandbox(cfg *config.Config, apiURL string, apiToken string, ceb *cluster
 	return s, nil
 }
 
-func (s *Sandbox) StartFunctionWorker(name string, functionConfig *definition.FunctionConfig, code string) error {
-	worker, err := NewFunctionExecutionWorker(s.config, s.apiURL, s.apiToken, s.ceb, name, functionConfig, code)
+func (s *Sandbox) StartFunctionWorker(name string, functionConfig *definition.FunctionConfig, code string, libs definition.LibraryMap) error {
+	worker, err := NewFunctionExecutionWorker(s.config, s.apiURL, s.apiToken, s.ceb, name, functionConfig, code, libs)
 	if err != nil {
 		return err
 	}
@@ -88,8 +88,8 @@ func (s *Sandbox) StartFunctionWorker(name string, functionConfig *definition.Fu
 	return nil
 }
 
-func (s *Sandbox) StartJobWorker(name definition.FunctionID, jobConfig *definition.JobConfig, code string) error {
-	worker, err := NewJobExecutionWorker(s.config, s.apiURL, s.apiToken, s.ceb, string(name), jobConfig, code)
+func (s *Sandbox) StartJobWorker(name definition.FunctionID, jobConfig *definition.JobConfig, code string, libs definition.LibraryMap) error {
+	worker, err := NewJobExecutionWorker(s.config, s.apiURL, s.apiToken, s.ceb, string(name), jobConfig, code, libs)
 	if err != nil {
 		return err
 	}

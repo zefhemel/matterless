@@ -21,10 +21,13 @@ var summaryTemplate string
 //go:embed template/model.template
 var rerenderTemplate string
 
+type LibraryMap = map[FunctionID]*LibraryDef
+
 type Definitions struct {
 	Imports        []string                     `json:"imports,omitempty"`
 	Functions      map[FunctionID]*FunctionDef  `json:"functions"`
 	Jobs           map[FunctionID]*JobDef       `json:"jobs"`
+	Libraries      LibraryMap                   `json:"libraries"`
 	Events         map[string][]FunctionID      `json:"events"`
 	Macros         map[MacroID]*MacroDef        `json:"macros"`
 	MacroInstances map[string]*MacroInstanceDef `json:"macro_instances,omitempty"`
@@ -57,6 +60,13 @@ type JobDef struct {
 	Config   *JobConfig `json:"config,omitempty"`
 	Language string     `json:"language,omitempty"`
 	Code     string     `json:"code,omitempty"`
+}
+
+type LibraryDef struct {
+	Name     string `json:"name"`
+	Runtime  string `json:"runtime"`
+	Language string `json:"language,omitempty"`
+	Code     string `json:"code,omitempty"`
 }
 
 type MacroDef struct {

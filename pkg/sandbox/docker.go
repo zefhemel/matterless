@@ -47,7 +47,7 @@ func (inst *dockerFunctionInstance) DidExit() chan error {
 	return inst.procExit
 }
 
-func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
+func newDockerFunctionInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string, libs definition.LibraryMap) (FunctionInstance, error) {
 	//funcHash := newFunctionHash(name, code)
 	inst := &dockerFunctionInstance{
 		name:          name,
@@ -221,7 +221,7 @@ func (inst *dockerJobInstance) Name() string {
 	return inst.name
 }
 
-func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string) (JobInstance, error) {
+func newDockerJobInstance(ctx context.Context, cfg *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string, libs definition.LibraryMap) (JobInstance, error) {
 	//funcHash := newFunctionHash(name, code)
 	inst := &dockerJobInstance{
 		apiURL:        apiURL,

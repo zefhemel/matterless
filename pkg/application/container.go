@@ -305,10 +305,6 @@ func (c *Container) Close() {
 	c.apiGateway.Stop()
 }
 
-func (c *Container) ClusterConnection() *nats.Conn {
-	return c.clusterConn
-}
-
 func (c *Container) ClusterEventBus() *cluster.ClusterEventBus {
 	return c.clusterEventBus
 }

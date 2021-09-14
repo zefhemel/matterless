@@ -46,6 +46,7 @@ func Parse(code string) (*Definitions, error) {
 	decls := &Definitions{
 		Functions:      map[FunctionID]*FunctionDef{},
 		Jobs:           map[FunctionID]*JobDef{},
+		Libraries:      map[FunctionID]*LibraryDef{},
 		Events:         map[string][]FunctionID{},
 		Macros:         map[MacroID]*MacroDef{},
 		MacroInstances: map[string]*MacroInstanceDef{},
@@ -106,8 +107,14 @@ func Parse(code string) (*Definitions, error) {
 			if jobDef.Config.Instances == 0 {
 				jobDef.Config.Instances = 1
 			}
-			//log.Info("FOr job ", currentDeclarationName, " got config ", jobDef.Config)
 			decls.Jobs[FunctionID(currentDeclarationName)] = jobDef
+		case "library":
+			libraryDef := &LibraryDef{
+				Name:     currentDeclarationName,
+				Language: currentLanguage,
+				Code:     currentBody,
+			}
+			decls.Libraries[FunctionID(currentDeclarationName)] = libraryDef
 		case "events":
 			var def map[string][]FunctionID
 			if err := validate("schema/events.schema.json", currentBody); err != nil {

@@ -103,7 +103,7 @@ func newFunctionHash(name string, code string) functionHash {
 	return functionHash(fmt.Sprintf("%x", bs))
 }
 
-func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string) (FunctionInstance, error) {
+func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, runMode RunMode, name string, logCallback func(funcName, message string), functionConfig *definition.FunctionConfig, code string, libs definition.LibraryMap) (FunctionInstance, error) {
 	inst := &denoFunctionInstance{
 		name:   name,
 		config: config,
@@ -127,6 +127,14 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 
 	if err := os.WriteFile(fmt.Sprintf("%s/function.js", denoDir), []byte(wrapScript(functionConfig.Init, code)), 0600); err != nil {
 		return nil, errors.Wrap(err, "write JS function file")
+	}
+
+	// Write library files
+	for libName, libDef := range libs {
+		// TOOD: Secure enough?
+		if err := os.WriteFile(fmt.Sprintf("%s/%s", denoDir, util.SafeFilename(string(libName))), []byte(libDef.Code), 0600); err != nil {
+			return nil, errors.Wrap(err, "write JS library file")
+		}
 	}
 
 	// Find an available TCP port to bind the function server to
@@ -272,7 +280,7 @@ func (inst *denoJobInstance) Name() string {
 	return inst.name
 }
 
-func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string) (JobInstance, error) {
+func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL string, apiToken string, name string, logCallback func(funcName, message string), jobConfig *definition.JobConfig, code string, libs definition.LibraryMap) (JobInstance, error) {
 	inst := &denoJobInstance{}
 
 	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, apiToken, RunModeJob, name, logCallback, &definition.FunctionConfig{
@@ -281,7 +289,7 @@ func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL strin
 		Prewarm:     false,
 		Instances:   jobConfig.Instances,
 		DockerImage: jobConfig.DockerImage,
-	}, code)
+	}, code, libs)
 	if err != nil {
 		return nil, err
 	}

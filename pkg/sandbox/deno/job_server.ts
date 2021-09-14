@@ -1,9 +1,9 @@
-import { serve } from "https://deno.land/std@0.91.0/http/server.ts";
+import {serve} from "https://deno.land/std@0.91.0/http/server.ts";
 // @ts-ignore
-import {init, start, stop, run} from "./function.js"
+import {init, run, start, stop} from "./function.js"
 
 const port = +Deno.args[0];
-const server = serve({ hostname: "0.0.0.0", port: port });
+const server = serve({hostname: "0.0.0.0", port: port});
 console.log(`Starting deno job runtime (${port})`);
 
 // @ts-ignore
@@ -11,7 +11,7 @@ Promise.resolve(init()).then(async () => {
     const headers = new Headers();
     headers.set("Content-type", "application/json");
     for await (const request of server) {
-        if(request.url === "/start") {
+        if (request.url === "/start") {
             // @ts-ignore
             Promise.resolve(start()).then(result => {
                 request.respond({
@@ -31,7 +31,7 @@ Promise.resolve(init()).then(async () => {
                     body: jsonError(e)
                 });
             });
-        } else if(request.url === "/stop") {
+        } else if (request.url === "/stop") {
             // @ts-ignore
             Promise.resolve(stop()).then(result => {
                 request.respond({
@@ -51,7 +51,7 @@ Promise.resolve(init()).then(async () => {
             });
         }
 
-        function jsonError(e : Error) {
+        function jsonError(e: Error) {
             return JSON.stringify({
                 error: JSON.parse(JSON.stringify(e, Object.getOwnPropertyNames(e)))
             })

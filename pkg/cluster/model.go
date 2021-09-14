@@ -53,3 +53,8 @@ type AppInfo struct {
 	FunctionWorkers map[string]int
 	JobWorkers      map[string]int
 }
+
+type LogMessage struct {
+	Message  string `json:"message"`
+	Function string `json:"function"`
+}

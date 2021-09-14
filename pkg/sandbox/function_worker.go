@@ -29,11 +29,12 @@ type FunctionExecutionWorker struct {
 	functionExecutionLock sync.Mutex
 	runningInstance       FunctionInstance
 	invocationCount       int
+	libs                  definition.LibraryMap
 }
 
 func NewFunctionExecutionWorker(
 	cfg *config.Config, apiURL string, apiToken string, ceb *cluster.ClusterEventBus,
-	name string, functionConfig *definition.FunctionConfig, code string) (*FunctionExecutionWorker, error) {
+	name string, functionConfig *definition.FunctionConfig, code string, libs definition.LibraryMap) (*FunctionExecutionWorker, error) {
 
 	var err error
 	fm := &FunctionExecutionWorker{
@@ -43,6 +44,7 @@ func NewFunctionExecutionWorker(
 		apiToken:       apiToken,
 		name:           name,
 		functionConfig: functionConfig,
+		libs:           libs,
 		code:           code,
 		done:           make(chan struct{}),
 	}
@@ -67,7 +69,7 @@ func NewFunctionExecutionWorker(
 }
 
 func (fm *FunctionExecutionWorker) log(funcName, message string) {
-	fm.ceb.Publish(fmt.Sprintf("function.%s.log", fm.name), []byte(message))
+	fm.ceb.PublishLog(fm.name, message)
 }
 
 func (fm *FunctionExecutionWorker) cleanupJob() {
@@ -103,7 +105,7 @@ func (fm *FunctionExecutionWorker) invoke(event interface{}) (interface{}, error
 	if err := fm.warmup(ctx); err != nil {
 		return nil, err
 	}
-	log.Infof("Now actually locally invoking %s", fm.name)
+	//log.Infof("Now actually locally invoking %s", fm.name)
 	fm.invocationCount++
 	return fm.runningInstance.Invoke(ctx, event)
 }
@@ -122,7 +124,7 @@ func (fm *FunctionExecutionWorker) warmup(ctx context.Context) error {
 			return fmt.Errorf("unsupported runtime: %s", fm.functionConfig.Runtime)
 		}
 
-		inst, err = builder(ctx, fm.config, fm.apiURL, fm.apiToken, RunModeFunction, fm.name, fm.log, fm.functionConfig, fm.code)
+		inst, err = builder(ctx, fm.config, fm.apiURL, fm.apiToken, RunModeFunction, fm.name, fm.log, fm.functionConfig, fm.code, fm.libs)
 
 		if err != nil {
 			return err

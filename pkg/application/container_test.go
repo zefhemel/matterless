@@ -1,14 +1,13 @@
 package application_test
 
 import (
-	"fmt"
+	"github.com/zefhemel/matterless/pkg/cluster"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/zefhemel/matterless/pkg/application"
@@ -31,8 +30,8 @@ func TestEventHTTP(t *testing.T) {
 	container, err := application.NewContainer(cfg)
 	a.NoError(err)
 	defer container.Close()
-	container.ClusterConnection().Subscribe(fmt.Sprintf("%s.*.function.*.log", cfg.ClusterNatsPrefix), func(m *nats.Msg) {
-		log.Infof("[%s] %s", m.Subject, m.Data)
+	container.ClusterEventBus().SubscribeLogs("*", func(lm cluster.LogMessage) {
+		log.Infof("[%s] %s", lm.Function, lm.Message)
 	})
 	if err := container.Start(); err != nil {
 		log.Fatalf("Could not start container: %s", err)

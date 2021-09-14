@@ -91,7 +91,7 @@ func NewApplication(cfg *config.Config, appName string, s store.Store, ceb *clus
 	app.startWorkerSubscription, err = app.eventBus.SubscribeRequestJobWorker(func(jobName string) {
 		job := app.definitions.Jobs[definition.FunctionID(jobName)]
 		log.Info("Starting job worker ", jobName)
-		if err := app.sandbox.StartJobWorker(definition.FunctionID(jobName), job.Config, job.Code); err != nil {
+		if err := app.sandbox.StartJobWorker(definition.FunctionID(jobName), job.Config, job.Code, app.definitions.Libraries); err != nil {
 			log.Errorf("Could not start job %s: %s", jobName, err)
 		}
 	})
@@ -134,18 +134,11 @@ func (app *Application) Eval(defs *definition.Definitions) error {
 	log.Info("Loading functions...")
 	for name, def := range defs.Functions {
 		for i := 0; i < def.Config.Instances; i++ {
-			if err := app.sandbox.StartFunctionWorker(string(name), def.Config, def.Code); err != nil {
+			if err := app.sandbox.StartFunctionWorker(string(name), def.Config, def.Code, app.definitions.Libraries); err != nil {
 				log.Errorf("Could not spin up function worker for %s: %s", name, err)
 			}
 		}
 	}
-
-	//log.Info("Loading jobs...")
-	//for name, def := range defs.Jobs {
-	//	if err := app.sandbox.StartJobWorker(name, def.Config, def.Code); err != nil {
-	//		log.Errorf("Could not spin up job worker for %s: %s", name, err)
-	//	}
-	//}
 
 	log.Info("Ready to go.")
 	return nil
@@ -159,16 +152,6 @@ func (app *Application) EvalString(code string) error {
 
 	return app.Eval(defs)
 }
-
-//func (app *Application) StartJobs() error {
-//	log.Info("Starting jobs...")
-//	for name, def := range app.definitions.Jobs {
-//		if _, err := app.InvokeFunction(string(name), def.Config.Init); err != nil {
-//			return err
-//		}
-//	}
-//	return nil
-//}
 
 // reset but ready to start again
 func (app *Application) reset() {
