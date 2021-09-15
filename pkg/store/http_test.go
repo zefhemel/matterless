@@ -29,7 +29,7 @@ func sendOp(url string, args ...interface{}) (*store.OperationResponse, error) {
 func TestHTTP(t *testing.T) {
 	s, err := store.NewLevelDBStore("http_test")
 	assert.NoError(t, err)
-	defer s.RemoveStore()
+	defer s.DeleteStore()
 	httpStore := store.NewHTTPStore(s)
 	ts := httptest.NewServer(httpStore)
 	defer ts.Close()

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
@@ -15,6 +16,8 @@ import (
 )
 
 const sequenceKey = "$$seq"
+
+var SyncTimeoutErr = errors.New("sync timeout")
 
 type syncMessage struct {
 	ID string `json:"id"`
@@ -103,7 +106,7 @@ func (jss *JetstreamStore) init() error {
 	return nil
 }
 
-func (jss *JetstreamStore) Connect() error {
+func (jss *JetstreamStore) Connect(timeout time.Duration) error {
 	// By default we replay all events
 	syncOpt := nats.DeliverAll()
 
@@ -128,7 +131,7 @@ func (jss *JetstreamStore) Connect() error {
 	// Already, all set, let's start listenin'
 	go jss.receiveMessages(ctx, sub)
 
-	if err := jss.Sync(); err != nil {
+	if err := jss.Sync(timeout); err != nil {
 		return errors.Wrap(err, "sync")
 	}
 
@@ -136,7 +139,7 @@ func (jss *JetstreamStore) Connect() error {
 }
 
 // Sends out a sync message and waits for it to come back to ensure a fully synced state
-func (jss *JetstreamStore) Sync() error {
+func (jss *JetstreamStore) Sync(timeout time.Duration) error {
 	// To figure out when we've processed the backlog of messages we're going to publish a dummy "sync" message
 	// and wait for it to come back to us
 	sm := syncMessage{
@@ -151,7 +154,11 @@ func (jss *JetstreamStore) Sync() error {
 	}
 
 	// And return when we got our "sync" message back
-	<-jss.syncMessageChan
+	select {
+	case <-time.After(timeout):
+		return SyncTimeoutErr
+	case <-jss.syncMessageChan:
+	}
 
 	return nil
 }
@@ -257,8 +264,19 @@ func (jss *JetstreamStore) Disconnect() {
 	jss.listenCancel()
 }
 
-func (jss *JetstreamStore) DeleteStream() error {
-	return jss.js.DeleteStream(jss.streamName)
+func (jss *JetstreamStore) DeleteStore() error {
+	if err := jss.localCacheStore.DeleteStore(); err != nil {
+		return err
+	}
+	if err := jss.js.DeleteStream(jss.streamName); err != nil {
+		if err == nats.ErrStreamNotFound {
+			// Probably somebody else came first, that's ok
+			return nil
+		} else {
+			return err
+		}
+	}
+	return nil
 }
 
 func (jss *JetstreamStore) Put(key string, val interface{}) error {

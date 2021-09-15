@@ -23,6 +23,7 @@ type Config struct {
 	SandboxFunctionKeepAlive   time.Duration
 	SandboxJobStartTimeout     time.Duration
 	SandboxJobStopTimeout      time.Duration
+	DatastoreSyncTimeout       time.Duration
 }
 
 func NewConfig() *Config {
@@ -38,5 +39,6 @@ func NewConfig() *Config {
 		SandboxJobStopTimeout:      2 * time.Second,
 		SandboxCleanupInterval:     1 * time.Minute,
 		SandboxFunctionKeepAlive:   2 * time.Minute,
+		DatastoreSyncTimeout:       1 * time.Minute,
 	}
 }

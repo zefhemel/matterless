@@ -3,6 +3,10 @@ package store
 type MockStore struct {
 }
 
+func (m MockStore) DeleteStore() error {
+	return nil
+}
+
 func (m MockStore) Put(key string, val interface{}) error {
 	return nil
 }

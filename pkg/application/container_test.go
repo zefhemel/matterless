@@ -1,7 +1,6 @@
 package application_test
 
 import (
-	"github.com/zefhemel/matterless/pkg/cluster"
 	"io"
 	"net/http"
 	"os"
@@ -30,8 +29,8 @@ func TestEventHTTP(t *testing.T) {
 	container, err := application.NewContainer(cfg)
 	a.NoError(err)
 	defer container.Close()
-	container.ClusterEventBus().SubscribeLogs("*", func(lm cluster.LogMessage) {
-		log.Infof("[%s] %s", lm.Function, lm.Message)
+	container.ClusterEventBus().SubscribeLogs("*", func(funcName, message string) {
+		log.Infof("[%s] %s", funcName, message)
 	})
 	if err := container.Start(); err != nil {
 		log.Fatalf("Could not start container: %s", err)

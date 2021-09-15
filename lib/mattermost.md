@@ -193,10 +193,16 @@ Template:
     
     function init(cfg) {
         config = cfg;
+        if(!cfg.url) {
+            return;
+        }
         client = new Mattermost(config.url, config.admin_token);
     }
     
     async function handle() {
+        if(!client) {
+            return;
+        }
         if(await store.get(config.bot_token_config)) {
             // Bot token config already configured, done!
             console.log("Bot token already present, skipping.");

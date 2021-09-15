@@ -6,6 +6,7 @@ To configure this DB bot you need to set the following configuration variables i
 * `config:admin_token`: Personal access token for an admin user, enabling this app to create the necessary "
   matterless-bot" bot.
 * `config:team`: Name of the team for the bot to join
+* `config:root_token`: Matterless root token
 
 # import
 
@@ -122,6 +123,9 @@ async function init(cfg) {
 
 
 async function run() {
+    if (!url || !rootToken) {
+        return;
+    }
     subscribeAll();
     let ws = appEventSocket(rootToken, 'matterless-bot');
     console.log("Subscribing to app update events");
@@ -233,7 +237,7 @@ export async function putApp(rootToken, name, code) {
 }
 
 export async function deleteApp(rootToken, name) {
-    return adminCall(`/${name}`, "DELETE");
+    return adminCall(rootToken, `/${name}`, "DELETE");
 }
 
 export function appEventSocket(rootToken, appName) {

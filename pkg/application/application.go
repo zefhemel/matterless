@@ -1,8 +1,8 @@
 package application
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/mitchellh/copystructure"
 	"path/filepath"
 
 	"github.com/nats-io/nats.go"
@@ -18,8 +18,9 @@ import (
 
 type Application struct {
 	// Definitions
-	appName     string
-	definitions *definition.Definitions
+	appName                string
+	definitions            *definition.Definitions
+	unprocessedDefinitions *definition.Definitions
 
 	// Runtime
 	config                  *config.Config
@@ -64,15 +65,10 @@ func NewApplication(cfg *config.Config, appName string, s store.Store, ceb *clus
 	})
 
 	// We send all app events through a single event queue
-	app.eventsSubscription, err = app.eventBus.QueueSubscribe(cluster.EventPublishEvent, "event.workers", func(msg *nats.Msg) {
-		var eventData cluster.PublishEvent
-		if err := json.Unmarshal(msg.Data, &eventData); err != nil {
-			log.Errorf("Could not unmarshal event: %s - %s", err, string(msg.Data))
-			return
-		}
-		if funcsToInvoke, ok := app.definitions.Events[eventData.Name]; ok {
+	app.eventsSubscription, err = app.eventBus.SubscribeEvent("*", func(name string, data interface{}, msg *nats.Msg) {
+		if funcsToInvoke, ok := app.definitions.Events[name]; ok {
 			for _, funcToInvoke := range funcsToInvoke {
-				resp, err := app.InvokeFunction(string(funcToInvoke), eventData.Data)
+				resp, err := app.InvokeFunction(string(funcToInvoke), data)
 				if err != nil {
 					log.Errorf("Error invoking %s: %s", funcToInvoke, err)
 				}
@@ -117,22 +113,24 @@ func (app *Application) InvokeFunction(name string, event interface{}) (interfac
 
 // Publish a (custom) application event
 func (app *Application) PublishAppEvent(name string, event interface{}) error {
-	return app.eventBus.Publish(cluster.EventPublishEvent, util.MustJsonByteSlice(cluster.PublishEvent{
-		Name: name,
-		Data: event,
-	}))
+	return app.eventBus.PublishEvent(name, event)
 }
 
 func (app *Application) Eval(defs *definition.Definitions) error {
-	app.definitions = defs
-	defs.InterpolateStoreValues(app.dataStore)
+	defsCopy, err := copystructure.Copy(defs)
+	if err != nil {
+		return errors.Wrap(err, "deep copy of defs")
+	}
+	app.unprocessedDefinitions = defs
+	app.definitions = defsCopy.(*definition.Definitions)
+	app.definitions.InterpolateStoreValues(app.dataStore)
 
-	// fmt.Println(defs.Markdown())
+	// fmt.Println(app.definitions.Markdown())
 
 	app.reset()
 
 	log.Info("Loading functions...")
-	for name, def := range defs.Functions {
+	for name, def := range app.definitions.Functions {
 		for i := 0; i < def.Config.Instances; i++ {
 			if err := app.sandbox.StartFunctionWorker(string(name), def.Config, def.Code, app.definitions.Libraries); err != nil {
 				log.Errorf("Could not spin up function worker for %s: %s", name, err)

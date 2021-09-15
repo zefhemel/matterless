@@ -49,3 +49,7 @@ func (s *EventedStore) QueryPrefix(prefix string) ([]QueryResult, error) {
 func (s *EventedStore) Close() error {
 	return s.wrappedStore.Close()
 }
+
+func (s *EventedStore) DeleteStore() error {
+	return s.wrappedStore.DeleteStore()
+}

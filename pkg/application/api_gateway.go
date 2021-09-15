@@ -14,7 +14,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/zefhemel/matterless/pkg/cluster"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
@@ -131,10 +130,7 @@ func (ag *APIGateway) buildRouter(config *config.Config) {
 		log.Debugf("Received HTTP request (%s) %s", request.Method, path)
 
 		// Perform Request via eventbus
-		response, err := app.EventBus().Request(cluster.EventPublishEvent, util.MustJsonByteSlice(cluster.PublishEvent{
-			Name: fmt.Sprintf("http:%s:/%s", request.Method, path),
-			Data: evt,
-		}), config.HTTPGatewayResponseTimeout)
+		response, err := app.EventBus().RequestEvent(fmt.Sprintf("http:%s:/%s", request.Method, path), evt, config.HTTPGatewayResponseTimeout)
 		if err != nil {
 			reportHTTPError(err)
 			return

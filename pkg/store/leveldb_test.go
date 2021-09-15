@@ -41,5 +41,5 @@ func TestStore(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, people, 2)
 
-	defer s.RemoveStore()
+	defer s.DeleteStore()
 }

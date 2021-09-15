@@ -3,6 +3,7 @@ package store_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/cluster"
@@ -13,6 +14,7 @@ import (
 
 func TestJetstreamStore(t *testing.T) {
 	jetStreamStores := []*store.JetstreamStore{}
+	var timeout = 5 * time.Second
 
 	// Create a bunch of JetStream stores
 	for i := 0; i < 5; i++ {
@@ -20,7 +22,7 @@ func TestJetstreamStore(t *testing.T) {
 		assert.Nil(t, err)
 		levelDBStore, err := store.NewLevelDBStore(fmt.Sprintf("lvldb-%d", i))
 		assert.Nil(t, err)
-		defer levelDBStore.RemoveStore()
+		defer levelDBStore.DeleteStore()
 		jss, err := store.NewJetstreamStore(conn, "test", levelDBStore)
 		assert.Nil(t, err)
 		assert.NotNil(t, jss)
@@ -28,17 +30,17 @@ func TestJetstreamStore(t *testing.T) {
 	}
 
 	// Connect a bunch of them
-	assert.Nil(t, jetStreamStores[0].Connect())
+	assert.Nil(t, jetStreamStores[0].Connect(timeout))
 	defer jetStreamStores[0].Disconnect()
-	assert.Nil(t, jetStreamStores[1].Connect())
+	assert.Nil(t, jetStreamStores[1].Connect(timeout))
 	defer jetStreamStores[1].Disconnect()
-	assert.Nil(t, jetStreamStores[2].Connect())
+	assert.Nil(t, jetStreamStores[2].Connect(timeout))
 	defer jetStreamStores[2].Disconnect()
-	assert.Nil(t, jetStreamStores[3].Connect())
+	assert.Nil(t, jetStreamStores[3].Connect(timeout))
 	defer jetStreamStores[3].Disconnect()
 
 	// Clean up stream later
-	defer jetStreamStores[0].DeleteStream()
+	defer jetStreamStores[0].DeleteStore()
 
 	// Basic put-get
 	assert.Nil(t, jetStreamStores[0].Put("name", "Pete"))
@@ -47,7 +49,7 @@ func TestJetstreamStore(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "Pete", v)
 
-	assert.Nil(t, jetStreamStores[2].Sync())
+	assert.Nil(t, jetStreamStores[2].Sync(timeout))
 
 	v, err = jetStreamStores[2].Get("name")
 	assert.Nil(t, err)
@@ -58,14 +60,14 @@ func TestJetstreamStore(t *testing.T) {
 	}
 
 	// Spot check the result
-	assert.Nil(t, jetStreamStores[0].Sync())
+	assert.Nil(t, jetStreamStores[0].Sync(timeout))
 	r, err := jetStreamStores[0].Get("key22")
 	assert.Nil(t, err)
 	assert.Equal(t, float64(22), r)
 
 	// Late connecter
 	log.Info("Now connecting late")
-	assert.Nil(t, jetStreamStores[4].Connect())
+	assert.Nil(t, jetStreamStores[4].Connect(timeout))
 	defer jetStreamStores[4].Disconnect()
 
 	v, err = jetStreamStores[4].Get("name")
@@ -77,7 +79,7 @@ func TestJetstreamStore(t *testing.T) {
 	assert.Nil(t, jetStreamStores[2].Put("name", "John"))
 
 	// Affects connected store
-	assert.Nil(t, jetStreamStores[1].Sync())
+	assert.Nil(t, jetStreamStores[1].Sync(timeout))
 	v, err = jetStreamStores[1].Get("name")
 	assert.Nil(t, err)
 	assert.Equal(t, "John", v)
@@ -89,7 +91,7 @@ func TestJetstreamStore(t *testing.T) {
 
 	// Reconnect
 	log.Info("Connecting again")
-	assert.Nil(t, jetStreamStores[0].Connect())
+	assert.Nil(t, jetStreamStores[0].Connect(timeout))
 	v, err = jetStreamStores[0].Get("name")
 	assert.Nil(t, err)
 	assert.Equal(t, "John", v)
@@ -101,7 +103,7 @@ func TestJetstreamStore(t *testing.T) {
 	assert.Equal(t, "sup", v)
 
 	assert.Nil(t, jetStreamStores[2].Delete("deleteme"))
-	assert.Nil(t, jetStreamStores[0].Sync())
+	assert.Nil(t, jetStreamStores[0].Sync(timeout))
 	v, err = jetStreamStores[0].Get("deleteme")
 	assert.Nil(t, err)
 	assert.Nil(t, v)
@@ -119,7 +121,7 @@ func TestJetstreamStore(t *testing.T) {
 		Age:  21,
 	})
 
-	assert.Nil(t, s2.Sync())
+	assert.Nil(t, s2.Sync(timeout))
 
 	people, err := s2.QueryPrefix("person:")
 	assert.NoError(t, err)

@@ -111,16 +111,10 @@ func (ag *APIGateway) exposeEventAPI() {
 					log.Error("Could not parse websocket message: ", err)
 					continue
 				}
-				sub, err := app.EventBus().Subscribe(subscribeMessage.Pattern, func(msg *nats.Msg) {
-					var jsonData interface{}
-					if err := json.Unmarshal(msg.Data, &jsonData); err != nil {
-						log.Errorf("Could not unmarshal event data: %s", err)
-						return
-					}
+				sub, err := app.EventBus().SubscribeEvent(subscribeMessage.Pattern, func(name string, data interface{}, msg *nats.Msg) {
 					conn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(eventMessage{
-						// Strip off the NATS prefix and app name from the event
-						Name: msg.Subject[len(ag.config.ClusterNatsPrefix)+len(appName)+2:],
-						Data: jsonData,
+						Name: name,
+						Data: data,
 					}))
 				})
 				if err != nil {

@@ -13,6 +13,8 @@ type LevelDBStore struct {
 	db   *leveldb.DB
 }
 
+var _ Store = &LevelDBStore{}
+
 func NewLevelDBStore(path string) (*LevelDBStore, error) {
 	db, err := leveldb.OpenFile(path, nil)
 	if err != nil {
@@ -84,9 +86,7 @@ func (s *LevelDBStore) Close() error {
 	return s.db.Close()
 }
 
-func (s *LevelDBStore) RemoveStore() error {
+func (s *LevelDBStore) DeleteStore() error {
 	s.Close()
 	return os.RemoveAll(s.path)
 }
-
-var _ Store = &LevelDBStore{}

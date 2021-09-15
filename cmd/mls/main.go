@@ -1,16 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/zefhemel/matterless/pkg/cluster"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/zefhemel/matterless/pkg/application"
@@ -142,7 +138,8 @@ func rootCommand() *cobra.Command {
 		Use:   "mls",
 		Short: "Run Matterless in server mode",
 		Run: func(cmd *cobra.Command, args []string) {
-			runServer(cfg)
+			container := runServer(cfg)
+			defer container.Close()
 			busyLoop()
 		},
 	}
@@ -169,14 +166,8 @@ func runServer(cfg *config.Config) *application.Container {
 	}
 
 	// Subscribe to all logs and write to stdout
-	appContainer.ClusterEventBus().Subscribe("*.function.*.log", func(msg *nats.Msg) {
-		parts := strings.Split(msg.Subject, ".") // mls.myapp.function.MyFunction.log
-		var lm cluster.LogMessage
-		if err := json.Unmarshal(msg.Data, &lm); err != nil {
-			log.Errorf("Could not unmarshal log: %s", err)
-			return
-		}
-		log.Infof("LOG [%s | %s]: %s", parts[1], parts[3], lm.Message)
+	appContainer.ClusterEventBus().SubscribeContainerLogs("*.function.*.log", func(appName, funcName, message string) {
+		log.Infof("LOG [%s | %s]: %s", appName, funcName, message)
 	})
 
 	if err := appContainer.Start(); err != nil {

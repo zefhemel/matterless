@@ -36,8 +36,8 @@ func TestDenoSandboxFunction(t *testing.T) {
 	ceb := cluster.NewClusterEventBus(conn, "test")
 
 	// Listen to logs
-	ceb.SubscribeLogs("*", func(lm cluster.LogMessage) {
-		log.Infof("Got log: %s", lm.Message)
+	ceb.SubscribeLogs("*", func(funcName, message string) {
+		log.Infof("Got log: %s", message)
 	})
 
 	// Boot worker
@@ -87,10 +87,10 @@ function stop() {
 
 	// Listen to logs
 	allLogs := ""
-	ceb.SubscribeLogs("*", func(lm cluster.LogMessage) {
-		log.Infof("Got log: %s", lm.Message)
+	ceb.SubscribeLogs("*", func(funcName, message string) {
+		log.Infof("Got log: %s", message)
 
-		allLogs = allLogs + string(lm.Message)
+		allLogs = allLogs + string(message)
 	})
 
 	// Boot worker

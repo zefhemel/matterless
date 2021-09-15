@@ -6,6 +6,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/definition"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -18,15 +19,15 @@ import (
 )
 
 type Container struct {
-	config                 *config.Config
-	clusterConn            *nats.Conn
-	clusterEventBus        *cluster.ClusterEventBus
-	clusterLeaderElection  *cluster.LeaderElection
-	clusterStore           *store.JetstreamStore
-	apps                   map[string]*Application
-	apiGateway             *APIGateway
-	done                   chan struct{}
-	bringingToDesiredState bool
+	config                *config.Config
+	clusterConn           *nats.Conn
+	clusterEventBus       *cluster.ClusterEventBus
+	clusterLeaderElection *cluster.LeaderElection
+	clusterStore          *store.JetstreamStore
+	apps                  map[string]*Application
+	apiGateway            *APIGateway
+	done                  chan struct{}
+	desiredStateLock      sync.Mutex
 }
 
 const (
@@ -66,7 +67,7 @@ func NewContainer(config *config.Config) (*Container, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "create cluster store")
 	}
-	if err := c.clusterStore.Connect(); err != nil {
+	if err := c.clusterStore.Connect(config.DatastoreSyncTimeout); err != nil {
 		return nil, errors.Wrap(err, "cluster store connect")
 	}
 
@@ -104,7 +105,7 @@ func (c *Container) Start() error {
 			return err
 		}
 	}
-	c.done = make(chan struct{}, 1)
+	c.done = make(chan struct{})
 	go c.monitorCluster()
 
 	return nil
@@ -154,7 +155,9 @@ func (c *Container) subscribeToEvents() {
 			appName := event.Key[len("app:"):]
 
 			log.Infof("Deleting app %s...", appName)
-			c.Deregister(appName)
+			if err := c.DeleteApp(appName); err != nil {
+				log.Errorf("Could not delete app: %s", err)
+			}
 		}
 	})
 
@@ -168,8 +171,16 @@ func (c *Container) subscribeToEvents() {
 			log.Errorf("Asked to restart non-existing app: %s", appName)
 			return
 		}
-		if err := app.Eval(app.Definitions()); err != nil {
+		if err := app.Eval(app.unprocessedDefinitions); err != nil {
 			log.Errorf("Error starting app: %s", err)
+		}
+		if c.clusterLeaderElection.IsLeader() {
+			if err := c.bringToDesiredState(); err != nil {
+				log.Errorf("Could not bring cluster to desired state: %s", err)
+			}
+			if err := app.PublishAppEvent("init", struct{}{}); err != nil {
+				log.Errorf("could not send init event: %s", err)
+			}
 		}
 	})
 }
@@ -185,7 +196,6 @@ func (c *Container) loadApps() error {
 		if err := json.Unmarshal(util.MustJsonByteSlice(result.Value), &defs); err != nil {
 			return errors.Wrap(err, "decode apps")
 		}
-
 		app, err := c.CreateApp(appName)
 		if err != nil {
 			return errors.Wrap(err, "create app")
@@ -217,14 +227,8 @@ func (c *Container) monitorCluster() {
 }
 
 func (c *Container) bringToDesiredState() error {
-	// TODO: This is a bit unsafe
-	if c.bringingToDesiredState {
-		return nil
-	}
-	c.bringingToDesiredState = true
-	defer func() {
-		c.bringingToDesiredState = false
-	}()
+	c.desiredStateLock.Lock()
+	defer c.desiredStateLock.Unlock()
 	clusterInfo, err := c.clusterEventBus.FetchClusterInfo(time.Second)
 	if err != nil {
 		return errors.Wrap(err, "fetch cluster info")
@@ -246,9 +250,15 @@ func (c *Container) bringAppToDesiredState(app *Application, clusterInfo *cluste
 		jobInstancesToStart[jobName] = jobDef.Config.Instances
 	}
 
-	// Then iterate over all nodes and remove all runnings jobs
-	for _, nodeInfo := range clusterInfo.Nodes {
-		for jobName, runningInstances := range nodeInfo.Apps[app.Name()].JobWorkers {
+	// Then iterate over all nodes and remove all running jobs
+	for nodeId, nodeInfo := range clusterInfo.Nodes {
+		appInfo, ok := nodeInfo.Apps[app.Name()]
+		if !ok {
+			log.Errorf("Node %d does not know about app %s", nodeId, app.Name())
+			log.Errorf("All data: %+v", nodeInfo.Apps)
+			continue
+		}
+		for jobName, runningInstances := range appInfo.JobWorkers {
 			jobInstancesToStart[definition.FunctionID(jobName)] -= runningInstances
 		}
 	}
@@ -271,7 +281,7 @@ func (c *Container) CreateApp(appName string) (*Application, error) {
 	if err := os.MkdirAll(appDataPath, 0700); err != nil {
 		return nil, errors.Wrap(err, "create data dir")
 	}
-	levelDBStore, err := store.NewLevelDBStore(fmt.Sprintf("%s/store", appDataPath))
+	levelDBStore, err := store.NewLevelDBStore(appDataPath)
 	if err != nil {
 		return nil, errors.Wrap(err, "create data store dir")
 	}
@@ -281,7 +291,7 @@ func (c *Container) CreateApp(appName string) (*Application, error) {
 		return nil, errors.Wrap(err, "create jetstream store")
 	}
 
-	if err := jsStore.Connect(); err != nil {
+	if err := jsStore.Connect(c.config.DatastoreSyncTimeout); err != nil {
 		return nil, errors.Wrap(err, "jetstream store connect")
 	}
 
@@ -293,6 +303,21 @@ func (c *Container) CreateApp(appName string) (*Application, error) {
 	c.apps[appName] = app
 
 	return app, nil
+}
+
+func (c *Container) DeleteApp(name string) error {
+	if app, ok := c.apps[name]; ok {
+		if err := app.Close(); err != nil {
+			return errors.Wrap(err, "closing app")
+		}
+		if err := app.dataStore.DeleteStore(); err != nil {
+			return errors.Wrap(err, "delete store")
+		}
+		delete(c.apps, name)
+		return nil
+	} else {
+		return errors.New("app not found")
+	}
 }
 
 func (c *Container) Close() {
@@ -311,15 +336,6 @@ func (c *Container) ClusterEventBus() *cluster.ClusterEventBus {
 
 func (c *Container) Get(name string) *Application {
 	return c.apps[name]
-}
-
-func (c *Container) Deregister(name string) {
-	if app, ok := c.apps[name]; ok {
-		if err := app.Close(); err != nil {
-			log.Errorf("Failed to cleanly stop app %s: %s", name, err)
-		}
-		delete(c.apps, name)
-	}
 }
 
 func (c *Container) Store() *store.JetstreamStore {

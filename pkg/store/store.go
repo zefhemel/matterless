@@ -7,4 +7,5 @@ type Store interface {
 	QueryRange(startKey string, endKey string) ([]QueryResult, error)
 	QueryPrefix(prefix string) ([]QueryResult, error)
 	Close() error
+	DeleteStore() error
 }

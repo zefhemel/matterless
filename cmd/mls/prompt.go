@@ -17,6 +17,7 @@ import (
 func completer(in prompt.Document) []prompt.Suggest {
 	s := []prompt.Suggest{
 		{Text: "use", Description: "[appName] - switch to app context"},
+		{Text: "delete-app", Description: "[appName] - delete app and its data"},
 		{Text: "list", Description: "list all running apps"},
 		{Text: "put", Description: "[key] [value] — puts a value in the store"},
 		{Text: "get", Description: "[key] — retrieve a value from the store"},
@@ -29,7 +30,7 @@ func completer(in prompt.Document) []prompt.Suggest {
 		{Text: "exit", Description: "Exit"},
 	}
 	w := in.GetWordBeforeCursor()
-	if strings.HasPrefix(in.Text, "use ") {
+	if strings.HasPrefix(in.Text, "use ") || strings.HasPrefix(in.Text, "delete-app ") {
 		appNameSuggestions := make([]prompt.Suggest, len(promptContext.allAppNames))
 		for i, appName := range promptContext.allAppNames {
 			appNameSuggestions[i] = prompt.Suggest{
@@ -94,6 +95,16 @@ func executor(cmd string) {
 		for _, name := range appNames {
 			fmt.Printf("- %s\n", name)
 		}
+	case "delete-app":
+		if len(blocks) != 2 {
+			fmt.Println("You should specify an app name")
+			return
+		}
+		if err := promptContext.client.DeleteApp(blocks[1]); err != nil {
+			fmt.Println("App could not be deleted ", err.Error())
+			return
+		}
+		promptContext.appName = ""
 	case "get":
 		if promptContext.appName == "" {
 			fmt.Println("Please select an app first with 'use appname'")

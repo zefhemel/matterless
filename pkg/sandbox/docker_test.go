@@ -44,14 +44,14 @@ func TestDockerSandboxFunction(t *testing.T) {
 	ceb := cluster.NewClusterEventBus(conn, "test")
 
 	// Listen to logs
-	ceb.SubscribeLogs("*", func(lm cluster.LogMessage) {
-		log.Infof("Got log: %s", lm.Message)
+	ceb.SubscribeLogs("*", func(funcName, message string) {
+		log.Infof("Got log: %s", funcName)
 	})
 
 	// Boot worker
 	worker, err := sandbox.NewFunctionExecutionWorker(cfg, "", "", ceb, "TestFunction", &definition.FunctionConfig{
 		Runtime:     "docker",
-		DockerImage: "zefhemel/matterless-runner-docker",
+		DockerImage: "zefhemel/mls-node-function",
 	}, code, definition.LibraryMap{})
 	assert.NoError(t, err)
 	defer worker.Close()
@@ -91,9 +91,9 @@ for i in range(10):
 
 	// Listen to logs
 	allLogs := ""
-	ceb.SubscribeLogs("*", func(lm cluster.LogMessage) {
-		log.Infof("Got log: %s", lm.Message)
-		allLogs = allLogs + string(lm.Message)
+	ceb.SubscribeLogs("*", func(funcName, message string) {
+		log.Infof("Got log: %s", message)
+		allLogs = allLogs + string(message)
 	})
 
 	// Boot worker
