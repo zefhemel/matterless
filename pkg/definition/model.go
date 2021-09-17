@@ -36,8 +36,8 @@ type Definitions struct {
 type FunctionConfig struct {
 	Init        interface{} `yaml:"init" json:"init,omitempty"`
 	Runtime     string      `yaml:"runtime" json:"runtime,omitempty"`
-	Hot         bool        `yaml:"hot,omitempty" json:"hot,omitempty"` // Boot runtime immediately and don't clean it up
-	Instances   int         `yaml:"instances,omitempty"`                // Number of workers to start PER NODE
+	Hot         bool        `yaml:"hot,omitempty" json:"hot,omitempty"`              // Boot runtime immediately and don't clean it up
+	Instances   int         `yaml:"instances,omitempty"  json:"instances,omitempty"` // Number of workers to start PER NODE
 	DockerImage string      `yaml:"docker_image" json:"docker_image,omitempty" mapstructure:"docker_image"`
 }
 

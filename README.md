@@ -111,6 +111,8 @@ Matterless currently supports the following **core primitive definition types**:
   events occur.
 * `job`: for defining long-running background processes that for instance connect to external systems, and trigger
   events as a result.
+* `library`: for defining reusable modules (deno only supported for now) that will be available in every job and
+  function in the app.
 * `events`: for mapping events to functions to be triggered. There are certain built-in events that will automically
   trigger under certain conditions (e.g. when writing to the data store, or when certain URLs are called on Matterless’s
   HTTP Gateway).
@@ -131,11 +133,9 @@ few [Matterless APIs](https://github.com/zefhemel/matterless/blob/master/pkg/san
     * `store.get(key)` to fetch the value for a specific key.
     * `store.del(key)` to delete a key from the database.
     * `store.queryPrefix(prefix)` to fetch all keys and their values prefixed with `prefix`.
-* `events`: to publish events and respond to them (in an RPC setup):
-    * `events.publish(eventName, eventData)` to publish a custom event (that can be listened to via a `event` definition
-      in your definition file).
-* `functions`: invoke other functions by name (rarely needed, but supported)
-    * `functions.invoke(functionName, eventData)` invoke function `functionName` with `eventData`.
+* `publishEvent(eventName, eventData)` to publish a custom event (that can be listened to via a `event` definition in
+  your definition file).
+* `invokeFunction(functionName, eventData)` to invoke function `functionName` with `eventData`.
 
 But any arbitrary deno libraries can be imported as well.
 
@@ -247,7 +247,7 @@ Matterless APIs: `store` and `events` to track state between runs. Theoretically
 this value would be lost between restarts of the app:
 
 ```javascript
-import {store, events} from "./matterless.ts";
+import {store, publishEvent} from "./matterless.ts";
 
 let config;
 
@@ -270,7 +270,7 @@ function start() {
         // It changed!
         if (newCount !== oldStarCount) {
             // Publish event
-            await events.publish(config.event, {
+            await publishEvent(config.event, {
                 stars: newCount
             });
             // Store new value in store
@@ -327,8 +327,6 @@ response.
 #### function MyHTTPAPI
 
 ```javascript
-import {events} from "./matterless.ts";
-
 function handle(req) {
     return {
         status: 200,

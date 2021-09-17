@@ -27,8 +27,8 @@ events:
 # function ReactionChange
 
 ```javascript
-import {store, events} from "./matterless.ts";
-import {Mattermost} from "https://raw.githubusercontent.com/zefhemel/matterless/master/lib/mattermost_client.js";
+import {store} from "./matterless.ts";
+import {Mattermost} from "./mattermost_client.js";
 
 let botClient, meClient, directChannel, me, bot;
 

@@ -367,7 +367,7 @@ async function handle(event) {
     let store = api.getStore();
 
     let words = post.message.split(' ');
-    let key, result, val, prop;
+    let key, result, val, prop, eventName, functionName, jsonData;
     switch (words[0]) {
         case "get":
             key = words[1];
@@ -409,11 +409,21 @@ async function handle(event) {
             });
             break;
         case "trigger":
-            let eventName = words[1];
-            let jsonData = words.slice(2).join(' ');
+            eventName = words[1];
+            jsonData = words.slice(2).join(' ');
             await api.publishEvent(eventName, jsonData ? JSON.parse(jsonData) : {});
-            console.log("EVENT:", eventName, jsonData ? JSON.parse(jsonData) : {});
             await mmClient.addReaction(me.id, post.id, "white_check_mark");
+            break;
+        case "invoke":
+            functionName = words[1];
+            jsonData = words.slice(2).join(' ');
+            let result = await api.invokeFunction(functionName, jsonData ? JSON.parse(jsonData) : {});
+            await mmClient.createPost({
+                channel_id: post.channel_id,
+                root_id: post.id,
+                parent_id: post.id,
+                message: `${JSON.stringify(result)}`
+            });
             break;
         default:
             await mmClient.createPost({

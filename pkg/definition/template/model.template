@@ -1,22 +1,18 @@
 {{ $root := . }}
 {{range $name, $def := .Functions}}
 ## function {{$name}}
-{{if or $def.Config.Init $def.Config.Runtime -}}
 ```yaml
 {{yaml $def.Config -}}
 ```
-{{end}}
 ```{{$def.Language}}
 {{$def.Code -}}
 ```
 {{end}}
 {{range $name, $def := .Jobs}}
 ## job {{$name}}
-{{if or $def.Config.Init $def.Config.Runtime -}}
 ```yaml
 {{yaml $def.Config -}}
 ```
-{{end}}
 ```{{$def.Language}}
 {{$def.Code -}}
 ```

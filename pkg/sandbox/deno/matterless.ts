@@ -86,7 +86,6 @@ class Store {
     }
 
     async performOp(...args: any[]): Promise<any> {
-        console.log("Performing op against", this.url);
         let result = await fetch(`${this.url}/_store`, {
             method: "POST",
             headers: {
