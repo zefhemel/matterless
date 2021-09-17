@@ -76,6 +76,10 @@ func (defs *Definitions) MergeFrom(moreDefs *Definitions) error {
 		defs.MacroInstances[name] = def
 	}
 
+	for name, def := range moreDefs.Libraries {
+		defs.Libraries[name] = def
+	}
+
 	for eventName, newFns := range moreDefs.Events {
 		if existingFns, ok := defs.Events[eventName]; ok {
 			// Already has other listeners, add additional ones

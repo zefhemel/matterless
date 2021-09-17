@@ -5,10 +5,9 @@ import (
 )
 
 const (
-	EventRestartApp     = "restart"
-	EventPublishEvent   = "event"
-	EventFetchNodeInfo  = "nodeinfo"
-	EventStartJobWorker = "startjob"
+	EventRestartApp     = "$restart"
+	EventFetchNodeInfo  = "$nodeinfo"
+	EventStartJobWorker = "$startjob"
 )
 
 type NodeID = uint64
@@ -63,7 +62,7 @@ type logMessage struct {
 	Function string `json:"function"`
 }
 
-var safeSubjectRE = regexp.MustCompile("[^A-Za-z0-9_\\*]")
+var safeSubjectRE = regexp.MustCompile("[^A-Za-z0-9_\\*\\.>]")
 
 // SafeNATSSubject turns an event name into a safe to use NATS subject
 // TODO: add safer handling of e.g. colons

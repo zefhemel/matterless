@@ -24,6 +24,8 @@ func runCommand() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg.LoadApps = false
+			// Spin up own nats server
+			cfg.ClusterNatsUrl = fmt.Sprintf("nats://localhost:%d", util.FindFreePort(4222))
 			container := runServer(cfg)
 			defer container.Close()
 

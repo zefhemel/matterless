@@ -39,7 +39,7 @@ func TestDockerSandboxFunction(t *testing.T) {
 	}
 	`
 
-	conn, err := cluster.ConnectOrBoot("nats://localhost:4222")
+	conn, err := cluster.ConnectOrBoot(cfg)
 	assert.NoError(t, err)
 	ceb := cluster.NewClusterEventBus(conn, "test")
 
@@ -85,9 +85,9 @@ for i in range(10):
 `
 
 	// Boot up cluster
-	conn, err := cluster.ConnectOrBoot("nats://localhost:4222")
+	conn, err := cluster.ConnectOrBoot(cfg)
 	assert.NoError(t, err)
-	ceb := cluster.NewClusterEventBus(conn, "test")
+	ceb := cluster.NewClusterEventBus(conn, "test2")
 
 	// Listen to logs
 	allLogs := ""

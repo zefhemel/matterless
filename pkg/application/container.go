@@ -46,7 +46,7 @@ func NewContainer(config *config.Config) (*Container, error) {
 		return nil, errors.Wrap(err, "create data dir")
 	}
 
-	c.clusterConn, err = cluster.ConnectOrBoot(config.ClusterNatsUrl)
+	c.clusterConn, err = cluster.ConnectOrBoot(config)
 	if err != nil {
 		return nil, errors.Wrap(err, "create container nats")
 	}
@@ -269,8 +269,8 @@ func (c *Container) bringAppToDesiredState(app *Application, clusterInfo *cluste
 			continue
 		}
 		log.Infof("Now requesting %d instances of %s", toStart, jobName)
-		if err := app.eventBus.RequestJobWorkers(string(jobName), toStart); err != nil {
-			log.Errorf("Could not start workers")
+		if err := app.eventBus.RequestJobWorkers(string(jobName), toStart, c.config.SandboxJobStartTimeout); err != nil {
+			log.Errorf("Could not start workers: %s", err)
 		}
 	}
 }

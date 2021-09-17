@@ -3,7 +3,10 @@ package cluster
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mitchellh/mapstructure"
+	"github.com/zefhemel/matterless/pkg/config"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,10 +22,10 @@ import (
 
 // Checks if a NATS port is running at the given hostName and port, if not and if
 // the hostname is localhost/127.0.0.1 will boot a new NATS server
-func ConnectOrBoot(natsUrl string, options ...nats.Option) (*nats.Conn, error) {
-	nc, err := nats.Connect(natsUrl, options...)
+func ConnectOrBoot(config *config.Config) (*nats.Conn, error) {
+	nc, err := nats.Connect(config.ClusterNatsUrl)
 	if err != nil {
-		parsedUrl, err := url.Parse(natsUrl)
+		parsedUrl, err := url.Parse(config.ClusterNatsUrl)
 		if err != nil {
 			return nil, err
 		}
@@ -33,12 +36,12 @@ func ConnectOrBoot(natsUrl string, options ...nats.Option) (*nats.Conn, error) {
 			if err != nil {
 				return nil, errors.Wrap(err, "parsing port")
 			}
-			err = spawnNatsServer(p)
+			err = spawnNatsServer(path.Join(config.DataDir, ".nats"), p)
 			if err != nil {
 				return nil, errors.Wrap(err, "nats spawn")
 			}
 		}
-		nc, err = nats.Connect(natsUrl, options...)
+		nc, err = nats.Connect(config.ClusterNatsUrl)
 		if err != nil {
 			return nil, errors.Wrap(err, "after nats server boot")
 		}
@@ -46,16 +49,14 @@ func ConnectOrBoot(natsUrl string, options ...nats.Option) (*nats.Conn, error) {
 	return nc, nil
 }
 
-func spawnNatsServer(port int) error {
+func spawnNatsServer(dataDir string, port int) error {
 	opts := &server.Options{
-		Host:                  "0.0.0.0",
-		Port:                  port,
-		MaxControlLine:        4096,
-		DisableShortFirstPing: true,
+		Host: "0.0.0.0",
+		Port: port,
 
 		// Jetstream
 		JetStream: true,
-		StoreDir:  "js-data",
+		StoreDir:  dataDir,
 	}
 
 	s, err := server.NewServer(opts)
@@ -155,9 +156,9 @@ func (eb *ClusterEventBus) SubscribeInvokeFunction(name string, callback func(in
 }
 
 func (eb *ClusterEventBus) SubscribeLogs(funcName string, callback func(funcName string, message string)) (Subscription, error) {
-	return eb.subscribe(fmt.Sprintf("function.%s.log", SafeNATSSubject(funcName)), func(msg *nats.Msg) {
+	return eb.SubscribeEvent(fmt.Sprintf("%s.log", funcName), func(name string, data interface{}, msg *nats.Msg) {
 		var lm logMessage
-		if err := json.Unmarshal(msg.Data, &lm); err != nil {
+		if err := mapstructure.Decode(data, &lm); err != nil {
 			log.Errorf("Error unmarshaling log message: %s", err)
 			return
 		}
@@ -166,11 +167,16 @@ func (eb *ClusterEventBus) SubscribeLogs(funcName string, callback func(funcName
 }
 
 func (eb *ClusterEventBus) SubscribeContainerLogs(s string, callback func(appName, funcName, message string)) (Subscription, error) {
-	return eb.subscribe("*.function.*.log", func(msg *nats.Msg) {
-		parts := strings.Split(msg.Subject, ".") // mls.myapp.function.MyFunction.log
+	return eb.subscribe("*.*.log", func(msg *nats.Msg) {
+		parts := strings.Split(msg.Subject, ".") // mls.myapp.MyFunction.log
+		var pe publishEvent
+		if err := json.Unmarshal(msg.Data, &pe); err != nil {
+			log.Errorf("Could not unmarshal event data: %s", err)
+			return
+		}
 		var lm logMessage
-		if err := json.Unmarshal(msg.Data, &lm); err != nil {
-			log.Errorf("Could not unmarshal log: %s", err)
+		if err := mapstructure.Decode(pe.Data, &lm); err != nil {
+			log.Errorf("Error unmarshaling log message: %s", err)
 			return
 		}
 		callback(parts[1], lm.Function, lm.Message)
@@ -178,10 +184,10 @@ func (eb *ClusterEventBus) SubscribeContainerLogs(s string, callback func(appNam
 }
 
 func (eb *ClusterEventBus) PublishLog(funcName, message string) error {
-	return eb.publish(fmt.Sprintf("function.%s.log", SafeNATSSubject(funcName)), util.MustJsonByteSlice(logMessage{
+	return eb.PublishEvent(fmt.Sprintf("%s.log", SafeNATSSubject(funcName)), logMessage{
 		Function: funcName,
 		Message:  message,
-	}))
+	})
 }
 
 func (eb *ClusterEventBus) FetchClusterInfo(wait time.Duration) (*ClusterInfo, error) {
@@ -241,12 +247,14 @@ func (eb *ClusterEventBus) SubscribeRequestJobWorker(callback func(jobName strin
 			return
 		}
 		callback(sjw.Name)
+		// Respond with empty reply
+		msg.Respond([]byte{})
 	})
 }
 
-func (eb *ClusterEventBus) RequestJobWorkers(name string, n int) error {
+func (eb *ClusterEventBus) RequestJobWorkers(name string, n int, timeout time.Duration) error {
 	for i := 0; i < n; i++ {
-		if err := eb.publish(EventStartJobWorker, util.MustJsonByteSlice(startJobWorker{name})); err != nil {
+		if _, err := eb.request(EventStartJobWorker, util.MustJsonByteSlice(startJobWorker{name}), timeout); err != nil {
 			return err
 		}
 	}
@@ -269,14 +277,14 @@ func (eb *ClusterEventBus) SubscribeRestartApp(callback func(appName string)) (S
 }
 
 func (eb *ClusterEventBus) PublishEvent(name string, event interface{}) error {
-	return eb.publish(fmt.Sprintf("event.%s", SafeNATSSubject(name)), util.MustJsonByteSlice(publishEvent{
+	return eb.publish(SafeNATSSubject(name), util.MustJsonByteSlice(publishEvent{
 		Name: name,
 		Data: event,
 	}))
 }
 
 func (eb *ClusterEventBus) SubscribeEvent(pattern string, callback func(name string, data interface{}, msg *nats.Msg)) (Subscription, error) {
-	return eb.queueSubscribe(fmt.Sprintf("event.%s", SafeNATSSubject(pattern)), fmt.Sprintf("event.%s.workers", SafeNATSSubject(pattern)), func(msg *nats.Msg) {
+	return eb.subscribe(SafeNATSSubject(pattern), func(msg *nats.Msg) {
 		var eventData publishEvent
 		if err := json.Unmarshal(msg.Data, &eventData); err != nil {
 			log.Errorf("Could not unmarshal event: %s - %s", err, string(msg.Data))
@@ -286,8 +294,30 @@ func (eb *ClusterEventBus) SubscribeEvent(pattern string, callback func(name str
 	})
 }
 
+func (eb *ClusterEventBus) QueueSubscribeEvent(pattern string, callback func(name string, data interface{}, msg *nats.Msg)) (Subscription, error) {
+	return eb.queueSubscribe(SafeNATSSubject(pattern), fmt.Sprintf("%s.workers", SafeNATSSubject(pattern)), func(msg *nats.Msg) {
+		var eventData publishEvent
+		if err := json.Unmarshal(msg.Data, &eventData); err != nil {
+			log.Errorf("Could not unmarshal event: %s - %s", err, string(msg.Data))
+			return
+		}
+		callback(eventData.Name, eventData.Data, msg)
+	})
+}
+
+//func (eb *ClusterEventBus) SubscribeEvent(pattern string, callback func(name string, data interface{}, msg *nats.Msg)) (Subscription, error) {
+//	return eb.subscribe(SafeNATSSubject(pattern), func(msg *nats.Msg) {
+//		var eventData publishEvent
+//		if err := json.Unmarshal(msg.Data, &eventData); err != nil {
+//			log.Errorf("Could not unmarshal event: %s - %s", err, string(msg.Data))
+//			return
+//		}
+//		callback(eventData.Name, eventData.Data, msg)
+//	})
+//}
+
 func (eb *ClusterEventBus) RequestEvent(name string, event interface{}, timeout time.Duration) (*nats.Msg, error) {
-	return eb.request(fmt.Sprintf("event.%s", SafeNATSSubject(name)), util.MustJsonByteSlice(publishEvent{
+	return eb.request(SafeNATSSubject(name), util.MustJsonByteSlice(publishEvent{
 		Name: name,
 		Data: event,
 	}), timeout)

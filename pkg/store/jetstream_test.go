@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"fmt"
+	"github.com/zefhemel/matterless/pkg/config"
 	"testing"
 	"time"
 
@@ -18,7 +19,10 @@ func TestJetstreamStore(t *testing.T) {
 
 	// Create a bunch of JetStream stores
 	for i := 0; i < 5; i++ {
-		conn, err := cluster.ConnectOrBoot("nats://localhost:4222")
+		conn, err := cluster.ConnectOrBoot(&config.Config{
+			DataDir:        "nats-data",
+			ClusterNatsUrl: "nats://localhost:4222",
+		})
 		assert.Nil(t, err)
 		levelDBStore, err := store.NewLevelDBStore(fmt.Sprintf("lvldb-%d", i))
 		assert.Nil(t, err)

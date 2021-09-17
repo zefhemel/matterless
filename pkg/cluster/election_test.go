@@ -1,6 +1,7 @@
 package cluster_test
 
 import (
+	"github.com/zefhemel/matterless/pkg/config"
 	"sync"
 	"testing"
 	"time"
@@ -13,7 +14,10 @@ import (
 func TestMasterElection(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	a := assert.New(t)
-	conn, err := cluster.ConnectOrBoot("nats://localhost:4222")
+	conn, err := cluster.ConnectOrBoot(&config.Config{
+		DataDir:        "nats-data",
+		ClusterNatsUrl: "nats://localhost:4222",
+	})
 	a.Nil(err)
 	defer conn.Close()
 

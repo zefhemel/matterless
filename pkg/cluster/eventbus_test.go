@@ -2,6 +2,7 @@ package cluster_test
 
 import (
 	"fmt"
+	"github.com/zefhemel/matterless/pkg/config"
 	"testing"
 	"time"
 
@@ -14,7 +15,10 @@ import (
 func TestNatsCluster(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	a := assert.New(t)
-	eb, err := cluster.ConnectOrBoot("nats://localhost:4225")
+	eb, err := cluster.ConnectOrBoot(&config.Config{
+		DataDir:        "nats-data",
+		ClusterNatsUrl: "nats://localhost:4222",
+	})
 	a.Nil(err)
 	defer eb.Close()
 

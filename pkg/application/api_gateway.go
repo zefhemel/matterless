@@ -100,9 +100,9 @@ func (ag *APIGateway) buildRouter(config *config.Config) {
 	ag.rootRouter.Handle("/info", expvar.Handler())
 
 	// Expose internal API routes
+	ag.exposeEventAPI()
 	ag.exposeAdminAPI()
 	ag.exposeStoreAPI()
-	ag.exposeEventAPI()
 	ag.exposeFunctionAPI()
 	ag.exposeApplicationAPI()
 

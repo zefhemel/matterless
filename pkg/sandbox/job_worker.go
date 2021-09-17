@@ -104,11 +104,17 @@ func (ew *JobExecutionWorker) start() error {
 }
 
 func (ew *JobExecutionWorker) Close() error {
+	if ew.runningInstance == nil {
+		// Already closed
+		return nil
+	}
 	close(ew.done)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := ew.runningInstance.Stop(ctx); err != nil {
+		ew.runningInstance = nil
 		return errors.Wrap(err, "closing worker")
 	}
+	ew.runningInstance = nil
 	return nil
 }

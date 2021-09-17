@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/zefhemel/matterless/pkg/util"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -18,8 +19,14 @@ type subscribeMessage struct {
 }
 
 type eventMessage struct {
+	App  string      `json:"app"`
 	Name string      `json:"name"`
 	Data interface{} `json:"data"`
+}
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 }
 
 func (ag *APIGateway) exposeEventAPI() {
@@ -66,12 +73,7 @@ func (ag *APIGateway) exposeEventAPI() {
 		fmt.Fprint(w, `{"status":"ok"}`)
 	}).Methods(http.MethodPost)
 
-	var upgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-	}
-
-	// Websocket event listening
+	// Websocket for app events
 	ag.rootRouter.HandleFunc("/{app}/_events", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		appName := vars["app"]
@@ -86,43 +88,55 @@ func (ag *APIGateway) exposeEventAPI() {
 		// Authenticate
 		// TODO: Add authentication!
 
-		conn, err := upgrader.Upgrade(w, r, nil)
+		ag.eventStream(w, r, app.EventBus())
+	})
+
+	ag.rootRouter.HandleFunc("/_events", func(w http.ResponseWriter, r *http.Request) {
+		// Authenticate
+		// TODO: Add authentication!
+		ag.eventStream(w, r, ag.container.ClusterEventBus())
+	})
+}
+
+func (ag *APIGateway) eventStream(w http.ResponseWriter, r *http.Request, ceb *cluster.ClusterEventBus) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("websocket error: %s", err), http.StatusBadRequest)
+		return
+	}
+	defer conn.Close()
+	allSubscriptions := []cluster.Subscription{}
+	defer func() {
+		// Clean up all subscriptions
+		for _, subscription := range allSubscriptions {
+			subscription.Unsubscribe()
+		}
+	}()
+	for {
+		messageType, p, err := conn.ReadMessage()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("websocket error: %s", err), http.StatusBadRequest)
+			log.Errorf("Websocket error: %s", err)
 			return
 		}
-		defer conn.Close()
-		allSubscriptions := []cluster.Subscription{}
-		defer func() {
-			// Clean up all subscriptions
-			for _, subscription := range allSubscriptions {
-				subscription.Unsubscribe()
+		if messageType == websocket.TextMessage {
+			var subscribeMessage subscribeMessage
+			if err := json.Unmarshal(p, &subscribeMessage); err != nil {
+				log.Error("Could not parse websocket message: ", err)
+				continue
 			}
-		}()
-		for {
-			messageType, p, err := conn.ReadMessage()
+			sub, err := ceb.SubscribeEvent(subscribeMessage.Pattern, func(name string, data interface{}, msg *nats.Msg) {
+				subjectParts := strings.Split(msg.Subject, ".") // prefix.app.otherstufff
+				conn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(eventMessage{
+					App:  subjectParts[1],
+					Name: name,
+					Data: data,
+				}))
+			})
 			if err != nil {
-				log.Errorf("Websocket error: %s", err)
-				return
+				log.Error("Could not subscribe to event: ", err)
+				continue
 			}
-			if messageType == websocket.TextMessage {
-				var subscribeMessage subscribeMessage
-				if err := json.Unmarshal(p, &subscribeMessage); err != nil {
-					log.Error("Could not parse websocket message: ", err)
-					continue
-				}
-				sub, err := app.EventBus().SubscribeEvent(subscribeMessage.Pattern, func(name string, data interface{}, msg *nats.Msg) {
-					conn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(eventMessage{
-						Name: name,
-						Data: data,
-					}))
-				})
-				if err != nil {
-					log.Error("Could not subscribe to event: ", err)
-					continue
-				}
-				allSubscriptions = append(allSubscriptions, sub)
-			}
+			allSubscriptions = append(allSubscriptions, sub)
 		}
-	})
+	}
 }

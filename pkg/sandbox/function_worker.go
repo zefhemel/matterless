@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"github.com/pkg/errors"
 	"sync"
 	"time"
 
@@ -30,6 +31,7 @@ type FunctionExecutionWorker struct {
 	runningInstance       FunctionInstance
 	invocationCount       int
 	libs                  definition.LibraryMap
+	cancelFn              context.CancelFunc
 }
 
 func NewFunctionExecutionWorker(
@@ -53,23 +55,33 @@ func NewFunctionExecutionWorker(
 		return nil, err
 	}
 
-	if !functionConfig.Prewarm && cfg.SandboxCleanupInterval != 0 {
+	everythingOK := false
+	defer func() {
+		if !everythingOK {
+			log.Errorf("Could not properly start worker for %s, cleaning up", name)
+			fm.Close()
+		}
+	}()
+
+	if !functionConfig.Hot && cfg.SandboxCleanupInterval != 0 {
 		// Cleanup job
 		fm.ticker = time.NewTicker(cfg.SandboxCleanupInterval)
 		go fm.cleanupJob()
 	}
 
-	if functionConfig.Prewarm {
+	if functionConfig.Hot {
 		if err := fm.warmup(context.Background()); err != nil {
 			return nil, err
 		}
 	}
-
+	everythingOK = true
 	return fm, err
 }
 
 func (fm *FunctionExecutionWorker) log(funcName, message string) {
-	fm.ceb.PublishLog(fm.name, message)
+	if err := fm.ceb.PublishLog(fm.name, message); err != nil {
+		log.Errorf("Error publishing log: %s", err)
+	}
 }
 
 func (fm *FunctionExecutionWorker) cleanupJob() {
@@ -95,12 +107,14 @@ func (fm *FunctionExecutionWorker) cleanup() {
 	}
 }
 
+var FunctionStoppedErr = errors.New("function stopped")
+
 func (fm *FunctionExecutionWorker) invoke(event interface{}) (interface{}, error) {
 	// One invoke at a time per worker
 	fm.functionExecutionLock.Lock()
 	defer fm.functionExecutionLock.Unlock()
-	// TODO: Do something better here?
-	ctx := context.Background()
+	var ctx context.Context
+	ctx, fm.cancelFn = context.WithCancel(context.Background())
 
 	if err := fm.warmup(ctx); err != nil {
 		return nil, err
@@ -140,7 +154,17 @@ func (fm *FunctionExecutionWorker) warmup(ctx context.Context) error {
 	return nil
 }
 
-func (fm *FunctionExecutionWorker) Close() error {
+func (fm *FunctionExecutionWorker) Close() {
+	//log.Errorf("Closing worker %s", fm.name)
+	if fm.cancelFn != nil {
+		fm.cancelFn()
+	}
+
+	// Unsubscribe from queue
+	if err := fm.subscription.Unsubscribe(); err != nil {
+		log.Errorf("Could not unsubscribe function %s: %s", fm.name, err)
+	}
+
 	// Close the cleanup ticker
 	if fm.ticker != nil {
 		fm.ticker.Stop()
@@ -151,8 +175,7 @@ func (fm *FunctionExecutionWorker) Close() error {
 	if fm.runningInstance != nil {
 		fm.runningInstance.Kill()
 		fm.runningInstance = nil
+	} else {
+		log.Errorf("No running instance for worker: %s", fm.name)
 	}
-
-	// Unsubscribe from queue
-	return fm.subscription.Unsubscribe()
 }

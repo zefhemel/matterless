@@ -114,9 +114,8 @@ func (s *Sandbox) Flush() {
 		wg.Add(1)
 		worker2 := worker
 		go func() {
-			if err := worker2.Close(); err != nil {
-				log.Errorf("Error closing function worker: %s", err)
-			}
+			log.Infof("Closing function worker %s", worker2.name)
+			worker2.Close()
 			wg.Done()
 		}()
 	}
@@ -134,7 +133,7 @@ func (s *Sandbox) Flush() {
 	wg.Wait()
 	log.Info("Fully flushed")
 	s.functionWorkers = []*FunctionExecutionWorker{}
-	//s.jobWorkers = []*JobExecutionWorker{}
+	s.jobWorkers = []*JobExecutionWorker{}
 }
 
 func (s *Sandbox) AppInfo() *cluster.AppInfo {

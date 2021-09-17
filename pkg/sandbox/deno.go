@@ -168,6 +168,18 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 	if err := inst.cmd.Start(); err != nil {
 		return nil, errors.Wrap(err, "deno run")
 	}
+	//log.Errorf("STARTING %s", name)
+
+	// This is the point where we have a subprocess running which we may want to kill if we don't boot successfully
+	// This will be set to true at the end, if it's not set, some error occured along the way
+	everythingOk := false
+	defer func() {
+		if !everythingOk && inst.cmd.Process != nil {
+			//log.Info("Hard killing deno process because of error")
+			inst.Kill()
+		}
+	}()
+
 	go func() {
 		inst.denoExited <- inst.cmd.Wait()
 	}()
@@ -187,10 +199,7 @@ waitLoop:
 	for {
 		select {
 		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded {
-				return nil, ctx.Err()
-			}
-			break waitLoop
+			return nil, ctx.Err()
 		case <-inst.denoExited:
 			//log.Info("Exited ", err)
 			return nil, errors.New("deno exited on boot")
@@ -203,12 +212,15 @@ waitLoop:
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	everythingOk = true
+
 	return inst, nil
 }
 
 func (inst *denoFunctionInstance) Kill() {
-	if err := inst.cmd.Process.Kill(); err != nil {
-		log.Errorf("Error killing deno instance: %s", err)
+	if inst.cmd.Process != nil {
+		//log.Infof("KILLING %s", inst.name)
+		inst.cmd.Process.Kill()
 	}
 
 	if err := os.RemoveAll(inst.tempDir); err != nil {
@@ -286,7 +298,7 @@ func newDenoJobInstance(ctx context.Context, config *config.Config, apiURL strin
 	functionInstance, err := newDenoFunctionInstance(ctx, config, apiURL, apiToken, RunModeJob, name, logCallback, &definition.FunctionConfig{
 		Init:        jobConfig.Init,
 		Runtime:     jobConfig.Runtime,
-		Prewarm:     false,
+		Hot:         false,
 		Instances:   jobConfig.Instances,
 		DockerImage: jobConfig.DockerImage,
 	}, code, libs)

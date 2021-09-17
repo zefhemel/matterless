@@ -31,13 +31,13 @@ func TestDenoSandboxFunction(t *testing.T) {
 	`
 
 	// Boot up cluster
-	conn, err := cluster.ConnectOrBoot("nats://localhost:4222")
+	conn, err := cluster.ConnectOrBoot(cfg)
 	assert.NoError(t, err)
 	ceb := cluster.NewClusterEventBus(conn, "test")
 
 	// Listen to logs
 	ceb.SubscribeLogs("*", func(funcName, message string) {
-		log.Infof("Got log: %s", message)
+		log.Infof("Got log (func) %s", message)
 	})
 
 	// Boot worker
@@ -66,9 +66,6 @@ function init(config) {
 	console.log("Got config", config, "and env", Deno.env.get("API_URL"));
 }
 
-function start() {
-}
-
 function run() {
 	console.log("Running");
 	setInterval(() => {
@@ -81,14 +78,14 @@ function stop() {
 }
 `
 	// Boot up cluster
-	conn, err := cluster.ConnectOrBoot("nats://localhost:4222")
+	conn, err := cluster.ConnectOrBoot(cfg)
 	assert.NoError(t, err)
-	ceb := cluster.NewClusterEventBus(conn, "test")
+	ceb := cluster.NewClusterEventBus(conn, "test2")
 
 	// Listen to logs
 	allLogs := ""
 	ceb.SubscribeLogs("*", func(funcName, message string) {
-		log.Infof("Got log: %s", message)
+		log.Infof("Got log (job) %s", message)
 
 		allLogs = allLogs + string(message)
 	})

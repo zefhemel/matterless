@@ -64,8 +64,7 @@ func NewApplication(cfg *config.Config, appName string, s store.Store, ceb *clus
 		}
 	})
 
-	// We send all app events through a single event queue
-	app.eventsSubscription, err = app.eventBus.SubscribeEvent("*", func(name string, data interface{}, msg *nats.Msg) {
+	app.eventsSubscription, err = app.eventBus.QueueSubscribeEvent("*", func(name string, data interface{}, msg *nats.Msg) {
 		if funcsToInvoke, ok := app.definitions.Events[name]; ok {
 			for _, funcToInvoke := range funcsToInvoke {
 				resp, err := app.InvokeFunction(string(funcToInvoke), data)
@@ -132,6 +131,7 @@ func (app *Application) Eval(defs *definition.Definitions) error {
 	log.Info("Loading functions...")
 	for name, def := range app.definitions.Functions {
 		for i := 0; i < def.Config.Instances; i++ {
+			log.Infof("Starting function worker for %s", name)
 			if err := app.sandbox.StartFunctionWorker(string(name), def.Config, def.Code, app.definitions.Libraries); err != nil {
 				log.Errorf("Could not spin up function worker for %s: %s", name, err)
 			}
