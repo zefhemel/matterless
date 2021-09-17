@@ -175,7 +175,5 @@ func (fm *FunctionExecutionWorker) Close() {
 	if fm.runningInstance != nil {
 		fm.runningInstance.Kill()
 		fm.runningInstance = nil
-	} else {
-		log.Errorf("No running instance for worker: %s", fm.name)
 	}
 }

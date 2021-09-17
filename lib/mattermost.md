@@ -52,7 +52,7 @@ This is the macro:
     ```
     
     ```javascript
-    import {events} from "./matterless.ts";
+    import {publishEvent} from "./matterless.ts";
 
     let socket, config;
  
@@ -92,7 +92,7 @@ This is the macro:
                 }
             }
             if(config.events.indexOf(parsedEvent.event) !== -1) {
-                events.publish(`${config.name}:${parsedEvent.event}`, parsedEvent);
+                publishEvent(`${config.name}:${parsedEvent.event}`, parsedEvent);
             }
         });
         socket.addEventListener('close', function(event) {
@@ -115,7 +115,8 @@ This is the macro:
     ```yaml
     {{range $eventName, $fns := $arg.events}}
     "{{$name}}:{{$eventName}}":
-    {{range $fns}}  - {{.}}{{end}} 
+    {{range $fns}}  - {{.}}
+    {{end}} 
     {{end}}
     ```
 
@@ -285,7 +286,7 @@ schema:
                 const flagName = key.substring("FeatureFlag".length);
                 let previousValue = await store.get(`${config.ns}:flag:${flagName}`);
                 if(previousValue !== json[key]) {
-                    await events.publish(`${config.ns}:flag:${flagName}`, {
+                    await publishEvent(`${config.ns}:flag:${flagName}`, {
                         flag: flagName,
                         oldValue: previousValue,
                         newValue: value
@@ -297,7 +298,7 @@ schema:
         let oldVersion = (await store.get(`${config.ns}:version`)) || "db01f2a91b67e24187294dbe30cca1cf8fc6e494";
         let version = json.BuildHash;
         if(oldVersion != version) {
-            await events.publish(`${config.ns}:upgrade`, {
+            await publishEvent(`${config.ns}:upgrade`, {
                 oldVersion: oldVersion,
                 newVersion: version
             });
@@ -318,7 +319,7 @@ export class Mattermost {
         this.userCache = {};
         this.channelCache = {};
         this.channelNameCache = {};
-
+        this.userNameCache = {};
         this.callsMade = 0;
     }
 
@@ -367,6 +368,13 @@ export class Mattermost {
 
     async getUserByUsername(username) {
         return this.performFetch(`/users/username/${username}`, "GET");
+    }
+
+    async getUserByUsernameCached(username) {
+        if (!this.userNameCache[username]) {
+            this.userNameCache[username] = await this.getUserByUsername(username);
+        }
+        return this.userNameCache[username];
     }
 
     _serialize(obj) {
@@ -490,6 +498,10 @@ export class Mattermost {
 
     async getPost(postId) {
         return this.performFetch(`/posts/${postId}`, "GET");
+    }
+
+    async getThread(postId) {
+        return this.performFetch(`/posts/${postId}/thread`, "GET");
     }
 
     // Reactions

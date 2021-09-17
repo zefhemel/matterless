@@ -7,6 +7,7 @@ To configure this DB bot you need to set the following configuration variables i
   matterless-bot" bot.
 * `config:team`: Name of the team for the bot to join
 * `config:root_token`: Matterless root token
+* `config:allowed_users`: list of usernames who are allowed to create matterless apps
 
 # import
 
@@ -27,8 +28,10 @@ admin_token: ${config:admin_token}
 events:
   posted:
     - HandleCommand
+    - HandleConsoleCommand
   post_edited:
     - HandleCommand
+    - HandleConsoleCommand
   post_deleted:
     - HandleCommand
 ```
@@ -51,7 +54,7 @@ init:
 import {store} from "./matterless.ts";
 import {Mattermost, seenEvent} from "./mattermost_client.js";
 import {buildAppName, putApp, deleteApp} from "./matterless_root.js";
-import {ensureLogChannel, postLink} from "./util.js";
+import {ensureConsoleChannel, postLink} from "./util.js";
 
 let mmClient;
 let rootToken;
@@ -75,10 +78,6 @@ async function handle(event) {
     if (!mmClient) {
         console.log("Not inited yet");
     }
-    // Deduplicate events (bug in editing posts in Mattermost)
-    if (seenEvent(event)) {
-        return;
-    }
 
     let post = JSON.parse(event.data.post);
     let me = await mmClient.getMeCached();
@@ -87,23 +86,33 @@ async function handle(event) {
     let channel = await mmClient.getChannelCached(post.channel_id);
     // Ignore bot posts
     if (post.user_id === me.id) return;
-    console.log("Got event", event);
-    // Skip any message outside a private chat
+    // Skip any message outside a private chat with the bot
     if (channel.type != 'D') return;
+    // Deduplicate events (bug in editing posts in Mattermost)
+    if (seenEvent(event)) {
+        return;
+    }
 
-    let code = post.message;
+    // Check permissions
+    let allowedUserNames = (await store.get('config:allowed_users')) || [];
+    let allowedUserIds = {};
+
+    for (let username of allowedUserNames) {
+        let user = await mmClient.getUserByUsernameCached(username);
+        allowedUserIds[user.id] = true;
+    }
+    if (!allowedUserIds[post.user_id]) {
+        await ensureMyReply(me, post, "You're not on the allowed list :thumbsdown:");
+        return;
+    }
     let appName = buildAppName(post.user_id, post.id);
+    let code = post.message;
     let userId = post.user_id;
     if (event.event === 'post_deleted') {
         console.log("Deleting app:", appName);
         await deleteApp(rootToken, appName);
     } else {
         console.log("Updating app:", appName);
-        // try {
-        //     await mmClient.removeReaction(me.id, post.id, "white_check_mark");
-        // } catch (e) {
-        //     console.log("Remove reaction error", e);
-        // }
 
         // Attempt to extract an appname
         let friendlyAppName = post.id;
@@ -111,18 +120,43 @@ async function handle(event) {
         if (matchGroups) {
             friendlyAppName = matchGroups[1];
         }
-        let channelInfo = await ensureLogChannel(mmClient, team.id, post.id, friendlyAppName);
-        channelInfo.display_name = `
-Matterless : Logs : ${friendlyAppName}`;
-        channelInfo.header = `
-Logs
-for your matterless
-app [${friendlyAppName}](${postLink(url, team, post.id)})`;
+        let channelInfo = await ensureConsoleChannel(mmClient, team.id, post.id, friendlyAppName);
+        channelInfo.display_name = `Matterless : ${friendlyAppName}`;
+        channelInfo.header = `Console for your matterless app [${friendlyAppName}](${postLink(url, team, post.id)})`;
         await mmClient.updateChannel(channelInfo);
 
         await mmClient.addUserToChannel(channelInfo.id, userId);
-        await putApp(rootToken, appName, code);
-        // await mmClient.addReaction(me.id, post.id, "white_check_mark");
+        try {
+            let result = await putApp(rootToken, appName, code);
+            await mmClient.addReaction(me.id, post.id, "white_check_mark");
+            await mmClient.removeReaction(me.id, post.id, "octagonal_sign");
+            await ensureMyReply(me, post, 'All good to go :thumbsup:');
+        } catch (e) {
+            await mmClient.addReaction(me.id, post.id, "octagonal_sign");
+            await mmClient.removeReaction(me.id, post.id, "white_check_mark");
+            await ensureMyReply(me, post, `ERROR: ${e.message}`);
+        }
+    }
+}
+
+async function ensureMyReply(me, post, message) {
+    let thread = await mmClient.getThread(post.id);
+    let replyPost;
+    for (let postId of thread.order) {
+        let threadPost = thread.posts[postId];
+        if (threadPost.user_id == me.id) {
+            replyPost = threadPost;
+        }
+    }
+    if (replyPost) {
+        replyPost.message = message;
+        await mmClient.updatePost(replyPost);
+    } else {
+        await mmClient.createPost({
+            channel_id: post.channel_id,
+            root_id: post.id,
+            message: message
+        });
     }
 }
 ```
@@ -140,7 +174,7 @@ init:
 ```javascript
 import {listApps, globalEventSocket} from "./matterless_root.js";
 import {Mattermost} from "./mattermost_client.js";
-import {ensureLogChannel} from "./util.js";
+import {ensureConsoleChannel} from "./util.js";
 
 let sockets = [];
 let rootToken;
@@ -175,19 +209,19 @@ async function run() {
                 return
             }
             // console.log("Got a lot event", logJSON);
-            let [_, userId, appId] = logJSON.app.split('_');
+            let [_, appId] = logJSON.app.split('_');
             let functionName = logJSON.name.split('.')[0];
-            publishLog(userId, appId, functionName, logJSON.data.message);
+            publishLog(appId, functionName, logJSON.data.message);
         });
     } catch (e) {
         console.error(e);
     }
 }
 
-async function publishLog(userId, appId, functionName, message) {
+async function publishLog(appId, functionName, message) {
     // console.log(`${userId}: ${appId} [${functionName}] ${message}`);
-    let channelInfo = await ensureLogChannel(mmClient, team.id, appId);
-    await mmClient.addUserToChannel(channelInfo.id, userId);
+    let channelName = `matterless-console-${appId}`.toLowerCase();
+    let channelInfo = await mmClient.getChannelByName(team.id, channelName);
     await mmClient.createPost({
         channel_id: channelInfo.id,
         message: "From `" + functionName + "`:\n```\n" + message + "\n```"
@@ -201,7 +235,7 @@ async function publishLog(userId, appId, functionName, message) {
 const rootUrl = Deno.env.get("API_URL").split('/').slice(0, -1).join('/');
 
 export function buildAppName(userId, postId) {
-    return `mls_${userId}_${postId}`;
+    return `mls_${postId}`;
 }
 
 export async function adminCall(rootToken, path, method, body) {
@@ -212,10 +246,10 @@ export async function adminCall(rootToken, path, method, body) {
             'Authorization': `bearer ${rootToken}`
         },
         body: body
-    })
-    let textResult = (await result.text());
-    if (textResult.status === "error") {
-        throw Error(textResult.error);
+    });
+    let textResult = await result.text();
+    if (result.status > 300 || result.status < 200) {
+        throw Error(textResult);
     }
     return textResult;
 }
@@ -253,13 +287,17 @@ export function globalEventSocket(rootToken) {
     });
     return ws;
 }
+
+export function appApiUrl(appName) {
+    return `${rootUrl}/${appName}`;
+}
 ```
 
 # library util.js
 
 ```javascript
-export async function ensureLogChannel(mmClient, teamId, appId, appName) {
-    let channelName = `matterless-logs-${appId}`.toLowerCase();
+export async function ensureConsoleChannel(mmClient, teamId, appId, appName) {
+    let channelName = `matterless-console-${appId}`.toLowerCase();
     let channelInfo;
     try {
         channelInfo = await mmClient.getChannelByNameCached(teamId, channelName);
@@ -280,4 +318,110 @@ export async function ensureLogChannel(mmClient, teamId, appId, appName) {
 export function postLink(url, team, postId) {
     return `${url}/${team.name}/pl/${postId}`;
 } 
+```
+
+# function HandleConsoleCommand
+
+Implements the actual logic for the commands invoked whenever the bot is sent a message in a direct channel.
+
+```yaml
+init:
+  url: ${config:url}
+  token: ${token:MatterlessBot}
+  root_token: ${config:root_token}
+```
+
+```javascript
+import {appApiUrl} from "./matterless_root.js";
+import {API} from "./matterless.ts";
+import {Mattermost} from "./mattermost_client.js";
+
+let mmClient;
+let rootToken;
+
+function init(cfg) {
+    if (!cfg.url || !cfg.token) {
+        console.error("URL and token not initialized yet");
+        return;
+    }
+    mmClient = new Mattermost(cfg.url, cfg.token);
+    rootToken = cfg.root_token;
+}
+
+// Main event handler
+async function handle(event) {
+    let post = JSON.parse(event.data.post);
+    let me = await mmClient.getMeCached();
+
+    // Lookup channel
+    let channel = await mmClient.getChannelCached(post.channel_id);
+    // Ignore bot posts
+    if (post.user_id === me.id) return;
+    // Ignore any non-console commands
+    if (!channel.name.startsWith('matterless-console-')) {
+        return;
+    }
+
+    let appName = channel.name.substring('matterless-console-'.length);
+    let api = new API(appApiUrl(`mls_${appName}`), rootToken);
+    let store = api.getStore();
+
+    let words = post.message.split(' ');
+    let key, result, val, prop;
+    switch (words[0]) {
+        case "get":
+            key = words[1];
+            result = await store.get(key);
+            await mmClient.createPost({
+                channel_id: post.channel_id,
+                root_id: post.id,
+                parent_id: post.id,
+                message: `${result}`
+            });
+            break;
+        case "put":
+            key = words[1];
+            val = words.slice(2).join(' ');
+            await store.put(key, val);
+            await mmClient.addReaction(me.id, post.id, "white_check_mark");
+            break;
+        case "del":
+            key = words[1];
+            await store.del(key);
+            await mmClient.addReaction(me.id, post.id, "white_check_mark");
+            break;
+        case "keys":
+            result = (await store.queryPrefix(words[1] || "")) || [];
+            await mmClient.createPost({
+                channel_id: post.channel_id,
+                root_id: post.id,
+                parent_id: post.id,
+                message: `- ${result.map(([k, v]) => k).join("\n- ")}`
+            });
+            break;
+        case "all":
+            result = (await store.queryPrefix("")) || [];
+            await mmClient.createPost({
+                channel_id: post.channel_id,
+                root_id: post.id,
+                parent_id: post.id,
+                message: `- ${result.map(([k, v]) => `${k}: ${v}`).join("\n- ")}`
+            });
+            break;
+        case "trigger":
+            let eventName = words[1];
+            let jsonData = words.slice(2).join(' ');
+            await api.publishEvent(eventName, jsonData ? JSON.parse(jsonData) : {});
+            console.log("EVENT:", eventName, jsonData ? JSON.parse(jsonData) : {});
+            await mmClient.addReaction(me.id, post.id, "white_check_mark");
+            break;
+        default:
+            await mmClient.createPost({
+                channel_id: post.channel_id,
+                root_id: post.id,
+                parent_id: post.id,
+                message: "Not sure what you're saying. I only understand the commands `all`, `keys`, `put`, `get`, and `del`, so perhaps try one of those."
+            });
+    }
+}
 ```

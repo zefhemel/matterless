@@ -1,4 +1,5 @@
 # Cron
+
 This Matterless definition file defines a `cron` macro. You can define multiple crons using multiple definitions.
 
 Example use:
@@ -10,20 +11,21 @@ Example use:
     ```
 
 # macro cron
+
 Implements a simple cronjob scheduler.
 
 ```yaml
 schema:
-   type: object
-   properties:
-      schedule:
-        type: string
-      function:
-        type: string
-   required:
-   - schedule
-   - function
-   additionalProperties: false
+  type: object
+  properties:
+    schedule:
+      type: string
+    function:
+      type: string
+  required:
+    - schedule
+    - function
+  additionalProperties: false
 ```
 
 Template:
@@ -37,13 +39,13 @@ Template:
 
     ```javascript
     import {cron} from 'https://deno.land/x/deno_cron@v1.0.0/cron.ts';
-    import {events} from "./matterless.ts";
+    import {publishEvent} from "./matterless.ts";
     
     function init(config) {
         Object.keys(config).forEach(cronName => {
             let cronDef = config[cronName];
             cron(cronDef.schedule, () => {
-                events.publish(`cron:${cronName}`, {});
+                publishEvent(`cron:${cronName}`, {});
             });
         });
     }

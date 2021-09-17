@@ -49,6 +49,8 @@ func (client *MatterlessClient) DeployAppFiles(files []string, watch bool) error
 			log.Fatal(err)
 		}
 
+		//log.Infof("Here are all defs: %+v", defs.Events)
+
 		if err := client.DeployApp(AppNameFromPath(path), defs.Markdown()); err != nil {
 			return errors.Wrap(err, "deploy")
 		}

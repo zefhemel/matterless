@@ -86,6 +86,9 @@ func Parse(code string) (*Definitions, error) {
 			if funcDef.Config.Instances == 0 {
 				funcDef.Config.Instances = 1
 			}
+			if currentDeclarationName == "" {
+				return fmt.Errorf("functions should have a name")
+			}
 			decls.Functions[FunctionID(currentDeclarationName)] = funcDef
 		case "job":
 			jobDef := &JobDef{
@@ -107,12 +110,18 @@ func Parse(code string) (*Definitions, error) {
 			if jobDef.Config.Instances == 0 {
 				jobDef.Config.Instances = 1
 			}
+			if currentDeclarationName == "" {
+				return fmt.Errorf("jobs should have a name")
+			}
 			decls.Jobs[FunctionID(currentDeclarationName)] = jobDef
 		case "library":
 			libraryDef := &LibraryDef{
 				Name:     currentDeclarationName,
 				Language: currentLanguage,
 				Code:     currentBody,
+			}
+			if currentDeclarationName == "" {
+				return fmt.Errorf("libraries should have a filename")
 			}
 			decls.Libraries[FunctionID(currentDeclarationName)] = libraryDef
 		case "events":
@@ -143,6 +152,9 @@ func Parse(code string) (*Definitions, error) {
 			}
 			if strings.ToLower(currentDeclarationName[0:1]) != currentDeclarationName[0:1] {
 				return errors.New("All macros should start with a lower-case letter")
+			}
+			if currentDeclarationName == "" {
+				return fmt.Errorf("macros should have a name")
 			}
 			decls.Macros[MacroID(currentDeclarationName)] = &MacroDef{
 				Config:       config,
