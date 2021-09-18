@@ -25,6 +25,7 @@ type LibraryMap = map[FunctionID]*LibraryDef
 
 type Definitions struct {
 	Imports        []string                     `json:"imports,omitempty"`
+	Config         map[string]interface{}       `json:"config,omitempty"`
 	Functions      map[FunctionID]*FunctionDef  `json:"functions"`
 	Jobs           map[FunctionID]*JobDef       `json:"jobs"`
 	Libraries      LibraryMap                   `json:"libraries"`

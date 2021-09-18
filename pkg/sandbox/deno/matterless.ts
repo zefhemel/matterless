@@ -11,58 +11,22 @@ class API {
         return new Store(this.url, this.token);
     }
 
-    async publishEvent(eventName: string, eventData: object) {
-        let result = await fetch(`${this.url}/_event/${eventName}`, {
-            method: "POST",
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `bearer ${this.token}`
-            },
-            body: JSON.stringify(eventData || {})
-        })
-        let jsonResult = await result.json();
-        if (jsonResult.status === "error") {
-            throw Error(jsonResult.error);
-        }
+    getEvents() {
+        return new Events(this.url, this.token);
     }
 
-    async invokeFunction(name: string, eventData: any) {
-        let result = await fetch(`${this.url}/_function/${name}`, {
-            method: "POST",
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `bearer ${this.token}`
-            },
-            body: JSON.stringify(eventData || {})
-        })
-        if (result.status == 200) {
-            let jsonResult = await result.json();
-            if (jsonResult.status === "error") {
-                throw Error(jsonResult.error);
-            }
-            return jsonResult;
-        } else {
-            throw new Error(`HTTP request not ok: ${await result.text()}`);
-        }
+    getFunctions() {
+        return new Functions(this.url, this.token);
     }
 
-    async restartApp() {
-        let result = await fetch(`${this.url}/_restart`, {
-            method: "POST",
-            headers: {
-                'Authorization': `bearer ${this.token}`
-            },
-        })
-        if (result.status != 200) {
-            throw new Error(`HTTP request not ok: ${await result.text()}`);
-        }
+    getApplication() {
+        return new Application(this.url, this.token);
     }
 }
 
 class Store {
     url: string;
     token: string;
-
 
     constructor(url: string, token: string) {
         this.url = url;
@@ -102,17 +66,95 @@ class Store {
     }
 }
 
-let defaultApi = new API(Deno.env.get("API_URL")!, Deno.env.get("API_TOKEN")!),
+class Events {
+    url: string;
+    token: string;
+
+    constructor(url: string, token: string) {
+        this.url = url;
+        this.token = token;
+    }
+
+    async publish(eventName: string, eventData: object) {
+        let result = await fetch(`${this.url}/_event/${eventName}`, {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `bearer ${this.token}`
+            },
+            body: JSON.stringify(eventData || {})
+        })
+        let jsonResult = await result.json();
+        if (jsonResult.status === "error") {
+            throw Error(jsonResult.error);
+        }
+    }
+}
+
+class Functions {
+    url: string;
+    token: string;
+
+    constructor(url: string, token: string) {
+        this.url = url;
+        this.token = token;
+    }
+
+    async invoke(name: string, eventData: any) {
+        let result = await fetch(`${this.url}/_function/${name}`, {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `bearer ${this.token}`
+            },
+            body: JSON.stringify(eventData || {})
+        })
+        if (result.status == 200) {
+            let jsonResult = await result.json();
+            if (jsonResult.status === "error") {
+                throw Error(jsonResult.error);
+            }
+            return jsonResult;
+        } else {
+            throw new Error(`HTTP request not ok: ${await result.text()}`);
+        }
+    }
+}
+
+class Application {
+    url: string;
+    token: string;
+
+    constructor(url: string, token: string) {
+        this.url = url;
+        this.token = token;
+    }
+
+    async restart() {
+        let result = await fetch(`${this.url}/_restart`, {
+            method: "POST",
+            headers: {
+                'Authorization': `bearer ${this.token}`
+            },
+        })
+        if (result.status != 200) {
+            throw new Error(`HTTP request not ok: ${await result.text()}`);
+        }
+    }
+}
+
+// @ts-ignore
+const defaultApi = new API(Deno.env.get("API_URL")!, Deno.env.get("API_TOKEN")!),
     store = defaultApi.getStore(),
-    publishEvent = defaultApi.publishEvent.bind(defaultApi),
-    invokeFunction = defaultApi.invokeFunction.bind(defaultApi),
-    restartApp = defaultApi.restartApp.bind(defaultApi);
+    events = defaultApi.getEvents(),
+    functions = defaultApi.getFunctions(),
+    application = defaultApi.getApplication();
 
 
 export {
     store,
-    publishEvent,
-    invokeFunction,
-    restartApp,
+    events,
+    functions,
+    application,
     API
 }

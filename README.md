@@ -133,9 +133,11 @@ few [Matterless APIs](https://github.com/zefhemel/matterless/blob/master/pkg/san
     * `store.get(key)` to fetch the value for a specific key.
     * `store.del(key)` to delete a key from the database.
     * `store.queryPrefix(prefix)` to fetch all keys and their values prefixed with `prefix`.
-* `publishEvent(eventName, eventData)` to publish a custom event (that can be listened to via a `event` definition in
-  your definition file).
-* `invokeFunction(functionName, eventData)` to invoke function `functionName` with `eventData`.
+* `events`: a simple event bus
+    * `publish(eventName, eventData)` to publish a custom event (that can be listened to via a `event` definition in
+      your definition file).
+* `functions`: invoke functions by name
+    * `invoke(functionName, eventData)` to invoke function `functionName` with `eventData`.
 
 But any arbitrary deno libraries can be imported as well.
 
@@ -247,7 +249,7 @@ Matterless APIs: `store` and `events` to track state between runs. Theoretically
 this value would be lost between restarts of the app:
 
 ```javascript
-import {store, publishEvent} from "./matterless.ts";
+import {store, events} from "./matterless.ts";
 
 let config;
 
@@ -270,7 +272,7 @@ function start() {
         // It changed!
         if (newCount !== oldStarCount) {
             // Publish event
-            await publishEvent(config.event, {
+            await events.publish(config.event, {
                 stars: newCount
             });
             // Store new value in store

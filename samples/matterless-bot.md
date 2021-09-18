@@ -1,6 +1,6 @@
 # Matterless bot
 
-To configure this DB bot you need to set the following configuration variables in the store:
+To configure the matterless bot you need to set the following configuration variables in the store:
 
 * `config:url`: URL to your Mattermost installation
 * `config:admin_token`: Personal access token for an admin user, enabling this app to create the necessary "
@@ -8,6 +8,17 @@ To configure this DB bot you need to set the following configuration variables i
 * `config:team`: Name of the team for the bot to join
 * `config:root_token`: Matterless root token
 * `config:allowed_users`: list of usernames who are allowed to create matterless apps
+
+# config
+
+```yaml
+url:
+  type: string
+  description: The URL to your Mattermost installation
+admin_token:
+  type: string
+  description: Personal access token for an admin user, used to create the matterless bot
+```
 
 # import
 
@@ -201,17 +212,31 @@ async function run() {
     console.log("Subscribing to all log events");
     try {
         ws.addEventListener('open', function () {
-            ws.send(JSON.stringify({pattern: '*.*.log'}));
+            ws.send(JSON.stringify({type: "authenticate", token: rootToken}));
         });
         ws.addEventListener('message', function (event) {
             let logJSON = JSON.parse(event.data);
-            if (!logJSON.app.startsWith('mls_')) {
-                return
+            switch (logJSON.type) {
+                case 'authenticated':
+                    console.log("Log listener authenticated");
+                    ws.send(JSON.stringify({
+                        type: 'subscribe',
+                        pattern: '*.*.log'
+                    }));
+                    break;
+                case 'error':
+                    console.error("Got WS error:", logJSON.error);
+                    break
+                case 'event':
+                    if (!logJSON.app.startsWith('mls_')) {
+                        return
+                    }
+                    // console.log("Got a lot event", logJSON);
+                    let [_, appId] = logJSON.app.split('_');
+                    let functionName = logJSON.name.split('.')[0];
+                    publishLog(appId, functionName, logJSON.data.message);
+                    break;
             }
-            // console.log("Got a lot event", logJSON);
-            let [_, appId] = logJSON.app.split('_');
-            let functionName = logJSON.name.split('.')[0];
-            publishLog(appId, functionName, logJSON.data.message);
         });
     } catch (e) {
         console.error(e);
@@ -365,6 +390,7 @@ async function handle(event) {
     let appName = channel.name.substring('matterless-console-'.length);
     let api = new API(appApiUrl(`mls_${appName}`), rootToken);
     let store = api.getStore();
+    let events = api.getEvents();
 
     let words = post.message.split(' ');
     let key, result, val, prop, eventName, functionName, jsonData;
@@ -411,13 +437,13 @@ async function handle(event) {
         case "trigger":
             eventName = words[1];
             jsonData = words.slice(2).join(' ');
-            await api.publishEvent(eventName, jsonData ? JSON.parse(jsonData) : {});
+            await events.publish(eventName, jsonData ? JSON.parse(jsonData) : {});
             await mmClient.addReaction(me.id, post.id, "white_check_mark");
             break;
         case "invoke":
             functionName = words[1];
             jsonData = words.slice(2).join(' ');
-            let result = await api.invokeFunction(functionName, jsonData ? JSON.parse(jsonData) : {});
+            result = await api.invokeFunction(functionName, jsonData ? JSON.parse(jsonData) : {});
             await mmClient.createPost({
                 channel_id: post.channel_id,
                 root_id: post.id,

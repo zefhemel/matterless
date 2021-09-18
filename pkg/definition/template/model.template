@@ -29,6 +29,12 @@
 {{yaml .Events -}}
 ```
 {{- end -}}
+{{if .Config}}
+## config
+```yaml
+{{yaml .Config -}}
+```
+{{end}}
 {{range $name, $def := .Macros}}
 ## macro {{$name}}
 ```yaml

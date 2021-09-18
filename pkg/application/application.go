@@ -151,6 +151,19 @@ func (app *Application) EvalString(code string) error {
 	return app.Eval(defs)
 }
 
+func (app *Application) checkConfig() error {
+	errs := []error{}
+	for key, _ := range app.definitions.Config {
+		_, err := app.dataStore.Get(fmt.Sprintf("config:%s", key))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("Missing config:%s", key))
+			continue
+		}
+		// TODO: Check val format
+	}
+	return nil
+}
+
 // reset but ready to start again
 func (app *Application) reset() {
 	app.sandbox.Flush()

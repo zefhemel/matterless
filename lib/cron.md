@@ -39,13 +39,13 @@ Template:
 
     ```javascript
     import {cron} from 'https://deno.land/x/deno_cron@v1.0.0/cron.ts';
-    import {publishEvent} from "./matterless.ts";
+    import {events} from "./matterless.ts";
     
     function init(config) {
         Object.keys(config).forEach(cronName => {
             let cronDef = config[cronName];
             cron(cronDef.schedule, () => {
-                publishEvent(`cron:${cronName}`, {});
+                events.publish(`cron:${cronName}`, {});
             });
         });
     }

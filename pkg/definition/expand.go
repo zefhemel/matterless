@@ -80,6 +80,10 @@ func (defs *Definitions) MergeFrom(moreDefs *Definitions) error {
 		defs.Libraries[name] = def
 	}
 
+	for name, schema := range moreDefs.Config {
+		defs.Config[name] = schema
+	}
+
 	for eventName, newFns := range moreDefs.Events {
 		if existingFns, ok := defs.Events[eventName]; ok {
 			// Already has other listeners, add additional ones

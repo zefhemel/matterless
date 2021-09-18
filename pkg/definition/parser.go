@@ -44,6 +44,7 @@ func Parse(code string) (*Definitions, error) {
 	mdParser := goldmark.DefaultParser()
 
 	decls := &Definitions{
+		Config:         map[string]interface{}{},
 		Functions:      map[FunctionID]*FunctionDef{},
 		Jobs:           map[FunctionID]*JobDef{},
 		Libraries:      map[FunctionID]*LibraryDef{},
@@ -159,6 +160,16 @@ func Parse(code string) (*Definitions, error) {
 			decls.Macros[MacroID(currentDeclarationName)] = &MacroDef{
 				Config:       config,
 				TemplateCode: currentCodeBlock,
+			}
+		case "config":
+			var def map[string]interface{}
+			err := yaml.Unmarshal([]byte(currentBody), &def)
+			if err != nil {
+				return err
+			}
+			// Merge into other config blocks
+			for name, schema := range def {
+				decls.Config[name] = schema
 			}
 		case "import", "imports":
 			decls.Imports = append(decls.Imports, listItems...)

@@ -52,7 +52,7 @@ This is the macro:
     ```
     
     ```javascript
-    import {publishEvent} from "./matterless.ts";
+    import {events} from "./matterless.ts";
 
     let socket, config;
  
@@ -92,7 +92,7 @@ This is the macro:
                 }
             }
             if(config.events.indexOf(parsedEvent.event) !== -1) {
-                publishEvent(`${config.name}:${parsedEvent.event}`, parsedEvent);
+                events.publish(`${config.name}:${parsedEvent.event}`, parsedEvent);
             }
         });
         socket.addEventListener('close', function(event) {
@@ -186,7 +186,7 @@ Template:
     ```
     
     ```javascript
-    import {store, restartApp} from "./matterless.ts";
+    import {store, application} from "./matterless.ts";
     import {Mattermost} from "./mattermost_client.js";
     
     let client;
@@ -228,7 +228,7 @@ Template:
             return client.addUserToTeam(user.id, (await client.getTeamByName(teamName)).id);
         }));
         await store.put(config.bot_token_config, token.token);
-        restartApp();
+        application.restart();
     }
     ```
 
@@ -286,7 +286,7 @@ schema:
                 const flagName = key.substring("FeatureFlag".length);
                 let previousValue = await store.get(`${config.ns}:flag:${flagName}`);
                 if(previousValue !== json[key]) {
-                    await publishEvent(`${config.ns}:flag:${flagName}`, {
+                    await events.publish(`${config.ns}:flag:${flagName}`, {
                         flag: flagName,
                         oldValue: previousValue,
                         newValue: value
@@ -298,7 +298,7 @@ schema:
         let oldVersion = (await store.get(`${config.ns}:version`)) || "db01f2a91b67e24187294dbe30cca1cf8fc6e494";
         let version = json.BuildHash;
         if(oldVersion != version) {
-            await publishEvent(`${config.ns}:upgrade`, {
+            await events.publish(`${config.ns}:upgrade`, {
                 oldVersion: oldVersion,
                 newVersion: version
             });

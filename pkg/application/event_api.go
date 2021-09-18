@@ -14,14 +14,18 @@ import (
 	"github.com/zefhemel/matterless/pkg/cluster"
 )
 
-type subscribeMessage struct {
-	Pattern string `json:"pattern"`
+type wsEventClientMessage struct {
+	Type    string `json:"type"` // authenticate | subscribe
+	Token   string `json:"token,omitempty"`
+	Pattern string `json:"pattern,omitempty"`
 }
 
-type eventMessage struct {
-	App  string      `json:"app"`
-	Name string      `json:"name"`
-	Data interface{} `json:"data"`
+type wsEventMessage struct {
+	Type  string      `json:"type"` // error | event | subscribed | authenticated
+	Error string      `json:"error,omitempty"`
+	App   string      `json:"app,omitempty"`
+	Name  string      `json:"name,omitempty"`
+	Data  interface{} `json:"data,omitempty"`
 }
 
 var upgrader = websocket.Upgrader{
@@ -88,17 +92,17 @@ func (ag *APIGateway) exposeEventAPI() {
 		// Authenticate
 		// TODO: Add authentication!
 
-		ag.eventStream(w, r, app.EventBus())
+		ag.eventStream(w, r, app.EventBus(), app)
 	})
 
 	ag.rootRouter.HandleFunc("/_events", func(w http.ResponseWriter, r *http.Request) {
 		// Authenticate
 		// TODO: Add authentication!
-		ag.eventStream(w, r, ag.container.ClusterEventBus())
+		ag.eventStream(w, r, ag.container.ClusterEventBus(), nil)
 	})
 }
 
-func (ag *APIGateway) eventStream(w http.ResponseWriter, r *http.Request, ceb *cluster.ClusterEventBus) {
+func (ag *APIGateway) eventStream(w http.ResponseWriter, r *http.Request, ceb *cluster.ClusterEventBus, app *Application) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("websocket error: %s", err), http.StatusBadRequest)
@@ -112,31 +116,67 @@ func (ag *APIGateway) eventStream(w http.ResponseWriter, r *http.Request, ceb *c
 			subscription.Unsubscribe()
 		}
 	}()
+	authenticated := false
+messageLoop:
 	for {
 		messageType, p, err := conn.ReadMessage()
 		if err != nil {
-			log.Errorf("Websocket error: %s", err)
+			// Ignore close errors
+			if _, ok := err.(*websocket.CloseError); !ok {
+				log.Errorf("Websocket error: %s", err)
+			}
 			return
 		}
 		if messageType == websocket.TextMessage {
-			var subscribeMessage subscribeMessage
-			if err := json.Unmarshal(p, &subscribeMessage); err != nil {
+			var clientMessage wsEventClientMessage
+			if err := json.Unmarshal(p, &clientMessage); err != nil {
 				log.Error("Could not parse websocket message: ", err)
-				continue
+				continue messageLoop
 			}
-			sub, err := ceb.SubscribeEvent(subscribeMessage.Pattern, func(name string, data interface{}, msg *nats.Msg) {
-				subjectParts := strings.Split(msg.Subject, ".") // prefix.app.otherstufff
-				conn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(eventMessage{
-					App:  subjectParts[1],
-					Name: name,
-					Data: data,
-				}))
-			})
-			if err != nil {
-				log.Error("Could not subscribe to event: ", err)
-				continue
+			switch clientMessage.Type {
+			case "authenticate":
+				if app != nil {
+					authenticated = clientMessage.Token == app.apiToken || clientMessage.Token == ag.container.config.AdminToken
+				} else {
+					authenticated = clientMessage.Token == ag.container.config.AdminToken
+				}
+				if authenticated {
+					conn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(wsEventMessage{
+						Type: "authenticated",
+					}))
+				} else {
+					conn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(wsEventMessage{
+						Type:  "error",
+						Error: "invalid-token",
+					}))
+				}
+			case "subscribe":
+				if !authenticated {
+					conn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(wsEventMessage{
+						Type:  "error",
+						Error: "not-authenticated",
+					}))
+					continue messageLoop
+				}
+				sub, err := ceb.SubscribeEvent(clientMessage.Pattern, func(name string, data interface{}, msg *nats.Msg) {
+					subjectParts := strings.Split(msg.Subject, ".") // prefix.app.otherstufff
+					conn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(wsEventMessage{
+						Type: "event",
+						App:  subjectParts[1],
+						Name: name,
+						Data: data,
+					}))
+				})
+				if err != nil {
+					log.Error("Could not subscribe to event: ", err)
+					conn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(wsEventMessage{
+						Type:  "error",
+						Error: "subscription-failed",
+					}))
+					continue messageLoop
+				}
+				allSubscriptions = append(allSubscriptions, sub)
 			}
-			allSubscriptions = append(allSubscriptions, sub)
 		}
 	}
 }
