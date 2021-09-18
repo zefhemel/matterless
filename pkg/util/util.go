@@ -3,7 +3,9 @@ package util
 import (
 	"crypto/rand"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"regexp"
+	"strings"
 )
 
 func TokenGenerator() string {
@@ -26,4 +28,20 @@ func FlatStringMap(m map[string][]string) map[string]string {
 		}
 	}
 	return m2
+}
+
+func StrictYamlUnmarshal(yamlString string, target interface{}) error {
+	decoder := yaml.NewDecoder(strings.NewReader(yamlString))
+	decoder.KnownFields(true)
+	return decoder.Decode(target)
+}
+
+func YamlUnmarshal(yamlString string) (interface{}, error) {
+	var target interface{}
+	decoder := yaml.NewDecoder(strings.NewReader(yamlString))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&target); err != nil {
+		return nil, err
+	}
+	return target, nil
 }

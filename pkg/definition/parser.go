@@ -1,41 +1,23 @@
 package definition
 
 import (
-	"embed"
 	"fmt"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
-	"github.com/zefhemel/yamlschema"
-	"gopkg.in/yaml.v3"
+	"github.com/zefhemel/matterless/pkg/util"
 	"regexp"
 	"strings"
 )
 
-//go:embed schema/*.schema.json
-var jsonSchemas embed.FS
-
-func validate(schemaName string, yamlString string) error {
-	schemaBytes, err := jsonSchemas.ReadFile(schemaName)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return yamlschema.ValidateStrings(string(schemaBytes), yamlString)
-}
-
-func validateObj(schemaName string, obj interface{}) error {
-	schemaBytes, err := jsonSchemas.ReadFile(schemaName)
-	if err != nil {
-		log.Fatal(err)
-	}
-	var yamlSchema map[string]interface{}
-	if err := yaml.Unmarshal(schemaBytes, &yamlSchema); err != nil {
-		return errors.Wrap(err, "parsing schema")
-	}
-	return yamlschema.ValidateObjects(yamlSchema, obj)
-}
+var eventsSchema = MustNewSchema(`
+type: object
+additionalProperties:
+  type: array
+  items:
+    type: string
+`)
 
 var headerRegex = regexp.MustCompile("^\\s*([a-z][\\w\\.]+)\\s*(.*)")
 
@@ -44,7 +26,7 @@ func Parse(code string) (*Definitions, error) {
 	mdParser := goldmark.DefaultParser()
 
 	decls := &Definitions{
-		Config:         map[string]interface{}{},
+		Config:         map[string]*TypeSchema{},
 		Functions:      map[FunctionID]*FunctionDef{},
 		Jobs:           map[FunctionID]*JobDef{},
 		Libraries:      map[FunctionID]*LibraryDef{},
@@ -75,7 +57,7 @@ func Parse(code string) (*Definitions, error) {
 			}
 			if currentBody2 != "" {
 				// We got a parameter clause on our hands, parse the currentBody as YAML
-				if err := yaml.Unmarshal([]byte(currentBody), &funcDef.Config); err != nil {
+				if err := util.StrictYamlUnmarshal(currentBody, &funcDef.Config); err != nil {
 					return fmt.Errorf("Function %s: %s", currentDeclarationName, err)
 				}
 				// And the second block will be the code
@@ -99,7 +81,7 @@ func Parse(code string) (*Definitions, error) {
 			}
 			if currentBody2 != "" {
 				// We got a parameter clause on our hands, parse the currentBody as YAML
-				if err := yaml.Unmarshal([]byte(currentBody), &jobDef.Config); err != nil {
+				if err := util.StrictYamlUnmarshal(currentBody, &jobDef.Config); err != nil {
 					return fmt.Errorf("Job %s: %s", currentDeclarationName, err)
 				}
 				// And the second block will be the code
@@ -126,12 +108,13 @@ func Parse(code string) (*Definitions, error) {
 			}
 			decls.Libraries[FunctionID(currentDeclarationName)] = libraryDef
 		case "events":
-			var def map[string][]FunctionID
-			if err := validate("schema/events.schema.json", currentBody); err != nil {
+			// TODO: Unmarshalling twice now, could use struct mapping
+			if err := eventsSchema.ValidateString(currentBody); err != nil {
 				return fmt.Errorf("Events: %s", err)
 			}
-			err := yaml.Unmarshal([]byte(currentBody), &def)
-			if err != nil {
+			var def map[string][]FunctionID
+
+			if err := util.StrictYamlUnmarshal(currentBody, &def); err != nil {
 				return err
 			}
 			// Merge into other Events blocks
@@ -146,7 +129,7 @@ func Parse(code string) (*Definitions, error) {
 		case "macro":
 			var config MacroConfig
 			if len(currentBody) > 0 {
-				err := yaml.Unmarshal([]byte(currentBody), &config)
+				err := util.StrictYamlUnmarshal(currentBody, &config)
 				if err != nil {
 					return err
 				}
@@ -162,8 +145,8 @@ func Parse(code string) (*Definitions, error) {
 				TemplateCode: currentCodeBlock,
 			}
 		case "config":
-			var def map[string]interface{}
-			err := yaml.Unmarshal([]byte(currentBody), &def)
+			var def map[string]*TypeSchema
+			err := util.StrictYamlUnmarshal(currentBody, &def)
 			if err != nil {
 				return err
 			}
@@ -175,7 +158,7 @@ func Parse(code string) (*Definitions, error) {
 			decls.Imports = append(decls.Imports, listItems...)
 		default: // May be a custom one, let's try
 			var inputs interface{}
-			err := yaml.Unmarshal([]byte(currentBody), &inputs)
+			err := util.StrictYamlUnmarshal(currentBody, &inputs)
 			if err != nil {
 				return fmt.Errorf("[%s] %s: Could not parse YAML", currentDeclarationType, currentDeclarationName)
 			}
