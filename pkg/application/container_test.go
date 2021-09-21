@@ -1,6 +1,8 @@
 package application_test
 
 import (
+	"fmt"
+	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net/http"
 	"os"
@@ -20,7 +22,7 @@ func TestEventHTTP(t *testing.T) {
 	a := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 	cfg := config.NewConfig()
-	cfg.APIBindPort = 8123
+	cfg.APIBindPort = util.FindFreePort(8000)
 	cfg.ClusterNatsUrl = "nats://localhost:4225"
 	cfg.DataDir = os.TempDir()
 	cfg.AdminToken = "1234"
@@ -29,7 +31,7 @@ func TestEventHTTP(t *testing.T) {
 	container, err := application.NewContainer(cfg)
 	a.NoError(err)
 	defer container.Close()
-	container.ClusterEventBus().SubscribeLogs("*", func(funcName, message string) {
+	container.ClusterEventBus().SubscribeLogs("*.*", func(funcName, message string) {
 		log.Infof("[%s] %s", funcName, message)
 	})
 	if err := container.Start(); err != nil {
@@ -61,7 +63,7 @@ async function handle(event) {
 
 	// The actual benchmark
 	for i := 0; i < 10; i++ {
-		resp, err := http.Get("http://localhost:8123/test/hello")
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/test/hello", cfg.APIBindPort))
 		a.NoError(err)
 		a.Equal(http.StatusOK, resp.StatusCode)
 		data, err := io.ReadAll(resp.Body)

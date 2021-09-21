@@ -175,7 +175,7 @@ func newDenoFunctionInstance(ctx context.Context, config *config.Config, apiURL 
 	everythingOk := false
 	defer func() {
 		if !everythingOk && inst.cmd.Process != nil {
-			//log.Info("Hard killing deno process because of error")
+			log.Info("Hard killing deno process because of error")
 			inst.Kill()
 		}
 	}()
@@ -199,9 +199,10 @@ waitLoop:
 	for {
 		select {
 		case <-ctx.Done():
+			//log.Info("Case 1")
 			return nil, ctx.Err()
 		case <-inst.denoExited:
-			//log.Info("Exited ", err)
+			//log.Info("Case 2")
 			return nil, errors.New("deno exited on boot")
 		default:
 		}
