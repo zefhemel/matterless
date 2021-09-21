@@ -117,15 +117,11 @@ func (c *Container) subscribeToEvents() {
 		if strings.HasPrefix(event.Key, "app:") {
 			var err error
 			appName := event.Key[len("app:"):]
-			app := c.Get(appName)
-
 			log.Infof("Loading app %s...", appName)
-			if app == nil {
-				app, err = c.CreateApp(appName)
-				if err != nil {
-					log.Errorf("Could not create app: %s", appName)
-					return
-				}
+			app, err := c.GetOrCreate(appName)
+			if err != nil {
+				log.Errorf("Could not create app: %s", appName)
+				return
 			}
 
 			var defs definition.Definitions
@@ -218,7 +214,7 @@ func (c *Container) monitorCluster() {
 		select {
 		case <-c.done:
 			return
-		case <-time.After(10 * time.Second):
+		case <-time.After(c.config.ClusterMonitorInterval):
 			if c.clusterLeaderElection.IsLeader() {
 				c.bringToDesiredState()
 			}
@@ -229,7 +225,7 @@ func (c *Container) monitorCluster() {
 func (c *Container) bringToDesiredState() error {
 	c.desiredStateLock.Lock()
 	defer c.desiredStateLock.Unlock()
-	clusterInfo, err := c.clusterEventBus.FetchClusterInfo(time.Second)
+	clusterInfo, err := c.clusterEventBus.FetchClusterInfo(c.config.ClusterFetchInfoTimeout)
 	if err != nil {
 		return errors.Wrap(err, "fetch cluster info")
 	}
@@ -275,6 +271,7 @@ func (c *Container) bringAppToDesiredState(app *Application, clusterInfo *cluste
 	}
 }
 
+// CreateApp creates a new application in the container
 func (c *Container) CreateApp(appName string) (*Application, error) {
 	appDataPath := fmt.Sprintf("%s/%s", c.config.DataDir, util.SafeFilename(appName))
 
@@ -303,6 +300,15 @@ func (c *Container) CreateApp(appName string) (*Application, error) {
 	c.apps[appName] = app
 
 	return app, nil
+}
+
+func (c *Container) GetOrCreate(name string) (*Application, error) {
+	app := c.Get(name)
+	if app != nil {
+		return app, nil
+	} else {
+		return c.CreateApp(name)
+	}
 }
 
 func (c *Container) DeleteApp(name string) error {

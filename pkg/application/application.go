@@ -42,11 +42,12 @@ func NewApplication(cfg *config.Config, appName string, s store.Store, ceb *clus
 		return nil, errors.Wrap(err, "sandbox create")
 	}
 	app := &Application{
-		config:   cfg,
-		appName:  appName,
-		eventBus: ceb,
-		apiToken: apiToken,
-		sandbox:  sb,
+		config:      cfg,
+		appName:     appName,
+		eventBus:    ceb,
+		apiToken:    apiToken,
+		sandbox:     sb,
+		definitions: definition.NewDefinitions(),
 	}
 
 	app.dataStore = store.NewEventedStore(s, func(key string, val interface{}) {
@@ -57,7 +58,7 @@ func NewApplication(cfg *config.Config, appName string, s store.Store, ceb *clus
 			log.Errorf("Could not publish store:put event: %s", err)
 		}
 	}, func(key string) {
-		if err := app.PublishAppEvent(fmt.Sprintf("store:del:%s", key), map[string]interface{}{
+		if err := app.PublishAppEvent(fmt.Sprintf("store:del.%s", key), map[string]interface{}{
 			"key": key,
 		}); err != nil {
 			log.Errorf("Could not publish store:del event: %s", err)
@@ -99,7 +100,7 @@ func NewMockApplication(config *config.Config, appName string) *Application {
 	return &Application{
 		appName:     appName,
 		definitions: &definition.Definitions{},
-		dataStore:   &store.MockStore{},
+		dataStore:   &store.EmptyStore{},
 		config:      config,
 	}
 }
@@ -151,19 +152,6 @@ func (app *Application) EvalString(code string) error {
 	return app.Eval(defs)
 }
 
-func (app *Application) checkConfig() error {
-	errs := []error{}
-	for key, _ := range app.definitions.Config {
-		_, err := app.dataStore.Get(fmt.Sprintf("config:%s", key))
-		if err != nil {
-			errs = append(errs, fmt.Errorf("Missing config:%s", key))
-			continue
-		}
-		// TODO: Check val format
-	}
-	return nil
-}
-
 // reset but ready to start again
 func (app *Application) reset() {
 	app.sandbox.Flush()
@@ -194,4 +182,8 @@ func (app *Application) Sandbox() *sandbox.Sandbox {
 
 func (app *Application) Name() string {
 	return app.appName
+}
+
+func (app *Application) Store() store.Store {
+	return app.dataStore
 }

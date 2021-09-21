@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"gopkg.in/yaml.v3"
+	"net/http"
 	"regexp"
 	"strings"
 )
@@ -44,4 +45,30 @@ func YamlUnmarshal(yamlString string) (interface{}, error) {
 		return nil, err
 	}
 	return target, nil
+}
+
+type MultiError struct {
+	Errs []error
+}
+
+func NewMultiError(errs []error) *MultiError {
+	return &MultiError{errs}
+}
+
+func (me *MultiError) Error() string {
+	errs := make([]string, len(me.Errs))
+	for i, err := range me.Errs {
+		errs[i] = err.Error()
+	}
+	return strings.Join(errs, "\n")
+}
+
+func HTTPWriteJSONError(w http.ResponseWriter, httpStatus int, message string, additionalData interface{}) {
+	type jsonError struct {
+		Error string      `json:"error"`
+		Data  interface{} `json:"data,omitempty"`
+	}
+	w.Header().Add("content-type", "application/json")
+	w.WriteHeader(httpStatus)
+	w.Write(MustJsonByteSlice(jsonError{message, additionalData}))
 }

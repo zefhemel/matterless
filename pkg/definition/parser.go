@@ -25,15 +25,7 @@ var headerRegex = regexp.MustCompile("^\\s*([a-z][\\w\\.]+)\\s*(.*)")
 func Parse(code string) (*Definitions, error) {
 	mdParser := goldmark.DefaultParser()
 
-	decls := &Definitions{
-		Config:         map[string]*TypeSchema{},
-		Functions:      map[FunctionID]*FunctionDef{},
-		Jobs:           map[FunctionID]*JobDef{},
-		Libraries:      map[FunctionID]*LibraryDef{},
-		Events:         map[string][]FunctionID{},
-		Macros:         map[MacroID]*MacroDef{},
-		MacroInstances: map[string]*MacroInstanceDef{},
-	}
+	decls := NewDefinitions()
 	codeBytes := []byte(code)
 	node := mdParser.Parse(text.NewReader(codeBytes))
 	var (
@@ -224,4 +216,16 @@ func Parse(code string) (*Definitions, error) {
 	}
 
 	return decls, nil
+}
+
+func NewDefinitions() *Definitions {
+	return &Definitions{
+		Config:         map[string]*TypeSchema{},
+		Functions:      map[FunctionID]*FunctionDef{},
+		Jobs:           map[FunctionID]*JobDef{},
+		Libraries:      map[FunctionID]*LibraryDef{},
+		Events:         map[string][]FunctionID{},
+		Macros:         map[MacroID]*MacroDef{},
+		MacroInstances: map[string]*MacroInstanceDef{},
+	}
 }

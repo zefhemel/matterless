@@ -2,11 +2,19 @@
 
 Tracks all reactions added or removed for a specific user, and notifies the user about this via a bot account.
 
-Required store values for this to work:
+# config
 
-* `config:url`: Mattermost URL
-* `config:meToken`: Personal access token for the user to track reactions for (you)
-* `config:botToken`: Personal access token for bot user to send you messages as (create a separate bot account for this)
+```yaml
+config:url:
+  type: string
+  description: Mattermost URL
+config:meToken:
+  type: string
+  description: Personal access token for the user to track reactions for (you)
+config:botToken:
+  type: string
+  description: Personal access token for bot user to send you messages as (create a separate bot account for this)
+```
 
 # import
 

@@ -24,6 +24,8 @@ type Config struct {
 	SandboxJobStartTimeout     time.Duration
 	SandboxJobStopTimeout      time.Duration
 	DatastoreSyncTimeout       time.Duration
+	ClusterMonitorInterval     time.Duration
+	ClusterFetchInfoTimeout    time.Duration
 }
 
 func NewConfig() *Config {
@@ -32,6 +34,8 @@ func NewConfig() *Config {
 		ClusterNatsUrl:             "nats://localhost:4222",
 		ClusterNatsPrefix:          "mls",
 		ClusterHeartbeatInterval:   2 * time.Second,
+		ClusterMonitorInterval:     10 * time.Second,
+		ClusterFetchInfoTimeout:    1 * time.Second,
 		FunctionRunTimeout:         1 * time.Minute,
 		HTTPGatewayResponseTimeout: 10 * time.Second,
 		SanboxJobInitTimeout:       10 * time.Second,

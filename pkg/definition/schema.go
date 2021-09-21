@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/zefhemel/matterless/pkg/util"
-	"strings"
 )
 
 // Subset of JSON schema
@@ -22,7 +21,12 @@ type TypeSchema struct {
 }
 
 func NewSchema(yamlSource string) (*TypeSchema, error) {
-	var typeSchema TypeSchema
+	typeSchema := TypeSchema{
+		Properties:           map[string]*TypeSchema{},
+		AdditionalProperties: nil,
+		Required:             nil,
+		Items:                nil,
+	}
 	if err := util.StrictYamlUnmarshal(yamlSource, &typeSchema); err != nil {
 		return nil, err
 	}
@@ -37,24 +41,21 @@ func MustNewSchema(yamlSource string) *TypeSchema {
 	return ts
 }
 
-type MultiError struct {
-	errs []error
-}
-
-func (me *MultiError) Error() string {
-	errs := make([]string, len(me.errs))
-	for i, err := range me.errs {
-		errs[i] = err.Error()
-	}
-	return strings.Join(errs, "\n")
-}
-
 func (ts *TypeSchema) ValidateString(yamlString string) error {
 	d, err := util.YamlUnmarshal(yamlString)
 	if err != nil {
 		return errors.Wrap(err, "yaml unmarshal")
 	}
 	return ts.Validate(d)
+}
+
+type PropertyError struct {
+	Property string
+	Err      error
+}
+
+func (pe *PropertyError) Error() string {
+	return fmt.Sprintf("%s: %s", pe.Property, pe.Err)
 }
 
 func (ts *TypeSchema) Validate(val interface{}) error {
@@ -72,7 +73,7 @@ func (ts *TypeSchema) Validate(val interface{}) error {
 		}
 	case "bool", "boolean":
 		if _, ok := val.(bool); !ok {
-			return fmt.Errorf("should be a boolean value: %s", val)
+			return fmt.Errorf("should be a boolean: %s", val)
 		}
 	case "array":
 		errs := []error{}
@@ -86,7 +87,7 @@ func (ts *TypeSchema) Validate(val interface{}) error {
 			}
 		}
 		if len(errs) > 0 {
-			return &MultiError{errs}
+			return util.NewMultiError(errs)
 		}
 	case "object":
 		errs := []error{}
@@ -99,19 +100,19 @@ func (ts *TypeSchema) Validate(val interface{}) error {
 			if !ok {
 				if ts.AdditionalProperties != nil {
 					if err := ts.AdditionalProperties.Validate(v); err != nil {
-						errs = append(errs, err)
+						errs = append(errs, &PropertyError{k, err})
 					}
 				} else {
-					errs = append(errs, fmt.Errorf("undefined property: %s", k))
+					errs = append(errs, &PropertyError{k, fmt.Errorf("undefined property: %s", k)})
 				}
 			} else {
 				if err := prop.Validate(v); err != nil {
-					errs = append(errs, err)
+					errs = append(errs, &PropertyError{k, err})
 				}
 			}
 		}
 		if len(errs) > 0 {
-			return &MultiError{errs}
+			return util.NewMultiError(errs)
 		}
 	}
 	return nil

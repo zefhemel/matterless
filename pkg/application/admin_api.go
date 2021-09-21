@@ -21,20 +21,31 @@ func (ag *APIGateway) exposeAdminAPI() {
 		if !ag.authAdmin(w, r) {
 			return
 		}
+
+		// Read markdown application def from body
 		defBytes, err := io.ReadAll(r.Body)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, "Could not read body")
+			util.HTTPWriteJSONError(w, http.StatusInternalServerError, "Could not read body", nil)
 			return
 		}
 
 		code := string(defBytes)
 
+		// Syntax and semantic check
 		defs, err := definition.Check("", code, filepath.Join(ag.config.DataDir, ".importcache"))
 
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, err.Error())
+			util.HTTPWriteJSONError(w, http.StatusInternalServerError, err.Error(), nil)
+			return
+		}
+
+		// Check if all required configuration area already present in the data store, if not
+		existingApp, err := ag.container.GetOrCreate(appName)
+		if err != nil {
+			util.HTTPWriteJSONError(w, http.StatusInternalServerError, "could-not-create", err.Error())
+		}
+		if configIssues := defs.CheckConfig(existingApp.Store()); len(configIssues) > 0 {
+			util.HTTPWriteJSONError(w, http.StatusBadRequest, "config-errors", configIssues)
 			return
 		}
 
@@ -45,8 +56,6 @@ func (ag *APIGateway) exposeAdminAPI() {
 			fmt.Fprint(w, err.Error())
 			return
 		}
-
-		// if err := ag.container.Store().
 
 		fmt.Fprint(w, defs.Markdown())
 	}).Methods("PUT")

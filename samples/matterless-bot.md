@@ -1,23 +1,27 @@
 # Matterless bot
 
-To configure the matterless bot you need to set the following configuration variables in the store:
-
-* `config:url`: URL to your Mattermost installation
-* `config:admin_token`: Personal access token for an admin user, enabling this app to create the necessary "
-  matterless-bot" bot.
-* `config:team`: Name of the team for the bot to join
-* `config:root_token`: Matterless root token
-* `config:allowed_users`: list of usernames who are allowed to create matterless apps
+A bot that allows a configurable set of users to create, update, delete and interact with Matterless apps.
 
 # config
 
 ```yaml
-url:
+config:url:
   type: string
   description: The URL to your Mattermost installation
-admin_token:
+config:admin_token:
   type: string
   description: Personal access token for an admin user, used to create the matterless bot
+config:team:
+  type: string
+  description: Team name to have the bot join
+config:root_token:
+  type: string
+  description: root token for matterless install
+config:allowed_users:
+  type: array
+  items:
+    type: string
+  description: List of usernames that are allowed to create matterless apps
 ```
 
 # import
@@ -73,11 +77,6 @@ let team;
 let url;
 
 async function init(cfg) {
-    console.log("Here is the cfg", cfg)
-    if (!cfg.url || !cfg.token) {
-        console.error("URL and token not initialized yet");
-        return;
-    }
     url = cfg.url;
     mmClient = new Mattermost(cfg.url, cfg.token);
     rootToken = cfg.root_token;
@@ -86,10 +85,6 @@ async function init(cfg) {
 
 // Main event handler
 async function handle(event) {
-    if (!mmClient) {
-        console.log("Not inited yet");
-    }
-
     let post = JSON.parse(event.data.post);
     let me = await mmClient.getMeCached();
 
@@ -194,9 +189,6 @@ let team;
 let url;
 
 async function init(cfg) {
-    if (!cfg.url) {
-        return
-    }
     url = cfg.url;
     rootToken = cfg.root_token;
     mmClient = new Mattermost(cfg.url, cfg.bot_token);
@@ -205,9 +197,6 @@ async function init(cfg) {
 
 
 async function run() {
-    if (!url || !rootToken) {
-        return;
-    }
     let ws = globalEventSocket(rootToken);
     console.log("Subscribing to all log events");
     try {
@@ -365,10 +354,6 @@ let mmClient;
 let rootToken;
 
 function init(cfg) {
-    if (!cfg.url || !cfg.token) {
-        console.error("URL and token not initialized yet");
-        return;
-    }
     mmClient = new Mattermost(cfg.url, cfg.token);
     rootToken = cfg.root_token;
 }

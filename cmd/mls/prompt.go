@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -16,6 +15,8 @@ import (
 
 func completer(in prompt.Document) []prompt.Suggest {
 	s := []prompt.Suggest{
+		{Text: "r", Description: "Reload app from disk"},
+		{Text: "restart", Description: "restart application"},
 		{Text: "use", Description: "[appName] - switch to app context"},
 		{Text: "delete-app", Description: "[appName] - delete app and its data"},
 		{Text: "list", Description: "list all running apps"},
@@ -24,7 +25,6 @@ func completer(in prompt.Document) []prompt.Suggest {
 		{Text: "del", Description: "[key] — delete a value from the store"},
 		{Text: "query-prefix", Description: "[key-prefix] — query keys from the store, return with values"},
 		{Text: "keys", Description: "[key-prefix] — query keys from the store"},
-		{Text: "restart", Description: "restart application"},
 		{Text: "trigger", Description: "[eventName] [evenData] — trigger an event"},
 		{Text: "invoke", Description: "[functionName] [evenData] — invoke a function"},
 		{Text: "exit", Description: "Exit"},
@@ -72,9 +72,11 @@ func executor(cmd string) {
 		return
 	}
 	switch blocks[0] {
+	case "reload", "r":
+		promptContext.reloadCallback()
 	case "exit":
 		fmt.Println("Bye!")
-		os.Exit(0)
+		promptContext.exitCallback()
 	case "use":
 		if len(blocks) != 2 {
 			fmt.Println("You should specify an app name")
@@ -231,10 +233,12 @@ func executor(cmd string) {
 }
 
 type PromptContext struct {
-	appName     string
-	client      *client.MatterlessClient
-	allAppNames []string
-	defs        *definition.Definitions
+	appName        string
+	client         *client.MatterlessClient
+	allAppNames    []string
+	defs           *definition.Definitions
+	reloadCallback func()
+	exitCallback   func()
 }
 
 var promptContext = &PromptContext{}
@@ -246,10 +250,12 @@ func livePrefix() (string, bool) {
 	return promptContext.appName + "> ", true
 }
 
-func runConsole(c *client.MatterlessClient, filePaths []string) {
+func runConsole(c *client.MatterlessClient, filePath string, reloadCallback func(), exitCallback func()) {
 	promptContext.client = c
-	if len(filePaths) == 1 {
-		promptContext.appName = client.AppNameFromPath(filePaths[0])
+	promptContext.reloadCallback = reloadCallback
+	promptContext.exitCallback = exitCallback
+	if filePath != "" {
+		promptContext.appName = client.AppNameFromPath(filePath)
 	}
 	go metaDataFetcher()
 	p := prompt.New(
@@ -258,6 +264,12 @@ func runConsole(c *client.MatterlessClient, filePaths []string) {
 		prompt.OptionPrefix("> "),
 		prompt.OptionLivePrefix(livePrefix),
 		prompt.OptionTitle("mls"),
+		prompt.OptionAddKeyBind(prompt.KeyBind{
+			Key: prompt.ControlC,
+			Fn: func(buffer *prompt.Buffer) {
+				exitCallback()
+			},
+		}),
 	)
 	p.Run()
 }

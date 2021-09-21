@@ -3,69 +3,37 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/websocket"
+	log "github.com/sirupsen/logrus"
+	"github.com/zefhemel/matterless/pkg/application"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/zefhemel/matterless/pkg/cluster"
 	"github.com/zefhemel/matterless/pkg/definition"
 	"github.com/zefhemel/matterless/pkg/util"
 )
 
 type MatterlessClient struct {
-	URL   string
-	Token string
+	URL    string
+	Token  string
+	wsConn *websocket.Conn
+	done   chan struct{}
 }
 
 func NewMatterlessClient(url string, token string) *MatterlessClient {
 	return &MatterlessClient{
 		URL:   url,
 		Token: token,
+		done:  make(chan struct{}),
 	}
 }
 
 func AppNameFromPath(path string) string {
 	return strings.Replace(filepath.Base(path), ".md", "", 1)
-}
-
-func (client *MatterlessClient) DeployAppFiles(files []string, watch bool) error {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		panic(err)
-	}
-
-	for _, path := range files {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return errors.Wrapf(err, "read file: %s", path)
-		}
-		defs, err := definition.Check(path, string(data), "")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		//log.Infof("Here are all defs: %+v", defs.Events)
-
-		if err := client.DeployApp(AppNameFromPath(path), defs.Markdown()); err != nil {
-			return errors.Wrap(err, "deploy")
-		}
-		err = watcher.Add(path)
-		if err != nil {
-			return errors.Wrap(err, "watcher")
-		}
-	}
-
-	if watch {
-		// File watch the definition file and reload on changes
-		go client.watcher(watcher)
-	}
-
-	return nil
 }
 
 func (client *MatterlessClient) GetAppCode(appName string) (string, error) {
@@ -244,6 +212,15 @@ func (client *MatterlessClient) StoreQueryPrefix(appName string, prefix string) 
 	return nil, errors.New("Invalid result")
 }
 
+type ConfigIssuesError struct {
+	Message      string            `json:"error"`
+	ConfigIssues map[string]string `json:"data"`
+}
+
+func (mce *ConfigIssuesError) Error() string {
+	return mce.Message
+}
+
 func (client *MatterlessClient) DeployApp(appName, code string) error {
 	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", client.URL, appName), strings.NewReader(code))
 	if err != nil {
@@ -260,6 +237,16 @@ func (client *MatterlessClient) DeployApp(appName, code string) error {
 		bodyData, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return errors.Wrap(err, "read response body")
+		}
+		if resp.Header.Get("content-type") == "application/json" {
+			// May be a missing config error
+			var configIssuesError ConfigIssuesError
+			if err := json.Unmarshal(bodyData, &configIssuesError); err != nil {
+				return errors.Wrap(err, "unmarshal config issues")
+			}
+			if configIssuesError.Message == "config-errors" {
+				return &configIssuesError
+			}
 		}
 		return fmt.Errorf("app update error: %s", bodyData)
 	}
@@ -343,38 +330,67 @@ func (client *MatterlessClient) InvokeFunction(appName string, functionName stri
 	return resultObj, nil
 }
 
-func (client *MatterlessClient) watcher(watcher *fsnotify.Watcher) {
-eventLoop:
-	for {
-		select {
-		case event, ok := <-watcher.Events:
-			if !ok {
-				return
-			}
-			if event.Op&fsnotify.Write == fsnotify.Write {
-				path := event.Name
-				log.Infof("Definition %s modified, reloading...", path)
-				data, err := os.ReadFile(path)
-				if err != nil {
-					log.Error(err)
-					continue eventLoop
-				}
-				defs, err := definition.Check(path, string(data), "")
-				if err != nil {
-					log.Error(err)
-					continue eventLoop
-				}
+// TODO: Currently there can only be one connection to one app
+func (client *MatterlessClient) EventStream(appName string) (chan application.WSEventMessage, error) {
+	url := fmt.Sprintf("%s/%s/_events", strings.ReplaceAll(strings.ReplaceAll(client.URL, "http://", "ws://"), "https://", "wss://"), appName)
 
-				if err := client.DeployApp(AppNameFromPath(path), defs.Markdown()); err != nil {
-					log.Errorf("Could not redeploy app %s: %s", AppNameFromPath(path), err)
-					continue eventLoop
-				}
-			}
-		case err, ok := <-watcher.Errors:
-			if !ok {
+	var err error
+	client.wsConn, _, err = websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "websocket connect")
+	}
+	if err := client.wsConn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(application.WSEventClientMessage{
+		Type:  "authenticate",
+		Token: client.Token,
+	})); err != nil {
+		return nil, errors.Wrap(err, "send ws auth")
+	}
+	wsChan := make(chan application.WSEventMessage)
+	go func() {
+		defer close(wsChan)
+	loop:
+		for {
+			_, message, err := client.wsConn.ReadMessage()
+			if err != nil {
+				log.Errorf("Error reading from websocket: %s", err)
 				return
 			}
-			log.Errorf("Watcher error: %s", err)
+			var wsMessage application.WSEventMessage
+			if err := json.Unmarshal(message, &wsMessage); err != nil {
+				log.Errorf("Could not unmarshal websocket message: %s", err)
+				continue
+			}
+			select {
+			case <-client.done:
+				break loop
+			default:
+			}
+			switch wsMessage.Type {
+			//case "authenticated":
+			//	log.Info("Event stream successfully authenticated")
+			//case "subscribed":
+			//	log.Info("Event stream successfully subscribed")
+			case "event":
+				//log.Info("Received event")
+				wsChan <- wsMessage
+			case "error":
+				log.Errorf("Received websocket error: %s", wsMessage.Error)
+			}
 		}
+	}()
+	return wsChan, nil
+}
+
+func (client *MatterlessClient) SubscribeEvent(pattern string) error {
+	if client.wsConn == nil {
+		return errors.New("not connected")
 	}
+	return client.wsConn.WriteMessage(websocket.TextMessage, util.MustJsonByteSlice(application.WSEventClientMessage{
+		Type:    "subscribe",
+		Pattern: pattern,
+	}))
+}
+
+func (client *MatterlessClient) Close() {
+	close(client.done)
 }
