@@ -66,7 +66,7 @@ function init(config) {
 	console.log("Got config", config, "and env", Deno.env.get("API_URL"));
 }
 
-function run() {
+function start() {
 	console.log("Running");
 	setInterval(() => {
 		console.log("Iteration");

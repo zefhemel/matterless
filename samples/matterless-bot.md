@@ -66,9 +66,9 @@ init:
 ```
 
 ```javascript
-import {store} from "./matterless.ts";
+import {store, API} from "./matterless.ts";
 import {Mattermost, seenEvent} from "./mattermost_client.js";
-import {buildAppName, putApp, deleteApp} from "./matterless_root.js";
+import {buildAppName, putApp, deleteApp, storeForApp} from "./matterless_root.js";
 import {ensureConsoleChannel, postLink} from "./util.js";
 
 let mmClient;
@@ -118,30 +118,66 @@ async function handle(event) {
         console.log("Deleting app:", appName);
         await deleteApp(rootToken, appName);
     } else {
-        console.log("Updating app:", appName);
+        if (!post.root_id) {
+            console.log("Updating app:", appName, event);
+            // Attempt to extract an appname
+            let friendlyAppName = post.id;
+            let matchGroups = /#\s*([A-Z][^\n]+)/.exec(code);
+            if (matchGroups) {
+                friendlyAppName = matchGroups[1];
+            }
+            let channelInfo = await ensureConsoleChannel(mmClient, team.id, post.id, friendlyAppName);
+            channelInfo.display_name = `Matterless : ${friendlyAppName}`;
+            channelInfo.header = `Console for your matterless app [${friendlyAppName}](${postLink(url, team, post.id)})`;
+            await mmClient.updateChannel(channelInfo);
 
-        // Attempt to extract an appname
-        let friendlyAppName = post.id;
-        let matchGroups = /#\s*([A-Z][^\n]+)/.exec(code);
-        if (matchGroups) {
-            friendlyAppName = matchGroups[1];
+            await mmClient.addUserToChannel(channelInfo.id, userId);
+            try {
+                let result = await putApp(rootToken, appName, code);
+                await mmClient.addReaction(me.id, post.id, "white_check_mark");
+                await mmClient.removeReaction(me.id, post.id, "octagonal_sign");
+                await ensureMyReply(me, post, 'All good to go :thumbsup:');
+            } catch (e) {
+                try {
+                    let errorData = JSON.parse(e.message);
+                    if (errorData.error === 'config-errors') {
+                        let toConfigure = errorData.data;
+                        // Pick any to configure
+                        let first = Object.keys(toConfigure)[0];
+                        await mmClient.createPost({
+                            channel_id: post.channel_id,
+                            root_id: post.id,
+                            message: `Some configuration is required, please enter a value for **${first}**:`,
+                            props: {
+                                configName: first
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.error(e);
+                    await ensureMyReply(me, post, `ERROR: ${e.message}`);
+                }
+                await mmClient.addReaction(me.id, post.id, "octagonal_sign");
+                await mmClient.removeReaction(me.id, post.id, "white_check_mark");
+            }
+        } else {
+            // Reply
+            console.log("Reply post:", post);
+            let thread = await mmClient.getThread(post.root_id);
+            let lastQuestion;
+            for (let postId of thread.order) {
+                let threadPost = thread.posts[postId];
+                if (threadPost.user_id == me.id) {
+                    lastQuestion = threadPost;
+                }
+            }
+            console.log("This is in response to", lastQuestion);
+            let configOption = lastQuestion.props.configName;
+            let mlsClient = storeForApp(appName);
+            await mlsClient.put(configOption, post.message);
         }
-        let channelInfo = await ensureConsoleChannel(mmClient, team.id, post.id, friendlyAppName);
-        channelInfo.display_name = `Matterless : ${friendlyAppName}`;
-        channelInfo.header = `Console for your matterless app [${friendlyAppName}](${postLink(url, team, post.id)})`;
-        await mmClient.updateChannel(channelInfo);
 
-        await mmClient.addUserToChannel(channelInfo.id, userId);
-        try {
-            let result = await putApp(rootToken, appName, code);
-            await mmClient.addReaction(me.id, post.id, "white_check_mark");
-            await mmClient.removeReaction(me.id, post.id, "octagonal_sign");
-            await ensureMyReply(me, post, 'All good to go :thumbsup:');
-        } catch (e) {
-            await mmClient.addReaction(me.id, post.id, "octagonal_sign");
-            await mmClient.removeReaction(me.id, post.id, "white_check_mark");
-            await ensureMyReply(me, post, `ERROR: ${e.message}`);
-        }
+
     }
 }
 
@@ -246,6 +282,8 @@ async function publishLog(appId, functionName, message) {
 # library matterless_root.js
 
 ```javascript
+import {API} from "./matterless.ts";
+
 const rootUrl = Deno.env.get("API_URL").split('/').slice(0, -1).join('/');
 
 export function buildAppName(userId, postId) {
@@ -266,6 +304,10 @@ export async function adminCall(rootToken, path, method, body) {
         throw Error(textResult);
     }
     return textResult;
+}
+
+export function storeForApp(rootToken, appName) {
+    return new API(`${rootUrl}/${appName}`, rootToken);
 }
 
 export async function listApps(rootToken) {
@@ -428,7 +470,7 @@ async function handle(event) {
         case "invoke":
             functionName = words[1];
             jsonData = words.slice(2).join(' ');
-            result = await api.invokeFunction(functionName, jsonData ? JSON.parse(jsonData) : {});
+            result = await api.getFunctions().invoke(functionName, jsonData ? JSON.parse(jsonData) : {});
             await mmClient.createPost({
                 channel_id: post.channel_id,
                 root_id: post.id,

@@ -1,0 +1,26 @@
+=============== Sep 22, 2021 (CEST) ===============
+09:43:14.215663 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+09:43:14.261791 db@open opening
+09:43:14.262448 version@stat F·[] S·0B[] Sc·[]
+09:43:14.282991 db@janitor F·2 G·0
+09:43:14.283274 db@open done T·21.433875ms
+=============== Sep 22, 2021 (CEST) ===============
+09:48:26.987499 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+09:48:26.989155 version@stat F·[] S·0B[] Sc·[]
+09:48:26.989185 db@open opening
+09:48:26.989327 journal@recovery F·1
+09:48:26.989699 journal@recovery recovering @1
+09:48:27.026589 memdb@flush created L0@2 N·86 S·355KiB "$$seq,v86":"app..ker,v41"
+09:48:27.026853 version@stat F·[1] S·355KiB[355KiB] Sc·[0.25]
+09:48:27.097148 db@janitor F·3 G·0
+09:48:27.097500 db@open done T·108.299334ms
+=============== Sep 22, 2021 (CEST) ===============
+09:50:50.190697 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+09:50:50.192954 version@stat F·[1] S·355KiB[355KiB] Sc·[0.25]
+09:50:50.192982 db@open opening
+09:50:50.193153 journal@recovery F·1
+09:50:50.193740 journal@recovery recovering @3
+09:50:50.223249 memdb@flush created L0@5 N·2 S·10KiB "$$seq,v89":"app..bot,v88"
+09:50:50.223542 version@stat F·[2] S·366KiB[366KiB] Sc·[0.50]
+09:50:50.292446 db@janitor F·4 G·0
+09:50:50.293289 db@open done T·100.292542ms

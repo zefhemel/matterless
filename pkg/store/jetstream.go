@@ -58,6 +58,7 @@ type JetstreamStore struct {
 	ackWaiting map[string]chan struct{}
 
 	// Sync
+	syncMessageLock sync.Mutex
 	syncMessageSeq  string
 	syncMessageChan chan struct{}
 
@@ -145,8 +146,10 @@ func (jss *JetstreamStore) Sync(timeout time.Duration) error {
 	sm := syncMessage{
 		ID: uuid.NewString(),
 	}
+	jss.syncMessageLock.Lock()
 	jss.syncMessageChan = make(chan struct{})
 	jss.syncMessageSeq = sm.ID
+	jss.syncMessageLock.Unlock()
 
 	_, err := jss.js.Publish(jss.syncEvent, util.MustJsonByteSlice(sm))
 	if err != nil {
@@ -182,13 +185,16 @@ loop:
 
 		switch m.Subject {
 		case jss.syncEvent:
+			jss.syncMessageLock.Lock()
 			if jss.syncMessageSeq == "" {
 				// Not waiting for a sync, skip
+				jss.syncMessageLock.Unlock()
 				continue loop
 			}
 			var syncMessage syncMessage
 			if err := json.Unmarshal(m.Data, &syncMessage); err != nil {
 				log.Errorf("Could not unmarshal sync message: %s", err)
+				jss.syncMessageLock.Unlock()
 				continue loop
 			}
 			// log.Infof("Received a sync event: %s, waiting for %s", syncMessage.ID, jss.syncMessageSeq)
@@ -197,6 +203,7 @@ loop:
 				jss.syncMessageSeq = ""
 				close(jss.syncMessageChan)
 			}
+			jss.syncMessageLock.Unlock()
 		case jss.putEvent:
 			// log.Infof("Received a put message: %s\n", string(m.Data))
 			var putMessage PutMessage

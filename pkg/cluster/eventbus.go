@@ -166,7 +166,7 @@ func (eb *ClusterEventBus) SubscribeLogs(funcName string, callback func(funcName
 	})
 }
 
-func (eb *ClusterEventBus) SubscribeContainerLogs(s string, callback func(appName, funcName, message string)) (Subscription, error) {
+func (eb *ClusterEventBus) SubscribeContainerLogs(callback func(appName, funcName, message string)) (Subscription, error) {
 	return eb.subscribe("*.*.log", func(msg *nats.Msg) {
 		parts := strings.Split(msg.Subject, ".") // mls.myapp.MyFunction.log
 		var pe publishEvent

@@ -1,0 +1,21 @@
+{
+  "headers": {
+    "x-amz-id-2": "98+PsjOwQgc01uWo+PIzOaKz7nuECuHIvqn7riUfVqg8bW5HTaWH36gXexYfMvoRE0PlAdkyV6c=",
+    "cf-cache-status": "DYNAMIC",
+    "content-type": "application/typescript; charset=utf-8",
+    "date": "Wed, 22 Sep 2021 07:50:51 GMT",
+    "etag": "\"39a6e3eb5ed9b03e29f162122aa1a562\"",
+    "content-length": "21917",
+    "server": "cloudflare",
+    "x-amz-request-id": "T77S265M8D7RXG2H",
+    "access-control-allow-origin": "*",
+    "x-amz-version-id": "qfTmutZHU8ZdgCz1s6UNAgcselfNf.A0",
+    "alt-svc": "h3=\":443\"; ma=86400, h3-29=\":443\"; ma=86400, h3-28=\":443\"; ma=86400, h3-27=\":443\"; ma=86400",
+    "last-modified": "Sun, 21 Mar 2021 14:06:15 GMT",
+    "cache-control": "public, max-age=31536000, immutable",
+    "cf-ray": "6929f1d95960ffc0-WAW",
+    "expect-ct": "max-age=604800, report-uri=\"https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct\"",
+    "connection": "keep-alive"
+  },
+  "url": "https://deno.land/std@0.91.0/io/bufio.ts"
+}
