@@ -71,7 +71,7 @@ func NewSandbox(cfg *config.Config, apiURL string, apiToken string, ceb *cluster
 	}
 
 	if !cfg.UseSystemDeno {
-		if err := ensureDeno(cfg); err != nil {
+		if err := EnsureDeno(cfg); err != nil {
 			return nil, errors.Wrap(err, "ensure deno")
 		}
 	}

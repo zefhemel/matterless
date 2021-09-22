@@ -31,7 +31,7 @@ func denoBinPath(config *config.Config) string {
 }
 
 // Automatically download deno executable into the data folder if it's not there
-func ensureDeno(config *config.Config) error {
+func EnsureDeno(config *config.Config) error {
 	denoPath := denoBinPath(config)
 	buildToGet := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
 	if _, err := os.Stat(denoPath); err != nil {

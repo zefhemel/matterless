@@ -5,6 +5,7 @@ import (
 	"github.com/zefhemel/matterless/pkg/application"
 	"github.com/zefhemel/matterless/pkg/config"
 	"github.com/zefhemel/matterless/pkg/util"
+	"os"
 	"reflect"
 
 	"github.com/pkg/errors"
@@ -78,6 +79,7 @@ func (p *Plugin) setConfiguration(configuration *configuration) {
 // OnConfigurationChange is invoked when configuration changes may have been made.
 func (p *Plugin) OnConfigurationChange() error {
 	var configuration = new(configuration)
+	p.API.LogInfo("Reloading configuration")
 
 	// Load the public configuration fields from the Mattermost server configuration.
 	if err := p.API.LoadPluginConfiguration(configuration); err != nil {
@@ -92,13 +94,18 @@ func (p *Plugin) OnConfigurationChange() error {
 
 	cfg := config.NewConfig()
 	pluginConfig := p.getConfiguration()
-	cfg.DataDir = pluginConfig.DataDir
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "localhost"
+	}
+	cfg.DataDir = fmt.Sprintf("mls-data-%s", hostname)
+	p.API.LogInfo("Setting DATA DIR", "datadir", cfg.DataDir)
 	cfg.ClusterNatsUrl = pluginConfig.NatsURL
 	cfg.APIBindPort = util.FindFreePort(8000)
 	cfg.AdminToken = pluginConfig.AdminToken
 	p.API.LogInfo(fmt.Sprintf("All config: %+v", cfg))
 
-	var err error
+	//var err error
 	p.container, err = application.NewContainer(cfg)
 	p.config = cfg
 	if err != nil {

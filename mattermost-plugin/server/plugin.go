@@ -8,6 +8,7 @@ import (
 	"github.com/mattermost/mattermost-server/v6/shared/mlog"
 	"github.com/zefhemel/matterless/pkg/application"
 	"github.com/zefhemel/matterless/pkg/config"
+	"github.com/zefhemel/matterless/pkg/sandbox"
 	"github.com/zefhemel/matterless/pkg/util"
 	"io"
 	"net/http"
@@ -37,6 +38,14 @@ type Plugin struct {
 
 func (p *Plugin) OnActivate() error {
 	log.SetLevel(log.DebugLevel)
+	return sandbox.EnsureDeno(p.config)
+}
+
+func (p *Plugin) OnDeactivate() error {
+	p.API.LogInfo("Deactivating...")
+	if p.container != nil {
+		p.container.Close()
+	}
 	return nil
 }
 

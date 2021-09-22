@@ -13,15 +13,15 @@ var manifest *model.Manifest
 
 const manifestStr = `
 {
-  "id": "com.mattermost.matterless-plugin",
-  "name": "Matterless plugin",
+  "id": "matterless",
+  "name": "Matterless",
   "description": "This plugin hosts Matterless as a Mattermost plugin",
-  "homepage_url": "https://github.com/zefhemel/mattermost-matterless-plugin",
-  "support_url": "https://github.com/zefhemel/mattermost-matterless-plugin/issues",
-  "release_notes_url": "https://github.com/zefhemel/mattermost-matterless-plugin/releases",
+  "homepage_url": "https://github.com/zefhemel/matterless",
+  "support_url": "https://github.com/zefhemel/matterless/issues",
+  "release_notes_url": "https://github.com/zefhemel/matterless/releases",
   "icon_path": "assets/starter-template-icon.svg",
   "version": "0.1.0",
-  "min_server_version": "5.12.0",
+  "min_server_version": "6.0.0",
   "server": {
     "executables": {
       "darwin-amd64": "server/dist/plugin-darwin-amd64",
