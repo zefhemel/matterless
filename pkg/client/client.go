@@ -42,6 +42,7 @@ func (client *MatterlessClient) GetAppCode(appName string) (string, error) {
 		return "", errors.Wrap(err, "request failed")
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("bearer %s", client.Token))
+	req.Header.Set("X-Matterless-Authorization", fmt.Sprintf("bearer %s", client.Token))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", errors.Wrap(err, "request failed")
@@ -332,6 +333,11 @@ func (client *MatterlessClient) InvokeFunction(appName string, functionName stri
 
 // TODO: Currently there can only be one connection to one app
 func (client *MatterlessClient) EventStream(appName string) (chan application.WSEventMessage, error) {
+	if client.wsConn != nil {
+		// Close any open connection
+		client.wsConn.Close()
+	}
+
 	url := fmt.Sprintf("%s/%s/_events", strings.ReplaceAll(strings.ReplaceAll(client.URL, "http://", "ws://"), "https://", "wss://"), appName)
 
 	var err error
@@ -352,7 +358,9 @@ func (client *MatterlessClient) EventStream(appName string) (chan application.WS
 		for {
 			_, message, err := client.wsConn.ReadMessage()
 			if err != nil {
-				log.Errorf("Error reading from websocket: %s", err)
+				//if _, ok := err.(*websocket.CloseError); !ok {
+				//	log.Errorf("Websocket error: %s", err)
+				//}
 				return
 			}
 			var wsMessage application.WSEventMessage

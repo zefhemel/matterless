@@ -87,6 +87,7 @@ func executor(cmd string) {
 			return
 		}
 		promptContext.appName = blocks[1]
+		receiveLogs(promptContext.client, promptContext.appName)
 		fetchMetadata()
 	case "list":
 		appNames, err := promptContext.client.ListApps()
@@ -254,8 +255,10 @@ func runConsole(c *client.MatterlessClient, filePath string, reloadCallback func
 	promptContext.client = c
 	promptContext.reloadCallback = reloadCallback
 	promptContext.exitCallback = exitCallback
+
 	if filePath != "" {
 		promptContext.appName = client.AppNameFromPath(filePath)
+		receiveLogs(c, promptContext.appName)
 	}
 	go metaDataFetcher()
 	p := prompt.New(

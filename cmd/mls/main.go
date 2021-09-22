@@ -139,7 +139,6 @@ func deployCommand() *cobra.Command {
 
 			mlsClient := client.NewMatterlessClient(url, adminToken)
 			appPath := args[0]
-			appName := client.AppNameFromPath(appPath)
 			loadApp(appPath, mlsClient)
 
 			if watch {
@@ -148,7 +147,6 @@ func deployCommand() *cobra.Command {
 				})
 			}
 			if attach {
-				receiveLogs(mlsClient, appName)
 				runConsole(mlsClient, appPath, func() {
 					loadApp(appPath, mlsClient)
 				}, func() {
@@ -297,7 +295,7 @@ func runServer(cfg *config.Config) *application.Container {
 	}
 
 	// Subscribe to all logs and write to stdout
-	appContainer.ClusterEventBus().SubscribeContainerLogs("*.function.*.log", func(appName, funcName, message string) {
+	appContainer.ClusterEventBus().SubscribeContainerLogs(func(appName, funcName, message string) {
 		log.Infof("LOG [%s | %s]: %s", appName, funcName, message)
 	})
 
